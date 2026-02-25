@@ -199,12 +199,62 @@ const DashboardSection: React.FC = () => {
 // ─── Exam Management Section ────────────────────────────────────────────
 const ExamManagementSection: React.FC = () => {
   const [fileName, setFileName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const exams = [
     { id: 1, name: 'Data Structures', questions: 50, students: 48, date: 'Feb 20, 2026' },
     { id: 2, name: 'Operating Systems', questions: 40, students: 52, date: 'Feb 18, 2026' },
     { id: 3, name: 'Algorithms', questions: 60, students: 45, date: 'Feb 15, 2026' },
   ];
+
+  const handleFileSelect = (file: File) => {
+    setSelectedFile(file);
+    setFileName(file.name);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setFileName('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <motion.div
@@ -254,13 +304,75 @@ const ExamManagementSection: React.FC = () => {
               />
             </div>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="w-full py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all"
-          >
-            📤 Upload Questions File
-          </motion.button>
+
+          {/* Drag & Drop File Upload Zone */}
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.csv,.xlsx,.xls,.txt,.pdf"
+              onChange={handleFileInput}
+              className="hidden"
+              aria-label="Upload questions file"
+            />
+            <motion.div
+              onClick={handleClick}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className={`relative cursor-pointer rounded-lg border-2 border-dashed transition-all ${
+                isDragging
+                  ? 'border-indigo-400 bg-indigo-500/10'
+                  : selectedFile
+                  ? 'border-green-500 bg-green-500/10'
+                  : 'border-slate-600 bg-slate-700/20 hover:border-indigo-500 hover:bg-slate-700/40'
+              }`}
+            >
+              <div className="py-8 px-6 text-center">
+                {selectedFile ? (
+                  <div className="space-y-3">
+                    <div className="text-4xl">✓</div>
+                    <div>
+                      <p className="text-green-400 font-semibold">{selectedFile.name}</p>
+                      <p className="text-slate-400 text-sm mt-1">
+                        {(selectedFile.size / 1024).toFixed(2)} KB
+                      </p>
+                    </div>
+                    <motion.button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveFile();
+                      }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="mt-2 px-4 py-2 text-sm rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                    >
+                      Remove File
+                    </motion.button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="text-4xl">
+                      {isDragging ? '📥' : '📤'}
+                    </div>
+                    <div>
+                      <p className="text-white font-semibold">
+                        {isDragging ? 'Drop your file here' : 'Upload Questions File'}
+                      </p>
+                      <p className="text-slate-400 text-sm mt-1">
+                        Click to browse or drag and drop
+                      </p>
+                      <p className="text-slate-500 text-xs mt-2">
+                        Supports JSON, CSV, XLSX, TXT, PDF files
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
         </div>
       </motion.div>
 
