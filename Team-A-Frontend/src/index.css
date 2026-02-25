@@ -1,0 +1,38 @@
+/* stylelint-disable at-rule-no-unknown */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.login-sky-gradient {
+	background: linear-gradient(
+		180deg,
+		#1a1a2e 0%,
+		#16213e 18%,
+		#2d1b3d 36%,
+		#3d2145 50%,
+		#5a3060 62%,
+		#7a4070 72%,
+		#9a556e 80%,
+		#b8756a 88%,
+		#c98060 94%,
+		#8a6050 100%
+	);
+}
+
+.input-caret-pink {
+	caret-color: #ff6b8a;
+}
+
+.login-btn-default {
+	background: linear-gradient(90deg, #e8436e 0%, #f0637a 50%, #e8436e 100%);
+	background-size: 200% auto;
+	box-shadow: 0 4px 20px rgba(232, 67, 110, 0.45);
+	transition: background-position 0.4s ease, box-shadow 0.3s ease;
+}
+
+.login-btn-success {
+	background: linear-gradient(90deg, #27ae60, #2ecc71);
+	background-size: 200% auto;
+	box-shadow: 0 4px 20px rgba(39, 174, 96, 0.45);
+	transition: background-position 0.4s ease, box-shadow 0.3s ease;
+}
