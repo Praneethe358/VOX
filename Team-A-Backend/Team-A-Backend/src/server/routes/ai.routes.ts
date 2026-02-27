@@ -5,6 +5,7 @@ import fs from "fs";
 import { speechService } from "../../services/speech.service";
 import { ttsService } from "../../services/tts.service";
 import { llamaService } from "../../services/llama.service";
+import { sendError, sendSuccess } from "../http-response";
 
 const router = Router();
 
@@ -16,15 +17,15 @@ const audioUpload = multer({ dest: path.join(process.cwd(), "tmp-uploads") });
 router.post("/stt-command", audioUpload.single("audio"), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
-      res.status(400).json({ error: "No audio file uploaded" });
+      sendError(res, "No audio file uploaded", 400);
       return;
     }
     const buffer = fs.readFileSync(req.file.path);
     const result = await speechService.recognizeCommand(buffer);
     fs.unlink(req.file.path, () => {});
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
-    res.status(500).json({ text: "", confidence: 0, error: String(error) });
+    sendError(res, String(error));
   }
 });
 
@@ -32,15 +33,15 @@ router.post("/stt-command", audioUpload.single("audio"), async (req: Request, re
 router.post("/stt-answer", audioUpload.single("audio"), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
-      res.status(400).json({ error: "No audio file uploaded" });
+      sendError(res, "No audio file uploaded", 400);
       return;
     }
     const buffer = fs.readFileSync(req.file.path);
     const result = await speechService.transcribeAnswer(buffer);
     fs.unlink(req.file.path, () => {});
-    res.json(result);
+    sendSuccess(res, result);
   } catch (error) {
-    res.status(500).json({ text: "", confidence: 0, error: String(error) });
+    sendError(res, String(error));
   }
 });
 
@@ -48,11 +49,11 @@ router.post("/stt-answer", audioUpload.single("audio"), async (req: Request, res
 router.post("/tts-speak", (req: Request, res: Response) => {
   const { text } = req.body as { text: string };
   if (!text) {
-    res.status(400).json({ error: "text required" });
+    sendError(res, "text required", 400);
     return;
   }
   ttsService.speak(text);
-  res.json({ success: true });
+  sendSuccess(res, { spoken: true });
 });
 
 // POST /api/ai/format-answer
@@ -60,13 +61,13 @@ router.post("/format-answer", async (req: Request, res: Response) => {
   try {
     const { rawText } = req.body as { rawText: string };
     if (!rawText) {
-      res.status(400).json({ error: "rawText required" });
+      sendError(res, "rawText required", 400);
       return;
     }
     const formatted = await llamaService.formatExamAnswer(rawText);
-    res.json({ formatted });
+    sendSuccess(res, { formatted });
   } catch (error) {
-    res.status(500).json({ formatted: "", error: String(error) });
+    sendError(res, String(error));
   }
 });
 

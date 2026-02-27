@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
-import { mongoService } from "../../database/mongo-client";
+import { dataProvider } from "../../database/provider";
 import { ResponseDocument } from "../../database/models/Response";
+import { sendError, sendSuccess } from "../http-response";
 
 const router = Router();
 
@@ -8,10 +9,10 @@ const router = Router();
 router.post("/save-response", async (req: Request, res: Response) => {
   try {
     const response = req.body as ResponseDocument;
-    await mongoService.saveResponse(response);
-    res.json({ success: true });
+    await dataProvider.saveResponse(response);
+    sendSuccess(res, { saved: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: String(error) });
+    sendError(res, String(error));
   }
 });
 
@@ -24,10 +25,10 @@ router.post("/log-audit", async (req: Request, res: Response) => {
       action: string;
       metadata?: unknown;
     };
-    await mongoService.logAudit({ studentId, examCode, action, metadata });
-    res.json({ success: true });
+    await dataProvider.logAudit({ studentId, examCode, action, metadata });
+    sendSuccess(res, { logged: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: String(error) });
+    sendError(res, String(error));
   }
 });
 
@@ -38,10 +39,10 @@ router.post("/submit-exam", async (req: Request, res: Response) => {
       studentId: string;
       examCode: string;
     };
-    await mongoService.submitExam(studentId, examCode);
-    res.json({ success: true });
+    await dataProvider.submitExam(studentId, examCode);
+    sendSuccess(res, { submitted: true });
   } catch (error) {
-    res.status(500).json({ success: false, error: String(error) });
+    sendError(res, String(error));
   }
 });
 

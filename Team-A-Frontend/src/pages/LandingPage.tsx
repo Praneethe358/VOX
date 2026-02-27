@@ -64,7 +64,7 @@ export default function LandingPage() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
             whileHover={{ y: -8 }}
-            onClick={() => navigate('/student-login')}
+            onClick={() => navigate('/student/login')}
             className="cursor-pointer bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-8 hover:border-pink-500/50 transition-all"
           >
             <div className="flex flex-col items-center text-center">

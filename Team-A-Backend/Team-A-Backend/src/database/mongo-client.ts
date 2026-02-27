@@ -52,6 +52,16 @@ export class MongoService {
     return doc;
   }
 
+  async getAllExams(): Promise<ExamDocument[]> {
+    const docs = await this.col("exams").find({}).toArray();
+    return docs as unknown as ExamDocument[];
+  }
+
+  async getActiveExams(): Promise<ExamDocument[]> {
+    const docs = await this.col("exams").find({ status: "active" }).toArray();
+    return docs as unknown as ExamDocument[];
+  }
+
   // ── Student ───────────────────────────────────────────
   async registerStudent(student: StudentDocument): Promise<void> {
     await this.col("students").replaceOne(

@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { studentApi } from '../api/apiService';
 
 export default function StudentPortal() {
   const navigate = useNavigate();
@@ -19,23 +20,22 @@ export default function StudentPortal() {
     const name = sessionStorage.getItem('studentName') || 'Student';
     setStudentName(name);
 
-    // Mock exams data (will be fetched from backend later)
-    setExams([
-      {
-        code: 'TECH101',
-        title: 'Introduction to AI',
-        duration: '30 min',
-        questions: 3,
-        status: 'available',
-      },
-      {
-        code: 'CS201',
-        title: 'Data Structures',
-        duration: '90 min',
-        questions: 50,
-        status: 'available',
-      },
-    ]);
+    const loadExams = async () => {
+      const response = await studentApi.getAvailableExams();
+      if (response.success && Array.isArray(response.data)) {
+        setExams(
+          response.data.map((exam: any) => ({
+            code: exam.code,
+            title: exam.title,
+            duration: `${exam.durationMinutes} min`,
+            questions: Array.isArray(exam.questions) ? exam.questions.length : 0,
+            status: exam.status || 'available',
+          }))
+        );
+      }
+    };
+
+    loadExams();
   }, [navigate]);
 
   const handleLogout = () => {

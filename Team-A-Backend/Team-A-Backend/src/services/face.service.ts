@@ -20,12 +20,13 @@ export class FaceService {
     try {
       if (!this.db) return { success: false };
 
+      const normalizedExamCode = (examCode || '').trim();
       const students = await this.db
         .collection("students")
-        .find({ examCode })
+        .find({ examCode: { $regex: `^${normalizedExamCode}$`, $options: "i" } })
         .toArray();
 
-      const THRESHOLD = 0.6;
+      const THRESHOLD = 0.78;
 
       for (const student of students) {
         const stored: number[] = student["faceDescriptor"];

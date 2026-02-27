@@ -57,7 +57,6 @@ export default function ExamInterface() {
   /* ── Recording toggle ── */
   const toggleRecording = useCallback(() => {
     if (isRecording) {
-      // Simulate saving an answer when stopping recording
       setAnswers((prev) => ({
         ...prev,
         [question.id]: "Voice answer recorded successfully.",

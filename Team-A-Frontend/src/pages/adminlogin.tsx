@@ -54,7 +54,7 @@ export default function LoginFaceID() {
         sessionStorage.setItem('adminUsername', username);
         setTimeout(() => navigate("/admin"), 1200);
       } else {
-        setError("Invalid username or password");
+        setError(result.error || "Invalid username or password");
         setIsLoading(false);
       }
     } catch (error) {
@@ -127,7 +127,7 @@ export default function LoginFaceID() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 autoComplete="username"
-                className="w-full rounded-full border-none bg-white/12 py-3.5 pl-10 pr-4 text-sm text-white/90 placeholder-slate-400 backdrop-blur-md outline-none transition-all focus:bg-white/18 focus:ring-2 focus:ring-pink-400/50 input-caret-pink"
+                className="w-full rounded-full border border-white/20 bg-slate-900/55 py-3.5 pl-10 pr-4 text-sm text-white placeholder-slate-300 backdrop-blur-md outline-none transition-all focus:border-pink-400/70 focus:ring-2 focus:ring-pink-400/50 input-caret-pink"
               />
             </div>
 
@@ -142,7 +142,7 @@ export default function LoginFaceID() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
-                  className="w-full rounded-full border-none bg-white/12 py-3.5 pl-10 pr-4 text-sm text-white/90 placeholder-slate-400 backdrop-blur-md outline-none transition-all focus:bg-white/18 focus:ring-2 focus:ring-pink-400/50 input-caret-pink"
+                  className="w-full rounded-full border border-white/20 bg-slate-900/55 py-3.5 pl-10 pr-4 text-sm text-white placeholder-slate-300 backdrop-blur-md outline-none transition-all focus:border-pink-400/70 focus:ring-2 focus:ring-pink-400/50 input-caret-pink"
                 />
               </div>
 
