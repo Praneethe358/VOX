@@ -15,12 +15,35 @@ interface Student {
   studentId?: string;
   examCode?: string;
   faceDescriptor?: number[];
+  normalizedEmbedding?: number[];
   name: string;
   rollNumber?: string;
   email?: string;
   passwordHash?: string;
   faceEmbedding?: string;
   registeredAt?: string;
+}
+
+interface FaceEmbeddingRecord {
+  studentId: string;
+  studentName: string;
+  examCode?: string;
+  email?: string;
+  facialEmbedding: number[];
+  normalizedEmbedding: number[];
+  frameCount: number;
+  qualityScore: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface FaceLoginAttemptRecord {
+  studentId?: string;
+  examCode?: string;
+  matched: boolean;
+  confidence: number;
+  timestamp: string;
+  reason?: string;
 }
 
 interface Exam {
@@ -70,6 +93,8 @@ const store = {
   responses: [] as Response[],
   audits: [] as Audit[],
   sessions: [] as ExamSession[],
+  face_embeddings: [] as FaceEmbeddingRecord[],
+  face_login_attempts: [] as FaceLoginAttemptRecord[],
 };
 
 export class MockMongoService {
@@ -174,40 +199,59 @@ export class MockMongoService {
     }
   }
 
-  async verifyFace(examCode: string, liveDescriptor: number[]): Promise<{ success: boolean; studentId?: string }> {
+  async verifyFace(examCode: string, liveDescriptor: number[]): Promise<{ success: boolean; studentId?: string; confidence?: number; distance?: number; student?: any }> {
     if (!Array.isArray(liveDescriptor) || liveDescriptor.length === 0) {
       return { success: false };
     }
 
     const normalizedExamCode = (examCode || '').trim().toUpperCase();
+    const normalizedLive = this.l2Normalize(liveDescriptor);
+
+    // First check face_embeddings store (higher accuracy with normalized embeddings)
+    for (const record of store.face_embeddings) {
+      const recExam = (record.examCode || '').trim().toUpperCase();
+      if (recExam !== normalizedExamCode) continue;
+      if (!record.normalizedEmbedding || record.normalizedEmbedding.length !== normalizedLive.length) continue;
+
+      const similarity = this.cosineSim(normalizedLive, record.normalizedEmbedding);
+      const dist = this.eucDist(normalizedLive, record.normalizedEmbedding);
+      if (similarity >= 0.85) {
+        const student = store.students.find(s => s.studentId === record.studentId);
+        return {
+          success: true,
+          studentId: record.studentId,
+          confidence: similarity,
+          distance: dist,
+          student: student ? { studentId: student.studentId, name: student.name, examCode: student.examCode, email: student.email } : undefined,
+        };
+      }
+    }
+
+    // Fallback: check legacy students store with Euclidean distance
     const candidates = store.students.filter((student) => {
       const studentExamCode = (student.examCode || '').trim().toUpperCase();
       return studentExamCode === normalizedExamCode && Array.isArray(student.faceDescriptor);
     });
 
-    const euclideanDistance = (a: number[], b: number[]) => {
-      const length = Math.min(a.length, b.length);
-      let sum = 0;
-      for (let i = 0; i < length; i++) {
-        sum += (a[i] - b[i]) ** 2;
-      }
-      return Math.sqrt(sum);
-    };
-
-    const THRESHOLD = 0.78;
+    const EUCLID_THRESHOLD = 0.55;
     for (const student of candidates) {
-      const stored = student.faceDescriptor || [];
-      if (stored.length !== liveDescriptor.length) continue;
-      const distance = euclideanDistance(stored, liveDescriptor);
-      if (distance < THRESHOLD) {
+      const stored = student.normalizedEmbedding || this.l2Normalize(student.faceDescriptor || []);
+      if (stored.length !== normalizedLive.length) continue;
+
+      const similarity = this.cosineSim(normalizedLive, stored);
+      const dist = this.eucDist(normalizedLive, stored);
+      if (similarity >= 0.85 || dist < EUCLID_THRESHOLD) {
         return {
           success: true,
           studentId: student.studentId || student.rollNumber,
+          confidence: similarity,
+          distance: dist,
+          student: { studentId: student.studentId, name: student.name, examCode: student.examCode, email: student.email },
         };
       }
     }
 
-    return { success: false };
+    return { success: false, confidence: 0, distance: Infinity };
   }
 
   async getStudentByRollNumber(rollNumber: string): Promise<Student | null> {
@@ -343,7 +387,8 @@ export class MockMongoService {
 
   // ── Auth ─────────────────────────────────────────────
   async findStudentByCredentials(email: string, password: string): Promise<Student | null> {
-    const student = store.students.find((s) => s.email === email);
+    const normalizedEmail = (email || '').toLowerCase().trim();
+    const student = store.students.find((s) => (s.email || '').toLowerCase() === normalizedEmail);
     if (!student || !student.passwordHash) return null;
     const ok = await bcrypt.compare(password, student.passwordHash);
     return ok ? student : null;
@@ -500,6 +545,185 @@ export class MockMongoService {
   // ── Utility ──────────────────────────────────────────
   getStore() {
     return store;
+  }
+
+  // ── Face Embeddings ─────────────────────────────────────────────────────
+
+  private l2Normalize(vec: number[]): number[] {
+    const mag = Math.sqrt(vec.reduce((s, v) => s + v * v, 0));
+    return mag === 0 ? vec : vec.map(v => v / mag);
+  }
+
+  private cosineSim(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0;
+    let dot = 0;
+    for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+    return dot;
+  }
+
+  private eucDist(a: number[], b: number[]): number {
+    if (a.length !== b.length) return Infinity;
+    let sum = 0;
+    for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
+    return Math.sqrt(sum);
+  }
+
+  async registerFaceEmbedding(data: {
+    studentId: string;
+    studentName: string;
+    examCode?: string;
+    email?: string;
+    descriptors: number[][];
+    qualityScore?: number;
+  }): Promise<{ registered: boolean; studentId: string; embeddingSize: number; frameCount: number }> {
+    const { studentId, studentName, examCode, email, descriptors, qualityScore } = data;
+
+    // Average descriptors
+    const dim = descriptors[0].length;
+    const avg = new Array(dim).fill(0);
+    for (const desc of descriptors) {
+      for (let i = 0; i < dim; i++) avg[i] += desc[i];
+    }
+    for (let i = 0; i < dim; i++) avg[i] /= descriptors.length;
+    const normalized = this.l2Normalize(avg);
+
+    const now = new Date().toISOString();
+    const record: FaceEmbeddingRecord = {
+      studentId,
+      studentName,
+      examCode,
+      email,
+      facialEmbedding: avg,
+      normalizedEmbedding: normalized,
+      frameCount: descriptors.length,
+      qualityScore: qualityScore ?? 0.9,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Upsert
+    const idx = store.face_embeddings.findIndex(e => e.studentId === studentId);
+    if (idx >= 0) {
+      store.face_embeddings[idx] = record;
+    } else {
+      store.face_embeddings.push(record);
+    }
+
+    // Also update students entry
+    const sIdx = store.students.findIndex(s => s.studentId === studentId);
+    if (sIdx >= 0) {
+      store.students[sIdx].faceDescriptor = avg;
+      store.students[sIdx].normalizedEmbedding = normalized;
+      store.students[sIdx].name = studentName;
+      store.students[sIdx].examCode = examCode;
+      store.students[sIdx].email = email;
+    } else {
+      store.students.push({
+        studentId,
+        name: studentName,
+        examCode,
+        email,
+        faceDescriptor: avg,
+        normalizedEmbedding: normalized,
+        registeredAt: now,
+      });
+    }
+
+    return { registered: true, studentId, embeddingSize: normalized.length, frameCount: descriptors.length };
+  }
+
+  async verifyFaceById(studentId: string, liveDescriptor: number[]): Promise<{
+    matched: boolean;
+    studentId?: string;
+    studentName?: string;
+    confidence: number;
+    distance: number;
+    method: string;
+    student?: any;
+  }> {
+    const normalizedLive = this.l2Normalize(liveDescriptor);
+    const THRESHOLD = 0.85;
+
+    // Check rate limiting
+    const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const recentFails = store.face_login_attempts.filter(
+      a => a.studentId === studentId && !a.matched && a.timestamp >= cutoff,
+    ).length;
+    if (recentFails >= 5) {
+      return { matched: false, confidence: 0, distance: Infinity, method: 'cosine', studentId };
+    }
+
+    // Check face_embeddings first
+    let record = store.face_embeddings.find(e => e.studentId === studentId);
+    let stored: number[] | undefined;
+    let studentName: string | undefined;
+
+    if (record) {
+      stored = record.normalizedEmbedding;
+      studentName = record.studentName;
+    } else {
+      // Fallback to students collection
+      const student = store.students.find(s => s.studentId === studentId);
+      if (student?.faceDescriptor) {
+        stored = student.normalizedEmbedding || this.l2Normalize(student.faceDescriptor);
+        studentName = student.name;
+      }
+    }
+
+    if (!stored || stored.length !== normalizedLive.length) {
+      store.face_login_attempts.push({ studentId, matched: false, confidence: 0, timestamp: new Date().toISOString(), reason: 'No embedding' });
+      return { matched: false, confidence: 0, distance: Infinity, method: 'cosine', studentId };
+    }
+
+    const similarity = this.cosineSim(normalizedLive, stored);
+    const distance = this.eucDist(normalizedLive, stored);
+    const matched = similarity >= THRESHOLD;
+
+    store.face_login_attempts.push({
+      studentId,
+      matched,
+      confidence: similarity,
+      timestamp: new Date().toISOString(),
+      reason: matched ? 'Match' : `Similarity ${similarity.toFixed(3)} < ${THRESHOLD}`,
+    });
+
+    return {
+      matched,
+      studentId,
+      studentName,
+      confidence: similarity,
+      distance,
+      method: 'cosine',
+      student: record || store.students.find(s => s.studentId === studentId),
+    };
+  }
+
+  async getAllRegisteredStudents(): Promise<any[]> {
+    // Combine face_embeddings + legacy students
+    const fromEmbeddings = store.face_embeddings.map(e => ({
+      studentId: e.studentId,
+      studentName: e.studentName,
+      examCode: e.examCode,
+      email: e.email,
+      frameCount: e.frameCount,
+      qualityScore: e.qualityScore,
+      createdAt: e.createdAt,
+      hasFaceData: true,
+    }));
+    const embeddingIds = new Set(fromEmbeddings.map(e => e.studentId));
+    const fromStudents = store.students
+      .filter(s => s.studentId && !embeddingIds.has(s.studentId))
+      .map(s => ({
+        studentId: s.studentId,
+        studentName: s.name,
+        examCode: s.examCode,
+        email: s.email,
+        frameCount: 0,
+        qualityScore: 0,
+        createdAt: s.registeredAt,
+        hasFaceData: Boolean(s.faceDescriptor && s.faceDescriptor.length > 0),
+      }));
+    return [...fromEmbeddings, ...fromStudents];
   }
 }
 

@@ -1,1213 +1,168 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { adminApi } from '../api/apiService';
-import * as faceapi from 'face-api.js';
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { adminApi } from "../api/client";
+import { useToast } from "../components/Toast";
+import { useAuth } from "../context/AuthContext";
+import * as faceapi from "face-api.js";
+import { LiveFaceRegistration } from "../components/student/LiveFaceRegistration";
+// ─── Types ──────────────────────────────────────────────────────────────────
+interface NavItem {  id: string;  label: string;  icon: string;}interface StatCardData {  icon: string;  label: string;  value: string;  trend?: string;}interface StudentSubmission {  id: number | string;  name: string;  exam: string;  score: number | null;  status: 'graded' | 'pending' | 'submitted';  submittedAt: string;  rollNumber?: string;  sessionId?: string;  answerCount?: number;}interface StudentRegistrationData {  studentId: string;  name: string;  examCode: string;  email: string;}interface ExamRecord {  id: number | string;  name: string;  questions: number;  students: number;  date: string;  status?: string;  code?: string;}
+// ─── Loading Spinner ────────────────────────────────────────────────────────
+const Spinner: React.FC<{ size?: string }> = ({ size = 'w-6 h-6' }) => (  <div className={`${size} border-2 border-indigo-500 border-t-transparent rounded-full animate-spin`} />);
+const LoadingOverlay: React.FC = () => (  <div className="flex items-center justify-center py-16">    <Spinner size="w-8 h-8" />  </div>);
+// ─── Sidebar Navigation Component ──────────────────────────────────────────
+const AdminSidebar: React.FC<{  activePage: string;  onNavigate: (page: string) => void;  navItems: NavItem[];  adminName?: string;  adminRole?: string;}> = ({ activePage, onNavigate, navItems, adminName, adminRole }) => (  <motion.nav    initial={{ x: -240 }}    animate={{ x: 0 }}    transition={{ duration: 0.3 }}    className="w-60 min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 border-r border-slate-700/50 flex flex-col fixed left-0 top-0 z-[100]"  >    <div className="px-6 py-7 border-b border-slate-700/50">      <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">        MindKraft      </h1>      <p className="text-xs text-slate-400 mt-1">Admin Console v2.0</p>    </div>    <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">      <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">        Navigation      </div>      {navItems.map((item) => (        <motion.button          key={item.id}          whileHover={{ x: 4 }}          whileTap={{ scale: 0.98 }}          onClick={() => onNavigate(item.id)}          className={`w-full px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 ${            activePage === item.id              ? 'bg-gradient-to-r from-indigo-600/30 to-pink-600/30 text-white border border-indigo-500/30'              : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'          }`}        >          <span className="text-lg">{item.icon}</span>          {item.label}        </motion.button>      ))}    </div>    <div className="px-6 py-4 border-t border-slate-700/50">      <div className="flex items-center gap-3">        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm">          A        </div>        <div>          <p className="text-sm font-medium text-white">{adminName || 'Admin User'}</p>          <p className="text-xs text-green-400">● {adminRole || 'Online'}</p>        </div>      </div>    </div>  </motion.nav>);
+// ─── Top Bar Component ──────────────────────────────────────────────────────
+const AdminTopbar: React.FC<{  pageTitle: string;  onLogout: () => void;}> = ({ pageTitle, onLogout }) => (  <motion.div    initial={{ y: -64 }}    animate={{ y: 0 }}    transition={{ duration: 0.3, delay: 0.1 }}    className="h-16 bg-slate-900/80 border-b border-slate-700/50 flex items-center justify-between px-8 sticky top-0 z-50 backdrop-blur-md"  >    <h2 className="text-lg font-semibold text-white">{pageTitle}</h2>    <div className="flex items-center gap-4">      <motion.button        whileHover={{ scale: 1.05 }}        whileTap={{ scale: 0.95 }}        onClick={onLogout}        className="px-4 py-2 rounded-lg border border-red-500/50 text-red-400 font-medium hover:bg-red-500/10 transition-colors text-sm"      >        Logout      </motion.button>    </div>  </motion.div>);
+// ─── Stat Card Component ────────────────────────────────────────────────────
+const StatCard: React.FC<StatCardData & { delay: number }> = ({ icon, label, value, trend, delay }) => (  <motion.div    initial={{ opacity: 0, y: 20 }}    animate={{ opacity: 1, y: 0 }}    transition={{ duration: 0.3, delay }}    whileHover={{ y: -4 }}    className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6 hover:border-indigo-500/30 transition-all"  >    <div className="flex items-start justify-between">      <div>        <p className="text-slate-400 text-sm font-medium">{label}</p>        <p className="text-3xl font-bold text-white mt-2">{value}</p>        {trend && <p className="text-xs text-green-400 mt-2">{trend}</p>}      </div>      <div className="text-3xl">{icon}</div>    </div>  </motion.div>);
+// ═══════════════════════════════════════════════════════════════════════════════
+//  DASHBOARD SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+const DashboardSection: React.FC = () => {  const [stats, setStats] = useState<StatCardData[]>([    { icon: '📄', label: 'Total Exams', value: '—' },    { icon: '👥', label: 'Total Submissions', value: '—' },    { icon: '⏳', label: 'Pending Review', value: '—' },    { icon: '🎓', label: 'Avg Score', value: '—' },  ]);  const [activityItems, setActivityItems] = useState<string[]>([]);  const [loading, setLoading] = useState(true);  const [backendStatus, setBackendStatus] = useState<'online' | 'offline' | 'checking'>('checking');  useEffect(() => {    const loadData = async () => {      setLoading(true);      try {
+// Check backend health
+const health = await adminApi.getDashboardStats();        setBackendStatus(health.success ? 'online' : 'offline');        const [statsResponse, activityResponse] = await Promise.all([          adminApi.getDashboardStats(),          adminApi.getRecentActivity(),        ]);        if (statsResponse.success && statsResponse.data) {          const d = statsResponse.data;          setStats([            { icon: '📄', label: 'Total Exams', value: String(d.totalExams ?? 0) },            { icon: '👥', label: 'Total Submissions', value: String(d.totalSubmissions ?? 0) },            { icon: '⏳', label: 'Pending Review', value: String(d.pendingReview ?? 0) },            { icon: '🎓', label: 'Avg Score', value: `${d.averageScore ?? 0}%` },          ]);        }        if (activityResponse.success && Array.isArray(activityResponse.data)) {          setActivityItems(activityResponse.data.map((item: any) => item.message || String(item)));        }      } catch {        setBackendStatus('offline');      } finally {        setLoading(false);      }    };    loadData();  }, []);  if (loading) return <LoadingOverlay />;  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">      {/* Backend Status Banner */}      <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm ${        backendStatus === 'online'          ? 'bg-green-500/10 border border-green-500/30 text-green-300'          : backendStatus === 'offline'          ? 'bg-red-500/10 border border-red-500/30 text-red-300'          : 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-300'      }`}>        <span className={`w-2 h-2 rounded-full ${backendStatus === 'online' ? 'bg-green-400' : backendStatus === 'offline' ? 'bg-red-400' : 'bg-yellow-400'}`} />        Backend: {backendStatus === 'online' ? 'Connected' : backendStatus === 'offline' ? 'Unreachable — showing cached data' : 'Checking...'}      </div>      {/* Stats Grid */}      <div>        <h3 className="text-xl font-semibold text-white mb-6">Dashboard Overview</h3>        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">          {stats.map((stat, idx) => (            <StatCard key={idx} {...stat} delay={idx * 0.1} />          ))}        </div>      </div>      {/* Recent Activity */}      <motion.div        initial={{ opacity: 0, y: 20 }}        animate={{ opacity: 1, y: 0 }}        transition={{ delay: 0.4 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h4 className="text-lg font-semibold text-white mb-4">Recent Activity</h4>        {activityItems.length === 0 ? (          <p className="text-slate-400 text-sm text-center py-4">No recent activity</p>        ) : (          <div className="space-y-3">            {activityItems.map((item, idx) => (              <motion.div                key={idx}                initial={{ x: -20, opacity: 0 }}                animate={{ x: 0, opacity: 1 }}                transition={{ delay: 0.5 + idx * 0.1 }}                className="flex items-start gap-3 text-slate-300"              >                <span className="text-indigo-400 mt-1">→</span>                <p className="text-sm">{item}</p>              </motion.div>            ))}          </div>        )}      </motion.div>    </motion.div>  );};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  EXAM MANAGEMENT SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+const ExamManagementSection: React.FC = () => {  const toast = useToast();  const fileInputRef = useRef<HTMLInputElement>(null);  const [examName, setExamName] = useState('');  const [examCode, setExamCode] = useState('');  const [manualQuestions, setManualQuestions] = useState('');  const [durationMinutes, setDurationMinutes] = useState('');  const [selectedFile, setSelectedFile] = useState<File | null>(null);  const [isDragging, setIsDragging] = useState(false);  const [isCreating, setIsCreating] = useState(false);  const [exams, setExams] = useState<ExamRecord[]>([]);  const [loading, setLoading] = useState(true);  const loadExams = useCallback(async () => {    const response = await adminApi.getExams() as any;    const items = response?.data ?? response?.exams ?? [];    if (response?.success && Array.isArray(items)) {      setExams(        items.map((exam: any, index: number) => ({          id: exam.id ?? exam._id ?? index + 1,          name: exam.name ?? exam.title ?? exam.code ?? 'Untitled Exam',          questions: Array.isArray(exam.questions) ? exam.questions.length : Number(exam.questions ?? 0),          students: Number(exam.students ?? 0),          date: exam.date ?? exam.createdAt ?? '-',          status: exam.status,          code: exam.code,        })),      );    }    setLoading(false);  }, []);  useEffect(() => { loadExams(); }, [loadExams]);  const handleExamNameChange = (value: string) => {    setExamName(value);    setExamCode(value.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20));  };  const handleFileSelect = (file: File) => { setSelectedFile(file); };  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {    const f = e.target.files?.[0];    if (f) handleFileSelect(f);  };  const handleRemoveFile = () => {    setSelectedFile(null);    if (fileInputRef.current) fileInputRef.current.value = '';  };  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };  const handleDragLeave = () => setIsDragging(false);  const handleDrop = (e: React.DragEvent) => {    e.preventDefault();    setIsDragging(false);    const f = e.dataTransfer.files[0];    if (f) handleFileSelect(f);  };  const handleCreateExam = async () => {    if (!examName.trim()) { toast.warning('Validation', 'Exam name is required'); return; }    if (!durationMinutes.trim() || Number(durationMinutes) < 5) { toast.warning('Validation', 'Duration must be at least 5 minutes'); return; }    setIsCreating(true);    try {      let result: any;      if (selectedFile) {        result = await adminApi.uploadExamPdf(selectedFile, {          code: examCode,          title: examName.trim(),          durationMinutes: Number(durationMinutes),        });      } else {        const questions = manualQuestions          .split('\n')          .map((l) => l.trim())          .filter((l) => l.length > 3)          .map((l, i) => ({ id: i + 1, text: l.replace(/^[\d]+[.):\s]+/, '').trim() || l }));        if (questions.length === 0 && !selectedFile) {          toast.warning('No Questions', 'Add questions manually or upload a file');          setIsCreating(false);          return;        }        result = await adminApi.createExam({          code: examCode,          title: examName.trim(),          durationMinutes: Number(durationMinutes),          questions,        });      }      if (result?.success) {        const qCount = result?.data?.questionCount ?? 0;        toast.success('Exam Created', `"${examName.trim()}" created with ${qCount} question${qCount !== 1 ? 's' : ''}`);        setExamName(''); setExamCode(''); setManualQuestions(''); setDurationMinutes('');        handleRemoveFile();        await loadExams();      } else {        toast.error('Failed', result?.error || 'Could not create exam');      }    } catch (err: any) {      toast.error('Error', err?.message || 'Unknown error');    } finally {      setIsCreating(false);    }  };  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">      {/* Create Exam Card */}      <motion.div        initial={{ opacity: 0, y: 20 }}        animate={{ opacity: 1, y: 0 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-8"      >        <h3 className="text-lg font-semibold text-white mb-4">Create New Exam</h3>        <div className="space-y-4">          {/* Name + Code */}          <div className="grid grid-cols-2 gap-4">            <div>              <label className="block text-sm font-medium text-slate-300 mb-2">Exam Name <span className="text-red-400">*</span></label>              <input                type="text" placeholder="e.g., Advanced Machine Learning"                value={examName} onChange={(e) => handleExamNameChange(e.target.value)}                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"              />            </div>            <div>              <label className="block text-sm font-medium text-slate-300 mb-2">Exam Code (auto)</label>              <input                type="text" placeholder="TECH101" value={examCode}                onChange={(e) => setExamCode(e.target.value.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, ''))}                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none font-mono"              />            </div>          </div>          {/* Duration */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">Duration (minutes) <span className="text-red-400">*</span></label>            <input              type="number" placeholder="90" min="5" value={durationMinutes}              onChange={(e) => setDurationMinutes(e.target.value)}              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"            />          </div>          {/* Manual Questions */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">              Questions <span className="text-slate-500 font-normal">(one per line — optional if uploading a file)</span>            </label>            <textarea              rows={5}              placeholder={"1. What is the full form of AI?\n2. Define Machine Learning.\n3. Who is the father of AI?"}              value={manualQuestions} onChange={(e) => setManualQuestions(e.target.value)}              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 outline-none resize-y text-sm font-mono"            />            {manualQuestions.trim() && (              <p className="text-xs text-slate-400 mt-1">                {manualQuestions.split('\n').filter((l) => l.trim().length > 3).length} question(s) detected              </p>            )}          </div>          {/* File Upload */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">              Upload File <span className="text-slate-500 font-normal">(PDF, JSON, TXT, CSV)</span>            </label>            <input ref={fileInputRef} type="file" accept=".json,.csv,.txt,.pdf" onChange={handleFileInput} className="hidden" />            <motion.div              onClick={() => fileInputRef.current?.click()}              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}              whileHover={{ scale: 1.005 }}              className={`cursor-pointer rounded-lg border-2 border-dashed transition-all ${                isDragging ? 'border-indigo-400 bg-indigo-500/10'                  : selectedFile ? 'border-green-500 bg-green-500/10'                  : 'border-slate-600 bg-slate-700/20 hover:border-indigo-500 hover:bg-slate-700/40'              }`}            >              <div className="py-5 px-6 text-center">                {selectedFile ? (                  <div className="flex items-center justify-between">                    <div className="flex items-center gap-3">                      <span className="text-2xl text-green-400">✓</span>                      <div className="text-left">                        <p className="text-green-400 font-medium text-sm">{selectedFile.name}</p>                        <p className="text-slate-400 text-xs">{(selectedFile.size / 1024).toFixed(1)} KB</p>                      </div>                    </div>                    <button                      onClick={(e) => { e.stopPropagation(); handleRemoveFile(); }}                      className="px-3 py-1 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"                    >Remove</button>                  </div>                ) : (                  <div>                    <span className="text-3xl">{isDragging ? '📥' : '📤'}</span>                    <p className="text-slate-300 text-sm mt-2">{isDragging ? 'Drop here' : 'Click to browse or drag & drop'}</p>                    <p className="text-slate-500 text-xs mt-1">PDF, JSON, TXT, CSV</p>                  </div>                )}              </div>            </motion.div>          </div>          <motion.button            whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}            onClick={handleCreateExam}            disabled={isCreating || !examName.trim() || !durationMinutes.trim()}            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed"          >            {isCreating ? (              <span className="flex items-center justify-center gap-2"><Spinner size="w-4 h-4" /> Creating...</span>            ) : 'Create & Publish Exam'}          </motion.button>        </div>      </motion.div>      {/* Exam List */}      <motion.div        initial={{ opacity: 0, y: 20 }}        animate={{ opacity: 1, y: 0 }}        transition={{ delay: 0.1 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h4 className="text-lg font-semibold text-white mb-4">Existing Exams</h4>        {loading ? <LoadingOverlay /> : exams.length === 0 ? (          <p className="text-slate-400 text-sm text-center py-6">No exams yet. Create one above.</p>        ) : (          <div className="space-y-3">            {exams.map((exam, idx) => (              <motion.div                key={exam.id}                initial={{ x: -20, opacity: 0 }}                animate={{ x: 0, opacity: 1 }}                transition={{ delay: 0.2 + idx * 0.05 }}                className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg border border-slate-600/30 hover:border-indigo-500/30 transition-all"              >                <div>                  <p className="font-medium text-white">{exam.name}</p>                  <p className="text-xs text-slate-400 mt-1">                    {exam.code && <span className="font-mono mr-2 text-indigo-300">{exam.code}</span>}                    {exam.questions} question{exam.questions !== 1 ? 's' : ''}                    {exam.date && exam.date !== '-' && ` · ${exam.date}`}                  </p>                  {exam.status && (                    <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-medium ${                      exam.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'                    }`}>                      {exam.status === 'active' ? '● Active' : exam.status}                    </span>                  )}                </div>              </motion.div>            ))}          </div>        )}      </motion.div>    </motion.div>  );};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  STUDENT MANAGEMENT SECTION (CRUD) — LIVE CAMERA REGISTRATION
+// ═══════════════════════════════════════════════════════════════════════════════
+const StudentManagementSection: React.FC = () => {
+  const [registeredStudents, setRegisteredStudents] = useState<any[]>([]);
+  const [loadingStudents, setLoadingStudents] = useState(true);
 
-interface NavItem {
-  id: string;
-  label: string;
-  icon: string;
-}
+  const API_BASE =
+    (import.meta.env.VITE_API_URL as string | undefined) ||
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+    'http://localhost:3000/api';
 
-interface StatCard {
-  icon: string;
-  label: string;
-  value: string;
-  trend?: string;
-}
-
-interface StudentSubmission {
-  id: number;
-  name: string;
-  exam: string;
-  score: number | null;
-  status: 'graded' | 'pending' | 'submitted';
-  submittedAt: string;
-}
-
-interface StudentRegistrationData {
-  studentId: string;
-  name: string;
-  examCode: string;
-  email: string;
-}
-
-// ─── Sidebar Navigation Component ──────────────────────────────────────
-const AdminSidebar: React.FC<{
-  activePage: string;
-  onNavigate: (page: string) => void;
-  navItems: NavItem[];
-}> = ({ activePage, onNavigate, navItems }) => {
-  return (
-    <motion.nav
-      initial={{ x: -240 }}
-      animate={{ x: 0 }}
-      transition={{ duration: 0.3 }}
-      className="w-60 min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 border-r border-slate-700/50 flex flex-col fixed left-0 top-0 z-100"
-    >
-      {/* Logo Section */}
-      <div className="px-6 py-7 border-b border-slate-700/50">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">
-          MindKraft
-        </h1>
-        <p className="text-xs text-slate-400 mt-1">Admin Console v1.0</p>
-      </div>
-
-      {/* Navigation Items */}
-      <div className="flex-1 py-4 px-3 space-y-2">
-        <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-          Navigation
-        </div>
-        {navItems.map((item) => (
-          <motion.button
-            key={item.id}
-            whileHover={{ x: 4 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => onNavigate(item.id)}
-            className={`w-full px-4 py-3 rounded-lg text-sm font-medium transition-all flex items-center gap-3 ${
-              activePage === item.id
-                ? 'bg-gradient-to-r from-indigo-600/30 to-pink-600/30 text-white border border-indigo-500/30'
-                : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
-            }`}
-          >
-            <span className="text-lg">{item.icon}</span>
-            {item.label}
-          </motion.button>
-        ))}
-      </div>
-
-      {/* User Info */}
-      <div className="px-6 py-4 border-t border-slate-700/50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-pink-500" />
-          <div>
-            <p className="text-sm font-medium text-white">Admin User</p>
-            <p className="text-xs text-slate-400">Active</p>
-          </div>
-        </div>
-      </div>
-    </motion.nav>
-  );
-};
-
-// ─── Top Bar Component ──────────────────────────────────────────────────
-const AdminTopbar: React.FC<{
-  pageTitle: string;
-  onLogout: () => void;
-}> = ({ pageTitle, onLogout }) => {
-  return (
-    <motion.div
-      initial={{ y: -64 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.3, delay: 0.1 }}
-      className="h-16 bg-slate-900/80 border-b border-slate-700/50 flex items-center justify-between px-8 sticky top-0 backdrop-blur-md"
-    >
-      <h2 className="text-lg font-semibold text-white">{pageTitle}</h2>
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={onLogout}
-        className="px-4 py-2 rounded-lg border border-red-500/50 text-red-400 font-medium hover:bg-red-500/10 transition-colors"
-      >
-        Logout
-      </motion.button>
-    </motion.div>
-  );
-};
-
-// ─── Statistics Card Component ──────────────────────────────────────────
-const StatCard: React.FC<StatCard & { delay: number }> = ({
-  icon,
-  label,
-  value,
-  trend,
-  delay,
-}) => {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay }}
-      whileHover={{ y: -4 }}
-      className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6 hover:border-indigo-500/30 transition-all"
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-slate-400 text-sm font-medium">{label}</p>
-          <p className="text-3xl font-bold text-white mt-2">{value}</p>
-          {trend && (
-            <p className="text-xs text-green-400 mt-2">↑ {trend} from last month</p>
-          )}
-        </div>
-        <div className="text-3xl">{icon}</div>
-      </div>
-    </motion.div>
-  );
-};
-
-// ─── Dashboard Section ──────────────────────────────────────────────────
-const DashboardSection: React.FC = () => {
-  const [stats, setStats] = useState<StatCard[]>([
-    { icon: '📄', label: 'Total Exams', value: '0' },
-    { icon: '👥', label: 'Total Submissions', value: '0' },
-    { icon: '⏳', label: 'Pending Review', value: '0' },
-    { icon: '🎓', label: 'Avg Score', value: '0%' },
-  ]);
-  const [activityItems, setActivityItems] = useState<string[]>([]);
-
-  useEffect(() => {
-    const loadData = async () => {
-      const [statsResponse, activityResponse] = await Promise.all([
-        adminApi.getDashboardStats(),
-        adminApi.getRecentActivity(),
-      ]);
-
-      if (statsResponse.success && statsResponse.data) {
-        setStats([
-          { icon: '📄', label: 'Total Exams', value: String(statsResponse.data.totalExams ?? 0) },
-          { icon: '👥', label: 'Total Submissions', value: String(statsResponse.data.totalSubmissions ?? 0) },
-          { icon: '⏳', label: 'Pending Review', value: String(statsResponse.data.pendingReview ?? 0) },
-          { icon: '🎓', label: 'Avg Score', value: `${statsResponse.data.averageScore ?? 0}%` },
-        ]);
-      }
-
-      if (activityResponse.success && Array.isArray(activityResponse.data)) {
-        setActivityItems(activityResponse.data.map(item => item.message));
-      }
-    };
-
-    loadData();
-  }, []);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-8"
-    >
-      <div>
-        <h3 className="text-xl font-semibold text-white mb-6">Dashboard Overview</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {stats.map((stat, idx) => (
-            <StatCard key={idx} {...stat} delay={idx * 0.1} />
-          ))}
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.4 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
-      >
-        <h4 className="text-lg font-semibold text-white mb-4">Recent Activity</h4>
-        <div className="space-y-3">
-          {activityItems.map((item, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ x: -20, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.5 + idx * 0.1 }}
-              className="flex items-start gap-3 text-slate-300"
-            >
-              <span className="text-indigo-400 mt-1">→</span>
-              <p className="text-sm">{item}</p>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-};
-
-// ─── Exam Management Section ────────────────────────────────────────────
-const ExamManagementSection: React.FC = () => {
-  const [fileName, setFileName] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [examName, setExamName] = useState('');
-  const [examCode, setExamCode] = useState('');
-  const [manualQuestions, setManualQuestions] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('');
-  const [isCreatingExam, setIsCreatingExam] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  const [exams, setExams] = useState<Array<{ id: number; name: string; questions: number; students: number; date: string; status?: string; code?: string }>>([]);
-
-  const loadExams = async () => {
-    const response = await adminApi.getExams() as any;
-    const items = response?.data ?? response?.exams ?? [];
-    if (response?.success && Array.isArray(items)) {
-      const normalized = items.map((exam: any, index: number) => ({
-        id: exam.id ?? index + 1,
-        name: exam.name ?? exam.title ?? exam.code ?? 'Untitled Exam',
-        questions: Array.isArray(exam.questions) ? exam.questions.length : Number(exam.questions ?? 0),
-        students: Number(exam.students ?? 0),
-        date: exam.date ?? '-',
-        status: exam.status,
-        code: exam.code,
-      }));
-      setExams(normalized);
-    }
-  };
-
-  useEffect(() => {
-    loadExams();
-  }, []);
-
-  // Auto-generate exam code from name
-  const handleExamNameChange = (value: string) => {
-    setExamName(value);
-    setExamCode(value.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20));
-  };
-
-  const handleFileSelect = (file: File) => {
-    setSelectedFile(file);
-    setFileName(file.name);
-  };
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFileSelect(file);
-  };
-
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
-    setFileName('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
-  const handleDragLeave = () => setIsDragging(false);
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileSelect(file);
-  };
-  const handleClick = () => fileInputRef.current?.click();
-
-  const handleCreateExam = async () => {
-    if (!examName.trim() || !durationMinutes.trim()) {
-      setErrorMsg('Please fill in Exam Name and Duration.');
-      return;
-    }
-
-    setIsCreatingExam(true);
-    setSuccessMsg('');
-    setErrorMsg('');
-
+  const loadStudents = async () => {
+    setLoadingStudents(true);
     try {
-      let result: any;
-
-      if (selectedFile) {
-        // File-based creation (PDF / JSON / TXT / CSV)
-        result = await adminApi.uploadExamPdf(selectedFile, {
-          code: examCode,
-          title: examName.trim(),
-          durationMinutes: Number(durationMinutes),
-        });
+      // Try new face API first, fall back to scoring endpoint
+      const res = await fetch(`${API_BASE}/face/students`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.data)) {
+        setRegisteredStudents(data.data);
       } else {
-        // JSON-based creation – parse manual questions if provided
-        const questions = manualQuestions
-          .split('\n')
-          .map((line) => line.trim())
-          .filter((line) => line.length > 3)
-          .map((line, i) => ({ id: i + 1, text: line.replace(/^[\d]+[.):\s]+/, '').trim() || line }));
-
-        result = await adminApi.createExam({
-          code: examCode,
-          title: examName.trim(),
-          durationMinutes: Number(durationMinutes),
-          questions,
-        });
-      }
-
-      if (result?.success) {
-        const qCount = result?.data?.questionCount ?? 0;
-        setSuccessMsg(`✓ Exam "${examName.trim()}" created successfully with ${qCount} question${qCount !== 1 ? 's' : ''}! It is now live.`);
-        setExamName('');
-        setExamCode('');
-        setManualQuestions('');
-        setDurationMinutes('');
-        handleRemoveFile();
-        await loadExams();
-      } else {
-        setErrorMsg(result?.error || 'Failed to create exam. Please try again.');
-      }
-    } catch (error: any) {
-      setErrorMsg(`Error: ${error?.message || 'Unknown error. Check console.'}`);
-      console.error('Failed to create exam:', error);
-    } finally {
-      setIsCreatingExam(false);
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-6"
-    >
-      {/* Create Exam Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-8"
-      >
-        <h3 className="text-lg font-semibold text-white mb-4">Create New Exam</h3>
-
-        {/* Success / Error banners */}
-        {successMsg && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p-3 rounded-lg bg-green-500/20 border border-green-500/40 text-green-300 text-sm">
-            {successMsg}
-          </motion.div>
-        )}
-        {errorMsg && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/40 text-red-300 text-sm">
-            {errorMsg}
-          </motion.div>
-        )}
-
-        <div className="space-y-4">
-          {/* Exam Name + Exam Code row */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Exam Name <span className="text-red-400">*</span></label>
-              <input
-                type="text"
-                placeholder="e.g., Advanced Machine Learning"
-                value={examName}
-                onChange={(e) => handleExamNameChange(e.target.value)}
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Exam Code (auto-generated)</label>
-              <input
-                type="text"
-                placeholder="e.g., TECH101"
-                value={examCode}
-                onChange={(e) => setExamCode(e.target.value.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, ''))}
-                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none font-mono"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Duration (minutes) <span className="text-red-400">*</span></label>
-            <input
-              type="number"
-              placeholder="90"
-              min="5"
-              value={durationMinutes}
-              onChange={(e) => setDurationMinutes(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-            />
-          </div>
-
-          {/* Manual question entry */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Questions <span className="text-slate-500 font-normal">(one per line — optional if uploading a file)</span>
-            </label>
-            <textarea
-              rows={5}
-              placeholder={"1. What is the full form of AI?\n2. Define Machine Learning in one sentence.\n3. Who is the father of Artificial Intelligence?"}
-              value={manualQuestions}
-              onChange={(e) => setManualQuestions(e.target.value)}
-              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 outline-none resize-y text-sm font-mono"
-            />
-            {manualQuestions.trim() && (
-              <p className="text-xs text-slate-400 mt-1">
-                {manualQuestions.split('\n').filter((l) => l.trim().length > 3).length} question(s) detected
-              </p>
-            )}
-          </div>
-
-          {/* File Upload (optional) */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Upload Questions File <span className="text-slate-500 font-normal">(optional — PDF, JSON, TXT, CSV)</span>
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,.csv,.txt,.pdf"
-              onChange={handleFileInput}
-              className="hidden"
-              aria-label="Upload questions file"
-            />
-            <motion.div
-              onClick={handleClick}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              whileHover={{ scale: 1.005 }}
-              className={`cursor-pointer rounded-lg border-2 border-dashed transition-all ${
-                isDragging ? 'border-indigo-400 bg-indigo-500/10'
-                : selectedFile ? 'border-green-500 bg-green-500/10'
-                : 'border-slate-600 bg-slate-700/20 hover:border-indigo-500 hover:bg-slate-700/40'
-              }`}
-            >
-              <div className="py-5 px-6 text-center">
-                {selectedFile ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">✓</span>
-                      <div className="text-left">
-                        <p className="text-green-400 font-medium text-sm">{selectedFile.name}</p>
-                        <p className="text-slate-400 text-xs">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleRemoveFile(); }}
-                      className="px-3 py-1 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <span className="text-3xl">{isDragging ? '📥' : '📤'}</span>
-                    <p className="text-slate-300 text-sm mt-2">{isDragging ? 'Drop file here' : 'Click to browse or drag & drop'}</p>
-                    <p className="text-slate-500 text-xs mt-1">Supports PDF, JSON, TXT, CSV</p>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-            {selectedFile && (
-              <p className="text-xs text-slate-400 mt-1">File will be parsed for questions. Manual questions above will be ignored.</p>
-            )}
-          </div>
-
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handleCreateExam}
-            disabled={isCreatingExam || !examName.trim() || !durationMinutes.trim()}
-            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isCreatingExam ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Creating Exam...
-              </span>
-            ) : 'Create & Publish Exam'}
-          </motion.button>
-        </div>
-      </motion.div>
-
-      {/* Exam List */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.1 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
-      >
-        <h4 className="text-lg font-semibold text-white mb-4">Existing Exams</h4>
-        {exams.length === 0 ? (
-          <p className="text-slate-400 text-sm text-center py-6">No exams yet. Create one above.</p>
-        ) : (
-          <div className="space-y-3">
-            {exams.map((exam, idx) => (
-              <motion.div
-                key={exam.id}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.2 + idx * 0.05 }}
-                className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg border border-slate-600/30 hover:border-indigo-500/30 transition-all"
-              >
-                <div>
-                  <p className="font-medium text-white">{exam.name}</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {exam.code && <span className="font-mono mr-2 text-indigo-300">{exam.code}</span>}
-                    {exam.questions} question{exam.questions !== 1 ? 's' : ''}
-                    {exam.date && exam.date !== '-' && ` • ${exam.date}`}
-                  </p>
-                  {exam.status && (
-                    <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-medium ${exam.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
-                      {exam.status === 'active' ? '● Active' : exam.status}
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </motion.div>
-    </motion.div>
-  );
-};
-
-// ─── Submissions Section ────────────────────────────────────────────────
-const SubmissionsSection: React.FC = () => {
-  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
-
-  useEffect(() => {
-    const loadSubmissions = async () => {
-      const response = await adminApi.getSubmissions();
-      if (response.success && Array.isArray(response.data)) {
-        setSubmissions(response.data);
-      }
-    };
-
-    loadSubmissions();
-  }, []);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'graded':
-        return 'text-green-400 bg-green-400/10';
-      case 'pending':
-        return 'text-yellow-400 bg-yellow-400/10';
-      case 'submitted':
-        return 'text-blue-400 bg-blue-400/10';
-      default:
-        return 'text-slate-400 bg-slate-400/10';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'graded':
-        return '✓ Graded';
-      case 'pending':
-        return '⏳ Pending';
-      case 'submitted':
-        return '📋 Submitted';
-      default:
-        return status;
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
-    >
-      <h3 className="text-lg font-semibold text-white mb-6">Student Submissions</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-700/50">
-              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                Student Name
-              </th>
-              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                Exam
-              </th>
-              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                Score
-              </th>
-              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                Status
-              </th>
-              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                Submitted
-              </th>
-              <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {submissions.map((sub, idx) => (
-              <motion.tr
-                key={sub.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"
-              >
-                <td className="px-4 py-3 text-sm text-white font-medium">{sub.name}</td>
-                <td className="px-4 py-3 text-sm text-slate-300">{sub.exam}</td>
-                <td className="px-4 py-3 text-sm text-slate-300">
-                  {sub.score ? `${sub.score}%` : '—'}
-                </td>
-                <td className="px-4 py-3 text-sm">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(sub.status)}`}>
-                    {getStatusLabel(sub.status)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-400">{sub.submittedAt}</td>
-                <td className="px-4 py-3 text-sm">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    className="text-indigo-400 hover:text-indigo-300 font-medium"
-                  >
-                    Review
-                  </motion.button>
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </motion.div>
-  );
-};
-
-// ─── Score Management Section ──────────────────────────────────────────
-const ScoreSection: React.FC = () => {
-  const [searchStudent, setSearchStudent] = useState('');
-  const [students, setStudents] = useState<Array<{ id: number; name: string; exam: string; submitted: boolean }>>([]);
-  const [scoreInputs, setScoreInputs] = useState<Record<number, string>>({});
-
-  useEffect(() => {
-    const loadStudents = async () => {
-      const response = await adminApi.getStudentsForScoring();
-      if (response.success && Array.isArray(response.data)) {
-        setStudents(response.data);
-      }
-    };
-
-    loadStudents();
-  }, []);
-
-  const handleDownloadAnswers = async (studentId: number, studentName: string) => {
-    try {
-      const blob = await adminApi.downloadStudentAnswers(studentId);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${studentName.replace(/\s+/g, '_')}_answers.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to download answers:', error);
-    }
-  };
-
-  const handleScoreSubmit = async (studentId: number) => {
-    const score = Number(scoreInputs[studentId] ?? 0);
-    if (Number.isNaN(score)) {
-      return;
-    }
-
-    const response = await adminApi.submitStudentScore(studentId, score);
-    if (!response.success) {
-      console.error('Failed to submit score:', response.error);
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-6"
-    >
-      {/* Search Bar */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
-      >
-        <h3 className="text-lg font-semibold text-white mb-4">Student Score Management</h3>
-        <input
-          type="text"
-          placeholder="Search by student name..."
-          value={searchStudent}
-          onChange={(e) => setSearchStudent(e.target.value)}
-          className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-        />
-      </motion.div>
-
-      {/* Score Entry Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.1 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
-      >
-        <h4 className="text-lg font-semibold text-white mb-6">Enter & Review Scores</h4>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700/50">
-                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                  Student Name
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                  Exam
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                  Enter Score
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">
-                  Download Answers
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {students
-                .filter((student) =>
-                  student.name.toLowerCase().includes(searchStudent.toLowerCase())
-                )
-                .map((student, idx) => (
-                  <motion.tr
-                    key={student.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"
-                  >
-                    <td className="px-4 py-3 text-sm text-white font-medium">
-                      {student.name}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-300">{student.exam}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          placeholder="Score"
-                          min="0"
-                          max="100"
-                          value={scoreInputs[student.id] ?? ''}
-                          onChange={(e) =>
-                            setScoreInputs((prev) => ({
-                              ...prev,
-                              [student.id]: e.target.value,
-                            }))
-                          }
-                          className="w-20 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none text-center"
-                        />
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleScoreSubmit(student.id)}
-                          className="px-3 py-2 rounded-lg bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 transition-colors font-medium"
-                        >
-                          Submit
-                        </motion.button>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() =>
-                          handleDownloadAnswers(student.id, student.name)
-                        }
-                        className="px-4 py-2 rounded-lg bg-green-600/20 text-green-300 hover:bg-green-600/40 transition-colors font-medium"
-                      >
-                        📥 Download
-                      </motion.button>
-                    </td>
-                  </motion.tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
-
-      {/* Bulk Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.2 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
-      >
-        <h4 className="text-lg font-semibold text-white mb-4">Bulk Actions</h4>
-        <div className="flex gap-4">
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all"
-          >
-            📥 Download All Answers
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="px-6 py-3 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-semibold transition-all"
-          >
-            📤 Export Scores
-          </motion.button>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-};
-
-const StudentRegistrationSection: React.FC = () => {
-  const [formData, setFormData] = useState<StudentRegistrationData>({
-    studentId: '',
-    name: '',
-    examCode: 'TECH101',
-    email: '',
-  });
-  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [isError, setIsError] = useState(false);
-
-  const loadModels = async () => {
-    const MODEL_URL = '/models';
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-    ]);
-  };
-
-  const extractDescriptorFromPhoto = async (file: File): Promise<number[]> => {
-    await loadModels();
-
-    const imageUrl = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = imageUrl;
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-    });
-
-    const detections = await faceapi
-      .detectAllFaces(img, new faceapi.TinyFaceDetectorOptions())
-      .withFaceLandmarks()
-      .withFaceDescriptors();
-
-    const detection = detections
-      .slice()
-      .sort((a, b) => (b.detection.box.width * b.detection.box.height) - (a.detection.box.width * a.detection.box.height))[0];
-
-    URL.revokeObjectURL(imageUrl);
-
-    if (!detection) {
-      throw new Error('No clear face found in the uploaded photo');
-    }
-
-    return Array.from(detection.descriptor);
-  };
-
-  const handleRegisterStudent = async () => {
-    if (!formData.studentId || !formData.name || !formData.examCode || !selectedPhoto) {
-      setIsError(true);
-      setStatusMessage('Please fill all required fields and upload a face photo');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setStatusMessage('Processing face photo...');
-    setIsError(false);
-
-    try {
-      const faceDescriptor = await extractDescriptorFromPhoto(selectedPhoto);
-      setStatusMessage('Saving student face details...');
-
-      const response = await adminApi.registerStudent({
-        studentId: formData.studentId,
-        name: formData.name,
-        examCode: formData.examCode,
-        email: formData.email,
-        faceDescriptor,
-      });
-
-      if (!response.success) {
-        throw new Error(response.error || 'Registration failed');
-      }
-
-      setStatusMessage('Student face registered successfully');
-      setIsError(false);
-      setFormData({ studentId: '', name: '', examCode: 'TECH101', email: '' });
-      setSelectedPhoto(null);
-    } catch (error) {
-      setIsError(true);
-      setStatusMessage(error instanceof Error ? error.message : 'Registration failed');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-6"
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
-      >
-        <h3 className="text-lg font-semibold text-white mb-4">Register Student Face</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            type="text"
-            placeholder="Student ID"
-            value={formData.studentId}
-            onChange={(e) => setFormData((prev) => ({ ...prev, studentId: e.target.value }))}
-            className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-          />
-          <input
-            type="text"
-            placeholder="Student Name"
-            value={formData.name}
-            onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-            className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-          />
-          <input
-            type="text"
-            placeholder="Exam Code"
-            value={formData.examCode}
-            onChange={(e) => setFormData((prev) => ({ ...prev, examCode: e.target.value.toUpperCase() }))}
-            className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-          />
-          <input
-            type="email"
-            placeholder="Email (optional)"
-            value={formData.email}
-            onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
-            className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-          />
-        </div>
-
-        <div className="mt-4">
-          <label className="block text-sm text-slate-300 mb-2">Upload Face Photo</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setSelectedPhoto(e.target.files?.[0] || null)}
-            className="w-full px-4 py-2 bg-slate-700/40 border border-slate-600 rounded-lg text-slate-200"
-          />
-          {selectedPhoto && (
-            <p className="text-xs text-slate-400 mt-2">Selected: {selectedPhoto.name}</p>
-          )}
-        </div>
-
-        {statusMessage && (
-          <p className={`mt-4 text-sm ${isError ? 'text-red-400' : 'text-green-400'}`}>
-            {statusMessage}
-          </p>
-        )}
-
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={handleRegisterStudent}
-          disabled={isSubmitting}
-          className="mt-5 px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 text-white font-semibold hover:from-indigo-500 hover:to-pink-500 disabled:opacity-60"
-        >
-          {isSubmitting ? 'Registering...' : 'Register Face Data'}
-        </motion.button>
-      </motion.div>
-    </motion.div>
-  );
-};
-
-// ─── Reports Section ────────────────────────────────────────────────────
-const ReportsSection: React.FC = () => {
-  const [stats, setStats] = React.useState<{
-    totalExams: number;
-    totalSubmissions: number;
-    pendingReview: number;
-    averageScore: number;
-  } | null>(null);
-  const [examTrends, setExamTrends] = React.useState<{ title: string; avgScore: number }[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const [statsRes, examsRes, submissionsRes] = await Promise.all([
-          adminApi.getDashboardStats(),
-          adminApi.getExams(),
-          adminApi.getSubmissions(),
-        ]);
-
-        if (statsRes.success && statsRes.data) {
-          setStats(statsRes.data as any);
+        const fallback = await adminApi.getStudentsForScoring();
+        if (fallback.success && Array.isArray(fallback.data)) {
+          setRegisteredStudents(fallback.data);
         }
-
-        // Build per-exam average scores from submissions
-        const exams: any[] = Array.isArray(examsRes?.data) ? examsRes.data : [];
-        const submissions: any[] = Array.isArray(submissionsRes?.data) ? submissionsRes.data : [];
-
-        const trends = exams.map((exam: any) => {
-          const examCode = exam.code ?? exam.name;
-          const examSubmissions = submissions.filter(
-            (s: any) => s.exam === examCode && s.score !== null && s.score !== undefined
-          );
-          const avg = examSubmissions.length > 0
-            ? Math.round(examSubmissions.reduce((sum: number, s: any) => sum + Number(s.score), 0) / examSubmissions.length)
-            : 0;
-          return { title: exam.name ?? exam.code ?? 'Exam', avgScore: avg };
-        });
-        setExamTrends(trends);
-      } catch (err) {
-        console.error('Failed to load reports:', err);
-      } finally {
-        setLoading(false);
       }
-    };
-    load();
-  }, []);
+    } catch {
+      try {
+        const fallback = await adminApi.getStudentsForScoring();
+        if (fallback.success && Array.isArray(fallback.data)) setRegisteredStudents(fallback.data);
+      } catch { /* ignore */ }
+    }
+    setLoadingStudents(false);
+  };
 
-  const totalSubmissions = stats?.totalSubmissions ?? 0;
-  const averageScore = stats?.averageScore ?? 0;
-  const totalExams = stats?.totalExams ?? 0;
-  const passRate = totalSubmissions > 0
-    ? Math.round((averageScore / 100) * totalSubmissions) + '/' + totalSubmissions
-    : '—';
-  const passPercent = Math.min(100, averageScore > 0 ? Math.round(averageScore * 1.1) : 0);
+  useEffect(() => { loadStudents(); }, []);
 
-  const reportMetrics = [
-    { title: 'Overall Pass Rate', value: averageScore > 0 ? `${passPercent}%` : '—', icon: '📈', color: 'from-green-600 to-emerald-600' },
-    { title: 'Average Score', value: averageScore > 0 ? String(averageScore) : '—', icon: '🎯', color: 'from-blue-600 to-cyan-600' },
-    { title: 'Total Submissions', value: String(totalSubmissions), icon: '👥', color: 'from-purple-600 to-pink-600' },
-    { title: 'Active Exams', value: String(totalExams), icon: '📊', color: 'from-orange-600 to-red-600' },
-  ];
+  const handleRegistrationSuccess = () => {
+    // Reload the student list after successful registration
+    loadStudents();
+  };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const handleDeleteEmbedding = async (studentId: string) => {
+    if (!confirm(`Delete face data for ${studentId}?`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/face/embedding/${encodeURIComponent(studentId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) loadStudents();
+    } catch { /* ignore */ }
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-6"
-    >
-      <h3 className="text-xl font-semibold text-white">Reports & Analytics</h3>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      {/* Live Camera Registration */}
+      <LiveFaceRegistration onRegistered={handleRegistrationSuccess} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {reportMetrics.map((metric, idx) => (
-          <motion.div
-            key={idx}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: idx * 0.1 }}
-            whileHover={{ y: -4 }}
-            className={`bg-gradient-to-br ${metric.color} rounded-xl p-6 text-white shadow-lg hover:shadow-xl transition-all`}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium opacity-90">{metric.title}</p>
-                <p className="text-3xl font-bold mt-3">{metric.value}</p>
-              </div>
-              <span className="text-3xl opacity-80">{metric.icon}</span>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Per-Exam Performance Chart */}
+      {/* Registered Students with Face Embeddings */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
+        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
         className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
       >
-        <h4 className="text-lg font-semibold text-white mb-6">Per-Exam Average Score</h4>
-        {examTrends.length === 0 ? (
-          <p className="text-slate-400 text-sm text-center py-8">No exam data yet. Upload and publish exams to see performance trends.</p>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-lg font-semibold text-white">Registered Students</h4>
+          <button onClick={loadStudents} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">↻ Refresh</button>
+        </div>
+        {loadingStudents ? <LoadingOverlay /> : registeredStudents.length === 0 ? (
+          <p className="text-slate-400 text-sm text-center py-4">No students registered yet. Use the camera above to register.</p>
         ) : (
-          <div className="space-y-4">
-            {examTrends.map((exam, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ x: -20, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.5 + idx * 0.1 }}
-              >
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm text-slate-300">{exam.title}</span>
-                  <span className="text-sm font-semibold text-indigo-400">
-                    {exam.avgScore > 0 ? `${exam.avgScore}%` : 'No submissions'}
-                  </span>
-                </div>
-                <div className="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${exam.avgScore}%` }}
-                    transition={{ duration: 1, delay: 0.6 + idx * 0.1 }}
-                    className="h-full bg-gradient-to-r from-indigo-500 to-pink-500 rounded-full"
-                  />
-                </div>
-              </motion.div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700/50">
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">Student ID</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">Name</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">Embedding</th>
+                  <th className="text-left px-4 py-3 text-sm font-semibold text-slate-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registeredStudents.map((s: any, idx: number) => (
+                  <tr key={s.studentId ?? s.id ?? idx} className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors">
+                    <td className="px-4 py-3 text-sm text-indigo-300 font-mono">{s.studentId || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-white font-medium">{s.studentName || s.name || s.fullName || '-'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        s.hasEmbedding || s.facialEmbedding || s.normalizedEmbedding || s.faceDescriptor
+                          ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'
+                      }`}>
+                        {s.hasEmbedding || s.facialEmbedding || s.normalizedEmbedding || s.faceDescriptor
+                          ? '✓ 128D Vector' : 'No Data'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <button
+                        onClick={() => handleDeleteEmbedding(s.studentId)}
+                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </motion.div>
     </motion.div>
   );
 };
-
-// ─── Main Admin Portal Component ────────────────────────────────────────
-export const AdminPortal: React.FC = () => {
-  const navigate = useNavigate();
-  const [activePage, setActivePage] = useState('dashboard');
-
-  const navItems: NavItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: '🏠' },
-    { id: 'exams', label: 'Manage Exams', icon: '📝' },
-    { id: 'students', label: 'Register Student', icon: '🧑‍🎓' },
-    { id: 'submissions', label: 'Submissions', icon: '📋' },
-    { id: 'scores', label: 'Score', icon: '⭐' },
-    { id: 'reports', label: 'Reports', icon: '📊' },
-  ];
-
-  const handleLogout = () => {
-    navigate('/');
-  };
-
-  const getPageTitle = () => {
-    return navItems.find((item) => item.id === activePage)?.label || 'Dashboard';
-  };
-
-  return (
-    <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 min-h-screen">
-      {/* Sidebar */}
-      <AdminSidebar
-        activePage={activePage}
-        onNavigate={setActivePage}
-        navItems={navItems}
-      />
-
-      {/* Main Content */}
-      <div className="ml-60 flex flex-col min-h-screen">
-        {/* Topbar */}
-        <AdminTopbar pageTitle={getPageTitle()} onLogout={handleLogout} />
-
-        {/* Content Area */}
-        <main className="flex-1 px-8 py-8 overflow-y-auto">
-          <motion.div
-            key={activePage}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {activePage === 'dashboard' && <DashboardSection />}
-            {activePage === 'exams' && <ExamManagementSection />}
-            {activePage === 'students' && <StudentRegistrationSection />}
-            {activePage === 'submissions' && <SubmissionsSection />}
-            {activePage === 'scores' && <ScoreSection />}
-            {activePage === 'reports' && <ReportsSection />}
-          </motion.div>
-        </main>
-      </div>
-    </div>
-  );
-};
-
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SUBMISSIONS SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+const SubmissionsSection: React.FC = () => {  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);  const [loading, setLoading] = useState(true);  useEffect(() => {    const load = async () => {      try {        const response = await adminApi.getSubmissions();        if (response.success && Array.isArray(response.data)) {          setSubmissions(response.data);        }      } catch { /* ignore */ }      setLoading(false);    };    load();  }, []);  const statusStyles: Record<string, string> = {    graded: 'text-green-400 bg-green-400/10',    pending: 'text-yellow-400 bg-yellow-400/10',    submitted: 'text-blue-400 bg-blue-400/10',  };  const statusLabels: Record<string, string> = {    graded: '✓ Graded',    pending: '⏳ Pending',    submitted: '📋 Submitted',  };  if (loading) return <LoadingOverlay />;  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}      className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"    >      <h3 className="text-lg font-semibold text-white mb-6">Student Submissions</h3>      {submissions.length === 0 ? (        <p className="text-slate-400 text-sm text-center py-8">No submissions yet</p>      ) : (        <div className="overflow-x-auto">          <table className="w-full">            <thead>              <tr className="border-b border-slate-700/50">                {['Student', 'Exam', 'Score', 'Status', 'Submitted', 'Answers'].map((h) => (                  <th key={h} className="text-left px-4 py-3 text-sm font-semibold text-slate-400">{h}</th>                ))}              </tr>            </thead>            <tbody>              {submissions.map((sub, idx) => (                <motion.tr key={sub.id ?? idx}                  initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}                  transition={{ delay: idx * 0.03 }}                  className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"                >                  <td className="px-4 py-3 text-sm text-white font-medium">{sub.name}</td>                  <td className="px-4 py-3 text-sm text-slate-300 font-mono">{sub.exam}</td>                  <td className="px-4 py-3 text-sm text-slate-300">{sub.score !== null ? `${sub.score}%` : '—'}</td>                  <td className="px-4 py-3 text-sm">                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusStyles[sub.status] ?? 'text-slate-400 bg-slate-400/10'}`}>                      {statusLabels[sub.status] ?? sub.status}                    </span>                  </td>                  <td className="px-4 py-3 text-sm text-slate-400">{sub.submittedAt}</td>                  <td className="px-4 py-3 text-sm text-slate-400">{sub.answerCount ?? '-'}</td>                </motion.tr>              ))}            </tbody>          </table>        </div>      )}    </motion.div>  );};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SCORE MANAGEMENT SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+const ScoreSection: React.FC = () => {  const toast = useToast();  const [searchStudent, setSearchStudent] = useState('');  const [students, setStudents] = useState<any[]>([]);  const [scoreInputs, setScoreInputs] = useState<Record<string, string>>({});  const [loading, setLoading] = useState(true);  useEffect(() => {    const load = async () => {      try {        const res = await adminApi.getStudentsForScoring();        if (res.success && Array.isArray(res.data)) setStudents(res.data);      } catch { /* ignore */ }      setLoading(false);    };    load();  }, []);  const handleDownloadAnswers = async (studentId: string | number, name: string) => {    try {      toast.info('Downloading', `Fetching answers for ${name}...`);      const blob = await adminApi.downloadStudentAnswers(studentId);      const url = window.URL.createObjectURL(blob);      const link = document.createElement('a');      link.href = url;      link.download = `${name.replace(/\s+/g, '_')}_answers.txt`;      document.body.appendChild(link);      link.click();      link.remove();      window.URL.revokeObjectURL(url);      toast.success('Downloaded', `Answers for ${name} downloaded`);    } catch (err: any) {      toast.error('Download Failed', err?.message || 'Could not download answers');    }  };  const handleScoreSubmit = async (studentId: string | number) => {    const score = Number(scoreInputs[String(studentId)] ?? 0);    if (Number.isNaN(score) || score < 0 || score > 100) {      toast.warning('Invalid Score', 'Score must be between 0 and 100');      return;    }    try {      const res = await adminApi.submitStudentScore(studentId, score);      if (res.success) {        toast.success('Score Saved', `Score ${score} submitted successfully`);        setScoreInputs((p) => ({ ...p, [String(studentId)]: '' }));      } else {        toast.error('Failed', (res as any).error || 'Could not submit score');      }    } catch (err: any) {      toast.error('Error', err?.message || 'Score submission error');    }  };  if (loading) return <LoadingOverlay />;  const filtered = students.filter((s) =>    (s.name || '').toLowerCase().includes(searchStudent.toLowerCase()),  );  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h3 className="text-lg font-semibold text-white mb-4">Score Management</h3>        <input type="text" placeholder="Search by student name..."          value={searchStudent} onChange={(e) => setSearchStudent(e.target.value)}          className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none" />      </motion.div>      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h4 className="text-lg font-semibold text-white mb-6">Enter & Review Scores</h4>        {filtered.length === 0 ? (          <p className="text-slate-400 text-sm text-center py-6">No students found</p>        ) : (          <div className="overflow-x-auto">            <table className="w-full">              <thead>                <tr className="border-b border-slate-700/50">                  {['Student', 'Exam', 'Score Input', 'Download'].map((h) => (                    <th key={h} className="text-left px-4 py-3 text-sm font-semibold text-slate-400">{h}</th>                  ))}                </tr>              </thead>              <tbody>                {filtered.map((student: any, idx: number) => (                  <motion.tr key={student.id ?? idx}                    initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}                    transition={{ delay: idx * 0.03 }}                    className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"                  >                    <td className="px-4 py-3 text-sm text-white font-medium">{student.name}</td>                    <td className="px-4 py-3 text-sm text-slate-300 font-mono">{student.exam}</td>                    <td className="px-4 py-3 text-sm">                      <div className="flex items-center gap-2">                        <input type="number" placeholder="0–100" min="0" max="100"                          value={scoreInputs[String(student.id)] ?? ''}                          onChange={(e) => setScoreInputs((p) => ({ ...p, [String(student.id)]: e.target.value }))}                          className="w-20 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none text-center" />                        <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}                          onClick={() => handleScoreSubmit(student.id)}                          className="px-3 py-2 rounded-lg bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 transition-colors font-medium text-sm"                        >Submit</motion.button>                      </div>                    </td>                    <td className="px-4 py-3 text-sm">                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}                        onClick={() => handleDownloadAnswers(student.id, student.name)}                        className="px-4 py-2 rounded-lg bg-green-600/20 text-green-300 hover:bg-green-600/40 transition-colors font-medium text-sm"                      >📥 Download</motion.button>                    </td>                  </motion.tr>                ))}              </tbody>            </table>          </div>        )}      </motion.div>    </motion.div>  );};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  VOICE LOGS VIEWER
+// ═══════════════════════════════════════════════════════════════════════════════
+const VoiceLogsSection: React.FC = () => {  const [logs, setLogs] = useState<any[]>([]);  const [loading, setLoading] = useState(true);  const [filter, setFilter] = useState('');  useEffect(() => {    const load = async () => {      try {
+// Fetch activity from legacy endpoint + attempt v1 if available
+const activityRes = await adminApi.getRecentActivity();        if (activityRes.success && Array.isArray(activityRes.data)) {          setLogs(activityRes.data.map((item: any, idx: number) => ({            id: idx,            eventType: 'activity',            message: item.message || String(item),            timestamp: new Date().toISOString(),          })));        }
+// Also fetch submissions which contain voice interaction data
+const subRes = await adminApi.getSubmissions();        if (subRes.success && Array.isArray(subRes.data)) {          const voiceLogs = subRes.data            .filter((s: any) => s.answerCount && s.answerCount > 0)            .map((s: any, idx: number) => ({              id: `sub-${idx}`,              eventType: 'voice-submission',              message: `${s.name} answered ${s.answerCount} questions via voice for ${s.exam}`,              timestamp: s.submittedAt || new Date().toISOString(),              studentName: s.name,              exam: s.exam,            }));          setLogs((prev) => [...prev, ...voiceLogs]);        }      } catch { /* ignore */ }      setLoading(false);    };    load();  }, []);  const filtered = logs.filter((log) =>    JSON.stringify(log).toLowerCase().includes(filter.toLowerCase()),  );  if (loading) return <LoadingOverlay />;  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h3 className="text-lg font-semibold text-white mb-4">Voice Interaction Logs</h3>        <input type="text" placeholder="Filter logs..."          value={filter} onChange={(e) => setFilter(e.target.value)}          className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none mb-4" />        {filtered.length === 0 ? (          <p className="text-slate-400 text-sm text-center py-8">No voice logs found</p>        ) : (          <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">            {filtered.map((log, idx) => (              <motion.div key={log.id ?? idx}                initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }}                transition={{ delay: idx * 0.02 }}                className="flex items-start gap-3 p-3 bg-slate-700/20 rounded-lg border border-slate-700/30 hover:border-indigo-500/20 transition-all"              >                <span className={`mt-0.5 text-sm ${                  log.eventType === 'voice-submission' ? 'text-blue-400' : 'text-indigo-400'                }`}>                  {log.eventType === 'voice-submission' ? '🎤' : '📝'}                </span>                <div className="flex-1">                  <p className="text-sm text-slate-200">{log.message}</p>                  <div className="flex items-center gap-3 mt-1">                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${                      log.eventType === 'voice-submission'                        ? 'bg-blue-500/20 text-blue-300'                        : 'bg-indigo-500/20 text-indigo-300'                    }`}>{log.eventType}</span>                    <span className="text-xs text-slate-500">                      {log.timestamp ? new Date(log.timestamp).toLocaleString() : '-'}                    </span>                  </div>                </div>              </motion.div>            ))}          </div>        )}      </motion.div>    </motion.div>  );};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  REPORTS SECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+const ReportsSection: React.FC = () => {  const [stats, setStats] = useState<any>(null);  const [examTrends, setExamTrends] = useState<{ title: string; avgScore: number }[]>([]);  const [loading, setLoading] = useState(true);  useEffect(() => {    const load = async () => {      try {        const [statsRes, examsRes, submissionsRes] = await Promise.all([          adminApi.getDashboardStats(),          adminApi.getExams(),          adminApi.getSubmissions(),        ]);        if (statsRes.success && statsRes.data) setStats(statsRes.data);        const exams: any[] = Array.isArray((examsRes as any)?.data) ? (examsRes as any).data : [];        const submissions: any[] = Array.isArray(submissionsRes?.data) ? submissionsRes.data : [];        const trends = exams.map((exam: any) => {          const code = exam.code ?? exam.name;          const subs = submissions.filter((s: any) => s.exam === code && s.score != null);          const avg = subs.length > 0            ? Math.round(subs.reduce((sum: number, s: any) => sum + Number(s.score), 0) / subs.length)            : 0;          return { title: exam.name ?? exam.code ?? 'Exam', avgScore: avg };        });        setExamTrends(trends);      } catch { /* ignore */ }      setLoading(false);    };    load();  }, []);  if (loading) return <LoadingOverlay />;  const totalSubmissions = stats?.totalSubmissions ?? 0;  const averageScore = stats?.averageScore ?? 0;  const totalExams = stats?.totalExams ?? 0;  const passPercent = Math.min(100, averageScore > 0 ? Math.round(averageScore * 1.1) : 0);  const metrics = [    { title: 'Pass Rate', value: averageScore > 0 ? `${passPercent}%` : '—', icon: '📈', color: 'from-green-600 to-emerald-600' },    { title: 'Average Score', value: averageScore > 0 ? String(averageScore) : '—', icon: '🎯', color: 'from-blue-600 to-cyan-600' },    { title: 'Submissions', value: String(totalSubmissions), icon: '👥', color: 'from-purple-600 to-pink-600' },    { title: 'Active Exams', value: String(totalExams), icon: '📊', color: 'from-orange-600 to-red-600' },  ];  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">      <h3 className="text-xl font-semibold text-white">Reports & Analytics</h3>      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">        {metrics.map((m, idx) => (          <motion.div key={idx}            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}            transition={{ delay: idx * 0.1 }} whileHover={{ y: -4 }}            className={`bg-gradient-to-br ${m.color} rounded-xl p-6 text-white shadow-lg transition-all`}          >            <div className="flex items-start justify-between">              <div>                <p className="text-sm font-medium opacity-90">{m.title}</p>                <p className="text-3xl font-bold mt-3">{m.value}</p>              </div>              <span className="text-3xl opacity-80">{m.icon}</span>            </div>          </motion.div>        ))}      </div>      {/* Per-Exam Chart */}      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h4 className="text-lg font-semibold text-white mb-6">Per-Exam Average Score</h4>        {examTrends.length === 0 ? (          <p className="text-slate-400 text-sm text-center py-8">No exam data yet</p>        ) : (          <div className="space-y-4">            {examTrends.map((exam, idx) => (              <motion.div key={idx}                initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }}                transition={{ delay: 0.5 + idx * 0.1 }}              >                <div className="flex justify-between mb-2">                  <span className="text-sm text-slate-300">{exam.title}</span>                  <span className="text-sm font-semibold text-indigo-400">                    {exam.avgScore > 0 ? `${exam.avgScore}%` : 'No submissions'}                  </span>                </div>                <div className="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">                  <motion.div                    initial={{ width: 0 }}                    animate={{ width: `${exam.avgScore}%` }}                    transition={{ duration: 1, delay: 0.6 + idx * 0.1 }}                    className="h-full bg-gradient-to-r from-indigo-500 to-pink-500 rounded-full"                  />                </div>              </motion.div>            ))}          </div>        )}      </motion.div>    </motion.div>  );};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SETTINGS SECTION (AI Config + System)
+// ═══════════════════════════════════════════════════════════════════════════════
+const SettingsSection: React.FC = () => {  const toast = useToast();  const [loading, setLoading] = useState(true);  const [saving, setSaving] = useState(false);  const [config, setConfig] = useState({    sttEngine: 'whisper' as 'vosk' | 'whisper',    llmModel: 'llama3.2',    grammarCorrection: true,    autoSaveInterval: 15,    multilingualMode: true,    ttsSpeed: 1,  });  useEffect(() => {    const load = async () => {      try {        const res = await adminApi.v1GetAIConfig();        if (res.success && res.data) {          setConfig({            sttEngine: res.data.sttEngine || 'whisper',            llmModel: res.data.llmModel || 'llama3.2',            grammarCorrection: res.data.grammarCorrection ?? true,            autoSaveInterval: res.data.autoSaveInterval || 15,            multilingualMode: res.data.multilingualMode ?? true,            ttsSpeed: res.data.ttsSpeed || 1,          });        }      } catch { /* use defaults */ }      setLoading(false);    };    load();  }, []);  const handleSave = async () => {    setSaving(true);    try {      const res = await adminApi.v1UpdateAIConfig(config);      if (res.success) {        toast.success('Saved', 'AI configuration updated');      } else {        toast.error('Failed', (res as any).error || 'Could not save config');      }    } catch (err: any) {      toast.error('Error', err?.message || 'Save failed');    } finally {      setSaving(false);    }  };  if (loading) return <LoadingOverlay />;  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h3 className="text-lg font-semibold text-white mb-6">AI & System Configuration</h3>        <div className="space-y-5">          {/* STT Engine */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">Speech-to-Text Engine</label>            <select value={config.sttEngine}              onChange={(e) => setConfig((p) => ({ ...p, sttEngine: e.target.value as 'vosk' | 'whisper' }))}              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:border-indigo-500 outline-none"            >              <option value="whisper">Whisper (OpenAI)</option>              <option value="vosk">Vosk (Offline)</option>            </select>          </div>          {/* LLM Model */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">LLM Model</label>            <input type="text" value={config.llmModel}              onChange={(e) => setConfig((p) => ({ ...p, llmModel: e.target.value }))}              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none font-mono" />          </div>          {/* Auto-save Interval */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">Auto-save Interval (seconds)</label>            <input type="number" min="5" max="300" value={config.autoSaveInterval}              onChange={(e) => setConfig((p) => ({ ...p, autoSaveInterval: Number(e.target.value) }))}              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:border-indigo-500 outline-none" />          </div>          {/* TTS Speed */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">TTS Speed ({config.ttsSpeed}x)</label>            <input type="range" min="0.5" max="2.5" step="0.1" value={config.ttsSpeed}              onChange={(e) => setConfig((p) => ({ ...p, ttsSpeed: Number(e.target.value) }))}              className="w-full accent-indigo-500" />          </div>          {/* Toggles */}          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">            <label className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">              <input type="checkbox" checked={config.grammarCorrection}                onChange={(e) => setConfig((p) => ({ ...p, grammarCorrection: e.target.checked }))}                className="w-4 h-4 accent-indigo-500" />              <div>                <p className="text-sm text-white font-medium">Grammar Correction</p>                <p className="text-xs text-slate-400">Auto-correct grammar in answers</p>              </div>            </label>            <label className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">              <input type="checkbox" checked={config.multilingualMode}                onChange={(e) => setConfig((p) => ({ ...p, multilingualMode: e.target.checked }))}                className="w-4 h-4 accent-indigo-500" />              <div>                <p className="text-sm text-white font-medium">Multilingual Mode</p>                <p className="text-xs text-slate-400">Support multiple languages</p>              </div>            </label>          </div>          <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}            onClick={handleSave} disabled={saving}            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all disabled:opacity-60"          >            {saving ? <span className="flex items-center justify-center gap-2"><Spinner size="w-4 h-4" /> Saving...</span> : 'Save Configuration'}          </motion.button>        </div>      </motion.div>      {/* System Info */}      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h4 className="text-lg font-semibold text-white mb-4">System Information</h4>        <div className="space-y-3 text-sm">          {[            ['Backend', 'Node.js + Express'],            ['Database', 'MongoDB Atlas'],            ['Voice Engine', config.sttEngine === 'whisper' ? 'OpenAI Whisper' : 'Vosk'],            ['LLM', config.llmModel],            ['Auto-save', `Every ${config.autoSaveInterval}s`],          ].map(([k, v]) => (            <div key={k} className="flex justify-between py-2 border-b border-slate-700/30">              <span className="text-slate-400">{k}</span>              <span className="text-white font-medium">{v}</span>            </div>          ))}        </div>      </motion.div>    </motion.div>  );};
+// ═══════════════════════════════════════════════════════════════════════════════
+//  MAIN ADMIN PORTAL
+// ═══════════════════════════════════════════════════════════════════════════════
+const AdminPortal: React.FC = () => {  const navigate = useNavigate();  const { admin, logout: authLogout } = useAuth();  const [activePage, setActivePage] = useState('dashboard');  const navItems: NavItem[] = [    { id: 'dashboard', label: 'Dashboard', icon: '🏠' },    { id: 'exams', label: 'Manage Exams', icon: '📝' },    { id: 'students', label: 'Student Mgmt', icon: '🧑‍🎓' },    { id: 'submissions', label: 'Submissions', icon: '📋' },    { id: 'scores', label: 'Scores', icon: '⭐' },    { id: 'voice-logs', label: 'Voice Logs', icon: '🎤' },    { id: 'reports', label: 'Reports', icon: '📊' },    { id: 'settings', label: 'Settings', icon: '⚙️' },  ];  const handleLogout = () => {    authLogout();    adminApi.logout();    sessionStorage.removeItem('adminAuth');    navigate('/');  };  const getPageTitle = () => navItems.find((i) => i.id === activePage)?.label || 'Dashboard';  return (    <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 min-h-screen">      <AdminSidebar activePage={activePage} onNavigate={setActivePage} navItems={navItems} adminName={admin?.name} adminRole={admin?.role} />      <div className="ml-60 flex flex-col min-h-screen">        <AdminTopbar pageTitle={getPageTitle()} onLogout={handleLogout} />        <main className="flex-1 px-8 py-8 overflow-y-auto">          <AnimatePresence mode="wait">            <motion.div              key={activePage}              initial={{ opacity: 0, y: 10 }}              animate={{ opacity: 1, y: 0 }}              exit={{ opacity: 0, y: -10 }}              transition={{ duration: 0.3 }}            >              {activePage === 'dashboard' && <DashboardSection />}              {activePage === 'exams' && <ExamManagementSection />}              {activePage === 'students' && <StudentManagementSection />}              {activePage === 'submissions' && <SubmissionsSection />}              {activePage === 'scores' && <ScoreSection />}              {activePage === 'voice-logs' && <VoiceLogsSection />}              {activePage === 'reports' && <ReportsSection />}              {activePage === 'settings' && <SettingsSection />}            </motion.div>          </AnimatePresence>        </main>      </div>    </div>  );};
 export default AdminPortal;

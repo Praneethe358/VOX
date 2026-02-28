@@ -1,7 +1,19 @@
-import React, { useEffect, useState } from 'react';
+/**
+ * ResultsPage.tsx - Exam results display with voice readout.
+ *
+ * Voice-enabled: Auto-reads results summary, navigation commands.
+ */
+
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import apiService from '../../services/student/api.service';
+import { useVoiceNavigation } from '../../hooks/useVoiceNavigation';
+import { useAutoSpeak } from '../../hooks/useAutoSpeak';
+import { useVoiceContext } from '../../context/VoiceContext';
+import { VoiceCommandEngine } from '../../components/student/VoiceCommandEngine';
+import { VoiceListener } from '../../components/student/VoiceListener';
+import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
 
 interface ResultItem {
   sessionId: string;
@@ -15,6 +27,35 @@ export default function ResultsPage() {
   const navigate = useNavigate();
   const [results, setResults] = useState<ResultItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { speak } = useVoiceContext();
+
+  // ── Voice: auto-speak results summary ──────────────────────────────────
+  useAutoSpeak(
+    () => {
+      if (loading) return null;
+      if (results.length === 0) return 'No exam results available yet. Say "go back" to return to the dashboard.';
+      const topResults = results.slice(0, 3).map(
+        (r, i) => `${r.examTitle}: ${r.score} out of ${r.totalMarks}`
+      ).join('. ');
+      return `You have ${results.length} exam result${results.length > 1 ? 's' : ''}. ${topResults}. Say "go back" to return, or "help" for more commands.`;
+    },
+    [loading, results.length],
+    { delay: 600, rate: 0.95 },
+  );
+
+  // ── Voice: navigation ──────────────────────────────────────────────────
+  const handleUnknownCommand = useCallback(
+    (raw: string) => {
+      speak(`Command not recognized. Say "go back" to return to dashboard, or "help" for commands.`);
+    },
+    [speak],
+  );
+
+  const { isListening, lastCommand } = useVoiceNavigation({
+    enabled: !loading,
+    onUnknownCommand: handleUnknownCommand,
+    pageName: 'the results page',
+  });
 
   useEffect(() => {
     const loadResults = async () => {
@@ -42,6 +83,20 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-4">
+      {/* Voice UI overlays */}
+      <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
+      <VoiceSpeaker position="bottom-center" />
+      <VoiceCommandEngine
+        isListening={isListening}
+        lastCommand={lastCommand}
+        position="bottom-right"
+        hints={[
+          { command: '"Go back"',      icon: '⬅️', description: 'Return to dashboard' },
+          { command: '"Dashboard"',    icon: '🏠', description: 'Go to dashboard' },
+          { command: '"Take exam"',    icon: '📝', description: 'Browse exams' },
+          { command: '"Help"',         icon: '❓', description: 'List all commands' },
+        ]}
+      />
       <div className="max-w-4xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-white">My Results</h1>

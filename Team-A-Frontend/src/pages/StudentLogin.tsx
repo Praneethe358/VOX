@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import * as faceapi from 'face-api.js';
+import { studentApi } from '../api/client';
 
 export default function StudentLogin() {
   const navigate = useNavigate();
@@ -113,29 +114,18 @@ export default function StudentLogin() {
   // Verify face with backend
   const verifyWithBackend = async (descriptor: number[]) => {
     try {
-      const response = await fetch('http://localhost:3000/api/student/verify-face', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          examCode: examCode || 'TECH101',
-          liveDescriptor: descriptor,
-        }),
-      });
+      const result = await studentApi.verifyFace(examCode || 'TECH101', descriptor);
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (result.success && result.data?.matched) {
         // Store student info in session
-        sessionStorage.setItem('studentLoggedIn', 'true');
-        sessionStorage.setItem('studentName', data.studentName || 'Student');
-        sessionStorage.setItem('studentRollNumber', data.rollNumber || '');
+        sessionStorage.setItem('studentAuth', 'true');
+        sessionStorage.setItem('studentId', result.data.studentId || 'UNKNOWN');
+        sessionStorage.setItem('studentName', result.data.student?.name || 'Student');
         
-        // Navigate to student portal
-        setTimeout(() => navigate('/student-portal'), 1000);
+        // Navigate to student dashboard
+        setTimeout(() => navigate('/student/dashboard'), 1000);
       } else {
-        setError(data.error || 'Face verification failed. Please try again.');
+        setError(result.error || 'Face verification failed. Please try again.');
         setDetecting(false);
       }
     } catch (err) {
@@ -152,9 +142,10 @@ export default function StudentLogin() {
       return;
     }
     
-    sessionStorage.setItem('studentLoggedIn', 'true');
+    sessionStorage.setItem('studentAuth', 'true');
     sessionStorage.setItem('studentName', studentName);
-    navigate('/student-portal');
+    sessionStorage.setItem('studentId', 'DEMO_STUDENT_001');
+    navigate('/student/dashboard');
   };
 
   return (

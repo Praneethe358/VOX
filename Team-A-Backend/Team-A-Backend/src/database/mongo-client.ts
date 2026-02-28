@@ -8,7 +8,11 @@ import { AuditDocument } from "./models/Audit";
 import { faceService } from "../services/face.service";
 
 const MONGO_URI = process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017";
-const DB_NAME = "mindkraft";
+const DB_NAME = process.env.MONGODB_DB_NAME;
+
+function redactMongoUri(uri: string): string {
+  return uri.replace(/:\/\/([^@]+)@/, "://***:***@");
+}
 
 export class MongoService {
   private client: MongoClient | null = null;
@@ -17,9 +21,9 @@ export class MongoService {
   async connect(): Promise<void> {
     this.client = new MongoClient(MONGO_URI);
     await this.client.connect();
-    this.db = this.client.db(DB_NAME);
+    this.db = DB_NAME ? this.client.db(DB_NAME) : this.client.db();
     faceService.setDb(this.db);
-    console.log(`Connected to MongoDB: ${DB_NAME}`);
+    console.log(`Connected to MongoDB: ${redactMongoUri(MONGO_URI)} | db=${this.db.databaseName}`);
   }
 
   private col(name: string) {

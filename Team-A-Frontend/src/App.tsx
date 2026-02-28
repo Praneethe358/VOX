@@ -1,15 +1,17 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
 import { ExamProvider } from "./context/ExamContext";
 import { VoiceProvider } from "./context/VoiceContext";
+import { ToastProvider } from "./components/Toast";
+import { ProtectedRoute, StudentProtectedRoute } from "./components/ProtectedRoute";
 
-// Legacy Pages
+// Pages
 import LandingPage from "./pages/LandingPage";
 import SplashScreen from "./pages/SplashScreen";
 import AdminLogin from "./pages/adminlogin";
-import Dashboard from "./pages/Dashboard";
 import AdminPortal from "./pages/AdminPortal";
 
-// New Student Portal Pages
+// Student Portal Pages
 import FaceRecognitionLogin from "./pages/student/FaceRecognitionLogin";
 import StudentDashboard from "./pages/student/StudentDashboard";
 import ExamSelector from "./pages/student/ExamSelector";
@@ -24,37 +26,67 @@ import ExamBriefing from "./pages/student/ExamBriefing";
 export default function App() {
   return (
     <BrowserRouter>
-      <ExamProvider>
-        <VoiceProvider>
-        <Routes>
-          {/* Legacy Routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/admin-login" element={<AdminLogin />} />
-          <Route path="/admin" element={<AdminPortal />} />
-          <Route path="/student-login" element={<Navigate to="/student/login-fallback" replace />} />
-          <Route path="/student-portal" element={<Navigate to="/student/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/exam" element={<Navigate to="/student/exams" replace />} />
-          <Route path="/splash" element={<SplashScreen />} />
+      <AuthProvider>
+        <ToastProvider>
+          <ExamProvider>
+            <VoiceProvider>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/admin-login" element={<AdminLogin />} />
+                <Route path="/splash" element={<SplashScreen />} />
 
-          {/* New Student Portal Routes */}
-          <Route path="/student" element={<Navigate to="/student/login" replace />} />
-          <Route path="/student/login" element={<FaceRecognitionLogin />} />
-          <Route path="/student/dashboard" element={<StudentDashboard />} />
-          <Route path="/student/exams" element={<ExamSelector />} />
-          <Route path="/student/exam/:examId/checklist" element={<PreExamChecklist />} />
-          <Route path="/student/exam/:examId/interface" element={<StudentExamInterface />} />
-          <Route path="/student/submission-confirmation" element={<SubmissionConfirmation />} />
-          <Route path="/student/results" element={<ResultsPage />} />
-          <Route path="/student/settings" element={<SettingsPage />} />
-          <Route path="/student/login-fallback" element={<PasswordFallbackLogin />} />
-          <Route path="/student/exam-briefing" element={<ExamBriefing />} />
+                {/* Legacy Redirects */}
+                <Route path="/student-login" element={<Navigate to="/student/login" replace />} />
+                <Route path="/student-portal" element={<Navigate to="/student/dashboard" replace />} />
+                <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
+                <Route path="/exam" element={<Navigate to="/student/exams" replace />} />
 
-          {/* Default Route */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        </VoiceProvider>
-      </ExamProvider>
+                {/* Admin Routes — Protected */}
+                <Route path="/admin" element={
+                  <ProtectedRoute>
+                    <AdminPortal />
+                  </ProtectedRoute>
+                } />
+
+                {/* Student Auth Routes — Public */}
+                <Route path="/student" element={<Navigate to="/student/login" replace />} />
+                <Route path="/student/login" element={<FaceRecognitionLogin />} />
+                <Route path="/student/login-fallback" element={<PasswordFallbackLogin />} />
+
+                {/* Student Routes — Protected */}
+                <Route path="/student/dashboard" element={
+                  <StudentProtectedRoute><StudentDashboard /></StudentProtectedRoute>
+                } />
+                <Route path="/student/exams" element={
+                  <StudentProtectedRoute><ExamSelector /></StudentProtectedRoute>
+                } />
+                <Route path="/student/exam/:examId/checklist" element={
+                  <StudentProtectedRoute><PreExamChecklist /></StudentProtectedRoute>
+                } />
+                <Route path="/student/exam/:examId/interface" element={
+                  <StudentProtectedRoute><StudentExamInterface /></StudentProtectedRoute>
+                } />
+                <Route path="/student/submission-confirmation" element={
+                  <StudentProtectedRoute><SubmissionConfirmation /></StudentProtectedRoute>
+                } />
+                <Route path="/student/results" element={
+                  <StudentProtectedRoute><ResultsPage /></StudentProtectedRoute>
+                } />
+                <Route path="/student/settings" element={
+                  <StudentProtectedRoute><SettingsPage /></StudentProtectedRoute>
+                } />
+                <Route path="/student/exam-briefing" element={
+                  <StudentProtectedRoute><ExamBriefing /></StudentProtectedRoute>
+                } />
+
+                {/* Catch-all */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </VoiceProvider>
+          </ExamProvider>
+        </ToastProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

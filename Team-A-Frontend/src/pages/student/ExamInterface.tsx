@@ -144,11 +144,11 @@ export function ExamInterface() {
     } finally { setIsFormatting(false); }
   }, [speak, transition, setRawTranscript, setFormattedAnswer, currentQuestion]);
 
-  const { isRecording, interimText, start: startDictation, stop: stopDictation, reset: resetDictation } =
+  const { isRecording, interimText, lastError: dictationError, start: startDictation, stop: stopDictation, reset: resetDictation } =
     useDictation({ onDictationEnd: handleDictationEnd, silenceTimeout: 3500 });
 
   // ── Command handler ─────────────────────────────────────────────────────────
-  function handleCommand(action: string, _confidence: number) {
+  async function handleCommand(action: string, _confidence: number) {
     if (silenceWarnTimerRef.current) { clearTimeout(silenceWarnTimerRef.current); silenceWarnTimerRef.current = null; }
     switch (action) {
       case 'next_question':
@@ -168,7 +168,7 @@ export function ExamInterface() {
         stopEngine();
         setRawTranscript(''); setFormattedAnswer(''); resetDictation();
         transition('DICTATION_MODE');
-        speak('Dictation active. Speak your answer now. I will stop after 3 seconds of silence.');
+        await speak('Dictation active. Speak your answer now. I will stop after 3 seconds of silence.');
         startDictation();
         break;
       case 'stop_dictating':
@@ -183,13 +183,13 @@ export function ExamInterface() {
         if (voiceState !== 'ANSWER_REVIEW') return;
         stopEngine(); setRawTranscript(''); setFormattedAnswer(''); resetDictation();
         transition('DICTATION_MODE');
-        speak('Re-dictating. Speak your new answer.');
+        await speak('Re-dictating. Speak your new answer.');
         startDictation();
         break;
       case 'continue_dictation':
         if (voiceState !== 'ANSWER_REVIEW') return;
         stopEngine(); transition('DICTATION_MODE');
-        speak('Continuing. Speak to add more.');
+        await speak('Continuing. Speak to add more.');
         startDictation();
         break;
       case 'read_my_answer':
@@ -233,7 +233,14 @@ export function ExamInterface() {
     }
   }
 
-  const { start: startEngine, stop: stopEngine, failCount, isListening } = useVoiceEngine(handleCommand as any);
+  const {
+    start: startEngine,
+    stop: stopEngine,
+    failCount,
+    isListening,
+    lastError: voiceEngineError,
+    isSupported: isVoiceSupported,
+  } = useVoiceEngine(handleCommand as any);
 
   // Start engine when entering listening states
   useEffect(() => {
@@ -268,7 +275,14 @@ export function ExamInterface() {
     setAnswers(p => new Map(p).set(currentQuestion.id, { questionId: currentQuestion.id, rawText: rawTranscript, formattedText: text }));
     setRawTranscript(''); setFormattedAnswer('');
     playBeep('success');
+    // Save to legacy autosave
     try { await studentApi.autoSaveSession({ sessionId, examCode, questionId: String(currentQuestion.id), draftAnswer: text } as any); } catch {}
+    // Save to V1 autosave (MongoDB Atlas)
+    try { await studentApi.v1AutosaveAnswer({ examSessionId: sessionId, questionNumber: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawSpeechText: rawTranscript, formattedAnswer: text }); } catch {}
+    // Save to legacy response store
+    try { await studentApi.saveResponse({ studentId: (student as any)?.studentId ?? 'UNKNOWN', examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: rawTranscript, formattedAnswer: text, confidence: 1 }); } catch {}
+    // Log voice activity
+    try { await studentApi.logAudit({ studentId: (student as any)?.studentId ?? 'UNKNOWN', examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId: currentQuestion.id, wordCount: text.split(/\s+/).length } }); } catch {}
     await speak('Answer saved.' + (currentIndex < questions.length - 1 ? ' Moving to next question.' : ' All questions answered.'));
     transition('COMMAND_MODE');
     if (currentIndex < questions.length - 1) { questionReadRef.current = null; setCurrentIndex(i => i + 1); }
@@ -278,7 +292,15 @@ export function ExamInterface() {
     transition('FINALIZE');
     stopEngine(); stopSpeaking();
     await speak('Submitting your exam. Please wait.');
-    try { await studentApi.submitExamSession({ sessionId, examCode, studentId: (student as any)?.studentId ?? 'UNKNOWN', answers: Array.from(answers.values()) } as any); } catch {}
+    const studentId = (student as any)?.studentId ?? 'UNKNOWN';
+    // Submit to legacy endpoint
+    try { await studentApi.submitExamSession({ sessionId, examCode, studentId, answers: Array.from(answers.values()) } as any); } catch {}
+    // Submit to V1 endpoint
+    try { await studentApi.v1SubmitSession(sessionId); } catch {}
+    // Submit to legacy DB
+    try { await studentApi.logAudit({ studentId, examCode, action: 'EXAM_SUBMITTED', metadata: { answeredCount: answers.size, totalQuestions: questions.length } }); } catch {}
+    // End exam via legacy student API
+    try { await studentApi.endExam(studentId, examCode); } catch {}
     setIsSubmitted(true);
     playBeep('success');
     await speak('Exam submitted successfully. Thank you.');
@@ -319,6 +341,26 @@ export function ExamInterface() {
         <div className="flex justify-center">
           <TimerDisplay remainingSeconds={remaining} isPaused={isPaused} />
         </div>
+
+        {/* Voice status / error banner */}
+        {(!isVoiceSupported || voiceEngineError || dictationError) && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3"
+            role="alert"
+          >
+            <p className="text-red-300 text-sm font-semibold mb-1">Voice input is unavailable</p>
+            <p className="text-red-200 text-xs leading-relaxed">
+              {voiceEngineError || dictationError || 'Speech recognition is not supported in this browser.'}
+            </p>
+            {voiceEngineError?.toLowerCase().includes('whisper') && (
+              <p className="text-red-200/80 text-[11px] mt-1">
+                Whisper fallback needs backend `/api/ai/stt-command` and a working `whisper` binary on the server.
+              </p>
+            )}
+          </motion.div>
+        )}
 
         {/* Question card */}
         {currentQuestion && (

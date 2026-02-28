@@ -26,10 +26,17 @@ class DataProvider {
   }
 
   async adminLogin(username: string, password: string): Promise<boolean> {
-    return this.withFallback(
-      () => mongoService.adminLogin(username, password),
-      () => mockMongoService.adminLogin(username, password),
-    );
+    if (USE_MOCK_DB) {
+      return mockMongoService.adminLogin(username, password);
+    }
+    try {
+      const result = await mongoService.adminLogin(username, password);
+      if (result) return true;
+      // Primary returned false — could be wrong creds or DB not connected; try mock as fallback
+      return await mockMongoService.adminLogin(username, password);
+    } catch {
+      return mockMongoService.adminLogin(username, password);
+    }
   }
 
   async saveExam(exam: any): Promise<void> {
@@ -74,7 +81,7 @@ class DataProvider {
     );
   }
 
-  async verifyFace(examCode: string, liveDescriptor: number[]): Promise<{ success: boolean; studentId?: string }> {
+  async verifyFace(examCode: string, liveDescriptor: number[]): Promise<{ success: boolean; studentId?: string; confidence?: number; distance?: number; student?: any }> {
     if (USE_MOCK_DB) {
       return mockMongoService.verifyFace(examCode, liveDescriptor);
     }
@@ -221,6 +228,57 @@ class DataProvider {
       async () => null,
       () => mockMongoService.getResultBySession(sessionId),
     );
+  }
+
+  // ── Face Embeddings ──────────────────────────────────
+  async verifyFaceById(studentId: string, liveDescriptor: number[]): Promise<{
+    matched: boolean;
+    studentId?: string;
+    studentName?: string;
+    confidence: number;
+    distance: number;
+    method: string;
+    student?: any;
+  }> {
+    if (USE_MOCK_DB) {
+      return mockMongoService.verifyFaceById(studentId, liveDescriptor);
+    }
+    try {
+      return await faceService.verifyFaceByStudentId(studentId, liveDescriptor);
+    } catch {
+      return mockMongoService.verifyFaceById(studentId, liveDescriptor);
+    }
+  }
+
+  async registerFaceEmbedding(data: {
+    studentId: string;
+    studentName: string;
+    examCode?: string;
+    email?: string;
+    descriptors: number[][];
+    qualityScore?: number;
+  }): Promise<{ registered: boolean; studentId: string; embeddingSize: number; frameCount: number }> {
+    if (USE_MOCK_DB) {
+      return mockMongoService.registerFaceEmbedding(data);
+    }
+    try {
+      return await faceService.registerFaceEmbedding(data);
+    } catch {
+      return mockMongoService.registerFaceEmbedding(data);
+    }
+  }
+
+  async getAllRegisteredStudents(): Promise<any[]> {
+    if (USE_MOCK_DB) {
+      return mockMongoService.getAllRegisteredStudents();
+    }
+    try {
+      const students = await faceService.getRegisteredStudents();
+      if (students.length > 0) return students;
+      return mockMongoService.getAllRegisteredStudents();
+    } catch {
+      return mockMongoService.getAllRegisteredStudents();
+    }
   }
 }
 

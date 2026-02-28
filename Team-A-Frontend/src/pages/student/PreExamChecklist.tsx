@@ -1,12 +1,18 @@
 /**
  * PreExamChecklist.tsx - Pre-exam system verification
+ *
+ * Voice-enabled: Auto-speaks check progress, auto-starts when all pass,
+ * speaks errors aloud.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ExamData } from '../../types/student/exam.types';
 import { useExamContext } from '../../context/ExamContext';
+import { useVoiceContext } from '../../context/VoiceContext';
+import { VoiceListener } from '../../components/student/VoiceListener';
+import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
 
 interface PreExamChecklistProps {
   exam?: ExamData;
@@ -24,7 +30,8 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   const navigate = useNavigate();
   const location = useLocation();
   const { examId } = useParams();
-  const { setExam, setSession } = useExamContext();
+  const { setExam, setSession, student } = useExamContext();
+  const { speak, playBeep } = useVoiceContext();
   
   // Try to get exam from props, then location state, then context
   const exam = propExam || (location.state as any)?.exam;
@@ -46,6 +53,7 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
       navigate('/student/exams');
       return;
     }
+    speak('Running system checks. Please wait.', { rate: 0.95 });
     runSystemChecks();
   }, [exam, navigate]);
 
@@ -53,11 +61,14 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
     if (propOnReadyToStart) {
       propOnReadyToStart();
     } else if (exam) {
+      const storedId = student?.studentId ||
+        sessionStorage.getItem('studentId') ||
+        'DEMO_STUDENT_001';
       // Initialize exam in context
       setExam(exam);
       setSession({
         sessionId: `sess_${Date.now()}`,
-        studentId: 'STU001',
+        studentId: storedId,
         examCode: exam.examCode,
         status: 'in_progress',
         startTime: new Date(),
@@ -118,14 +129,14 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   const checkInternet = async () => {
     updateChecklistItem('internet', 'checking');
     try {
-      const response = await fetch('/api/health', { method: 'HEAD' });
+      const response = await fetch('http://localhost:3000/health');
       if (response.ok) {
         updateChecklistItem('internet', 'success', 'Connected to server');
       } else {
         throw new Error('Server unreachable');
       }
     } catch (err) {
-      updateChecklistItem('internet', 'failed', 'Server connection failed');
+      updateChecklistItem('internet', 'failed', 'Cannot reach backend at localhost:3000. Make sure the server is running.');
     }
   };
 
@@ -146,8 +157,8 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
 
   const checkSpeakers = () => {
     updateChecklistItem('speakers', 'checking');
-    if ('speechSynthesis' in window || 'AudioContext' in window) {
-      updateChecklistItem('speakers', 'success', 'Audio output available');
+    if ('AudioContext' in window || 'webkitAudioContext' in window) {
+      updateChecklistItem('speakers', 'success', 'Audio output available (espeak TTS)');
     } else {
       updateChecklistItem('speakers', 'failed', 'No audio output detected');
     }
@@ -168,11 +179,33 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   // Check if all passed
   useEffect(() => {
     const passed = checklist.every(item => item.status === 'success');
+    const failed = checklist.filter(item => item.status === 'failed');
     setAllPassed(passed);
+
+    // Voice announcements
+    if (passed && checklist.length > 0) {
+      playBeep('success');
+      speak(
+        'All system checks passed successfully. ' +
+        (exam ? `Ready to start ${exam.title}. ` : '') +
+        'The exam will begin automatically, or press the start button.',
+        { rate: 0.95 },
+      );
+      // Auto-start after 3 seconds if all passed
+      const t = setTimeout(() => handleStart(), 3000);
+      return () => clearTimeout(t);
+    } else if (failed.length > 0 && checklist.every(item => item.status !== 'pending' && item.status !== 'checking')) {
+      playBeep('error');
+      const failedNames = failed.map(f => f.label).join(', ');
+      speak(`System check failed for: ${failedNames}. Please fix these issues before starting the exam.`);
+    }
   }, [checklist]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 flex items-center justify-center p-4">
+      {/* Voice UI */}
+      <VoiceListener isListening={true} mode="Navigation" position="top-right" compact />
+      <VoiceSpeaker position="bottom-center" />
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

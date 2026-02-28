@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { app, BrowserWindow } from "electron";
 import path from "path";
 import fs from "node:fs";
@@ -5,6 +6,8 @@ import { mongoService } from "./database/mongo-client";
 import { registerIPCHandlers } from "./bridge/ipc-handlers";
 import { seedDatabase } from "./database/seed";
 import { startExpressServer, stopExpressServer } from "./server/server";
+import { connectAtlas, disconnectAtlas } from "./voicesecure/core/db/mongoose";
+import { initializeVoiceSecureDefaults } from "./voicesecure/init";
 
 const EXPRESS_PORT = Number(process.env.PORT) || 3000;
 
@@ -36,6 +39,8 @@ async function loadFrontend(win: BrowserWindow): Promise<void> {
 async function bootstrap(): Promise<void> {
   // 1. Database
   await mongoService.connect();
+  await connectAtlas();
+  await initializeVoiceSecureDefaults();
   await seedDatabase();
 
   // 2. Start Express HTTP server (for multi-machine / remote frontends)
@@ -74,6 +79,7 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   stopExpressServer()
+    .then(() => disconnectAtlas())
     .then(() => mongoService.disconnect())
     .finally(() => app.quit());
 });

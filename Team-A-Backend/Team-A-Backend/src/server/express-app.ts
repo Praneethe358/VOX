@@ -8,8 +8,11 @@ import authRoutes from "./routes/auth.routes";
 import studentsRoutes from "./routes/students.routes";
 import resultsRoutes from "./routes/results.routes";
 import examSessionsRoutes from "./routes/exam-sessions.routes";
+import faceRoutes from "./routes/face.routes";
 import { dataProvider } from "../database/provider";
 import { sendError, sendSuccess } from "./http-response";
+import voiceSecureRoutes from "../voicesecure/routes";
+import { errorHandler } from "../voicesecure/core/middleware/error-handler";
 
 export function createExpressApp(): Application {
   const app = express();
@@ -39,6 +42,8 @@ export function createExpressApp(): Application {
   app.use("/api/students", studentsRoutes);
   app.use("/api/results", resultsRoutes);
   app.use("/api/exam-sessions", examSessionsRoutes);
+  app.use("/api/face", faceRoutes);
+  app.use("/api/v1", voiceSecureRoutes);
 
   // GET /api/exams/:examId  — exam lookup by code (used by some frontend hooks)
   app.get("/api/exams/:examId", async (req: Request, res: Response) => {
@@ -58,6 +63,8 @@ export function createExpressApp(): Application {
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: "Route not found" });
   });
+
+  app.use(errorHandler);
 
   return app;
 }

@@ -25,6 +25,7 @@ export interface UseDictationReturn {
   isRecording: boolean;
   interimText: string;
   finalText: string;
+  lastError: string | null;
   start: () => void;
   stop: () => void;
   reset: () => void;
@@ -35,10 +36,12 @@ export function useDictation({
   silenceTimeout = 3000,
   lang = 'en-US',
 }: UseDictationOptions): UseDictationReturn {
-  const { playBeep } = useVoiceContext();
+  const { playBeep, isSpeaking } = useVoiceContext();
+  const isSpeakingRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [interimText, setInterimText] = useState('');
   const [finalText, setFinalText] = useState('');
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const accumulatedRef = useRef('');
@@ -81,15 +84,36 @@ export function useDictation({
   }, [stopInternal]);
 
   const start = useCallback(() => {
+    const bootstrap = async () => {
+    console.log('[Dictation] Bootstrapping...');
     const SR =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      console.warn('SpeechRecognition not supported');
+      console.warn('[Dictation] SpeechRecognition not supported');
+      setLastError('Speech recognition is not supported in this browser. Use Chrome/Edge on desktop.');
       return;
     }
-    if (isActiveRef.current) return;
+    if (isActiveRef.current) {
+      console.log('[Dictation] Already active, skipping bootstrap');
+      return;
+    }
+
+    try {
+      console.log('[Dictation] Requesting microphone permission...');
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[Dictation] Microphone permission granted');
+        stream.getTracks().forEach(track => track.stop());
+      }
+    } catch (err) {
+      console.error('[Dictation] Microphone permission denied:', err);
+      setLastError('Microphone permission denied. Allow mic access and try dictation again.');
+      playBeep('error');
+      return;
+    }
 
     isActiveRef.current = true;
+    setLastError(null);
     accumulatedRef.current = '';
     setFinalText('');
     setInterimText('');
@@ -97,7 +121,19 @@ export function useDictation({
     playBeep('dictation');
 
     const createRecognition = () => {
-      if (!isActiveRef.current) return;
+      if (!isActiveRef.current) {
+        console.log('[Dictation] Not active, stopping createRecognition loop');
+        return;
+      }
+
+      // Wait for TTS to finish before starting recognition
+      if (isSpeakingRef.current) {
+        console.log('[Dictation] TTS is speaking, delaying recognition start...');
+        setTimeout(createRecognition, 200);
+        return;
+      }
+
+      console.log('[Dictation] Creating new SpeechRecognition instance');
       const r = new SR();
       recognitionRef.current = r;
 
@@ -107,18 +143,22 @@ export function useDictation({
       r.maxAlternatives = 1;
 
       r.onstart = () => {
+        console.log('[Dictation] SpeechRecognition started');
         setIsRecording(true);
         // Reset silence timer on start
         clearSilenceTimer();
         silenceTimerRef.current = setTimeout(() => {
+          console.log('[Dictation] Silence timeout reached');
           stopInternal(true);
         }, silenceTimeout);
       };
 
       r.onresult = (event: any) => {
+        console.log('[Dictation] SpeechRecognition result received');
         // Reset silence countdown on every speech detected
         clearSilenceTimer();
         silenceTimerRef.current = setTimeout(() => {
+          console.log('[Dictation] Silence timeout reached');
           stopInternal(true);
         }, silenceTimeout);
 
@@ -136,33 +176,55 @@ export function useDictation({
       };
 
       r.onend = () => {
+        console.log('[Dictation] SpeechRecognition ended');
         setIsRecording(false);
         // Chrome ends recognition after ~60s; restart if still active
         if (isActiveRef.current) {
+          console.log('[Dictation] Auto-restarting dictation...');
           setTimeout(createRecognition, 150);
         }
       };
 
       r.onerror = (e: any) => {
+        console.error('[Dictation] SpeechRecognition error:', e.error);
         if (e.error === 'no-speech') {
           // Treat as silence — will be handled by silence timer
           return;
         }
         if (e.error === 'aborted') return;
-        console.error('Dictation error:', e.error);
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          setLastError('Microphone access blocked during dictation. Enable mic and retry.');
+          isActiveRef.current = false;
+          setIsRecording(false);
+          return;
+        }
+        if (e.error === 'audio-capture') {
+          setLastError('No microphone detected for dictation.');
+        } else if (e.error === 'network') {
+          setLastError('Network issue during speech recognition.');
+        } else {
+          setLastError('Dictation error. Please retry.');
+        }
       };
 
       try {
         r.start();
-      } catch {}
+      } catch (err) {
+        console.error('[Dictation] Error starting SpeechRecognition:', err);
+      }
     };
 
     createRecognition();
+    };
+    void bootstrap();
   }, [lang, silenceTimeout, stopInternal, playBeep]);
+
+  // Keep isSpeakingRef in sync with TTS state
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
 
   useEffect(() => {
     return () => stopInternal(false);
   }, [stopInternal]);
 
-  return { isRecording, interimText, finalText, start, stop, reset };
+  return { isRecording, interimText, finalText, lastError, start, stop, reset };
 }

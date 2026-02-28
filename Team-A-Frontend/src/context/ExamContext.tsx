@@ -15,6 +15,7 @@ import {
 } from '../types/student/student.types';
 import { ActivityLog } from '../types/student/activity.types';
 import apiService from '../services/student/api.service';
+import { studentApi } from '../api/client';
 
 interface ExamContextType {
   exam: ExamData | null;
@@ -56,7 +57,24 @@ export function ExamProvider({ children }: { children: ReactNode }) {
 
   const addActivityLog = useCallback((log: ActivityLog) => {
     setActivityLogs(prev => [...prev, log]);
-  }, []);
+    // Sync to backend V1 activity-logs API
+    if (session?.sessionId) {
+      studentApi.v1CreateActivityLog({
+        examSessionId: session.sessionId,
+        eventType: log.action || 'activity',
+        metadata: { ...log, timestamp: log.metadata?.timestamp?.toISOString() || new Date().toISOString() },
+      }).catch(() => { /* best-effort — don't block UI */ });
+    }
+    // Also sync to legacy audit log
+    if (log.studentId && log.examCode) {
+      studentApi.logAudit({
+        studentId: log.studentId,
+        examCode: log.examCode,
+        action: log.action || 'activity',
+        metadata: log.metadata,
+      }).catch(() => {});
+    }
+  }, [session]);
 
   const submitAnswer = useCallback((answer: StudentAnswer) => {
     if (!session) return;
@@ -81,6 +99,28 @@ export function ExamProvider({ children }: { children: ReactNode }) {
         lastSavedAt: new Date(),
       };
     });
+
+    // Save to backend — V1 autosave
+    if (session?.sessionId) {
+      studentApi.v1AutosaveAnswer({
+        examSessionId: session.sessionId,
+        questionNumber: parseInt(answer.questionId, 10) || 1,
+        rawSpeechText: answer.rawTranscript || '',
+        formattedAnswer: answer.formattedAnswer || '',
+      }).catch(() => {});
+    }
+
+    // Save to legacy response endpoint
+    if (session?.studentId && session?.examCode) {
+      studentApi.saveResponse({
+        studentId: session.studentId,
+        examCode: session.examCode,
+        questionId: parseInt(answer.questionId, 10) || 1,
+        rawAnswer: answer.rawTranscript || '',
+        formattedAnswer: answer.formattedAnswer || '',
+        confidence: answer.confidence || 0,
+      }).catch(() => {});
+    }
   }, [session]);
 
   const updateNavigationState = useCallback((state: Partial<ExamNavigationState>) => {
@@ -125,6 +165,9 @@ export function ExamProvider({ children }: { children: ReactNode }) {
     });
     setActivityLogs([]);
     setNavigationState(null);
+    sessionStorage.removeItem('studentAuth');
+    sessionStorage.removeItem('studentId');
+    sessionStorage.removeItem('studentData');
   }, []);
 
   const value: ExamContextType = {

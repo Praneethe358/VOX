@@ -1,27 +1,104 @@
 /**
  * ExamSelector.tsx - Browse and select exams to take after login
+ *
+ * Voice-enabled: Auto-reads exam list, accepts "select exam 1", "exam 2",
+ * "go to dashboard", "help" etc.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useExamContext } from '../../context/ExamContext';
 import { ExamData } from '../../types/student/exam.types';
 import apiService from '../../services/student/api.service';
+import { useVoiceNavigation, NavCommand } from '../../hooks/useVoiceNavigation';
+import { useAutoSpeak } from '../../hooks/useAutoSpeak';
+import { useVoiceContext } from '../../context/VoiceContext';
+import { VoiceCommandEngine } from '../../components/student/VoiceCommandEngine';
+import { VoiceListener } from '../../components/student/VoiceListener';
+import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
 
 export function ExamSelector() {
   const navigate = useNavigate();
-  const { student, authState } = useExamContext();
+  const { student, authState, setStudent, updateAuthState } = useExamContext();
   const [exams, setExams] = useState<ExamData[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'available' | 'completed'>('available');
+  const { speak } = useVoiceContext();
 
-  // Redirect if not authenticated
+  // ── Voice: auto-speak exam list ────────────────────────────────────────
+  useAutoSpeak(
+    () => {
+      if (loading || exams.length === 0) return null;
+      const examList = exams
+        .slice(0, 5)
+        .map((e, i) => `Exam ${i + 1}: ${e.title}, ${e.durationMinutes} minutes`)
+        .join('. ');
+      return (
+        `You have ${exams.length} available exam${exams.length > 1 ? 's' : ''}. ` +
+        examList +
+        `. Say "select exam" followed by the number to begin, or "help" for more commands.`
+      );
+    },
+    [loading, exams.length],
+    { delay: 600 },
+  );
+
+  // ── Voice: navigation + exam selection ─────────────────────────────────
+  const handleVoiceCommand = useCallback(
+    (cmd: NavCommand) => {
+      if (cmd.action === 'select_exam' && cmd.param) {
+        const idx = parseInt(cmd.param, 10) - 1;
+        if (idx >= 0 && idx < exams.length) {
+          const selected = exams[idx];
+          speak(`Starting ${selected.title}.`);
+          handleExamSelect(selected);
+          return true; // handled
+        } else {
+          speak(`Exam ${cmd.param} not found. There are ${exams.length} exams available.`);
+          return true;
+        }
+      }
+      return false; // let default handler do navigation
+    },
+    [exams, speak],
+  );
+
+  const handleUnknownCommand = useCallback(
+    (raw: string) => {
+      speak(`I didn't understand "${raw}". Say "help" for available commands, or "select exam" followed by a number.`);
+    },
+    [speak],
+  );
+
+  const { isListening, lastCommand, lastHeard, error: voiceError } = useVoiceNavigation({
+    enabled: !loading,
+    onCommand: handleVoiceCommand,
+    onUnknownCommand: handleUnknownCommand,
+    pageName: 'the exam selection page',
+  });
+
+  // Restore student profile from sessionStorage when context is empty (page refresh)
   useEffect(() => {
-    if (!authState?.isAuthenticated || !student) {
+    if (!student && sessionStorage.getItem('studentAuth') === 'true') {
+      const savedData = sessionStorage.getItem('studentData');
+      if (savedData) {
+        try {
+          const profile = JSON.parse(savedData);
+          setStudent(profile);
+          updateAuthState({ isAuthenticated: true, student: profile, faceVerified: true });
+        } catch { /* malformed JSON — clear stale data */ }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Redirect only when there is genuinely no session
+  useEffect(() => {
+    if (!student && sessionStorage.getItem('studentAuth') !== 'true') {
       navigate('/student/login');
     }
-  }, [authState, student, navigate]);
+  }, [student, navigate]);
 
   // Load available exams
   useEffect(() => {
@@ -123,6 +200,33 @@ export function ExamSelector() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900">
+      {/* Voice UI overlays */}
+      <VoiceListener isListening={isListening} mode="Navigation" position="top-right" />
+      <VoiceSpeaker position="bottom-center" />
+      <VoiceCommandEngine
+        isListening={isListening}
+        lastCommand={lastCommand}
+        position="bottom-right"
+        hints={[
+          { command: '"Select exam 1"', icon: '📝', description: 'Select exam by number' },
+          { command: '"Dashboard"',     icon: '🏠', description: 'Go to dashboard' },
+          { command: '"Help"',          icon: '❓', description: 'List all commands' },
+        ]}
+      />
+      {/* Voice feedback bar */}
+      {(lastHeard || voiceError) && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-sm w-full px-4">
+          <div className={`rounded-xl px-4 py-2 text-sm text-center backdrop-blur border ${
+            voiceError
+              ? 'bg-red-900/80 border-red-500/50 text-red-200'
+              : lastHeard.startsWith('OK:')
+              ? 'bg-green-900/80 border-green-500/50 text-green-200'
+              : 'bg-slate-800/90 border-slate-600/50 text-slate-300'
+          }`}>
+            {voiceError ?? lastHeard}
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-slate-800/50 backdrop-blur border-b border-slate-700">
         <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
@@ -181,6 +285,12 @@ export function ExamSelector() {
                 transition={{ delay: idx * 0.1 }}
                 className="group bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 hover:border-indigo-500/50 transition-all hover:shadow-xl hover:shadow-indigo-500/20"
               >
+                {/* Voice hint badge */}
+                <div className="mb-2">
+                  <span className="inline-block px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-xs font-mono rounded">
+                    🎙️ Say "Select exam {idx + 1}"
+                  </span>
+                </div>
                 {/* Header */}
                 <div className="mb-4">
                   <div className="flex items-start justify-between mb-2">

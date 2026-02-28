@@ -1,8 +1,10 @@
 import { Router, Request, Response } from "express";
+import jwt from "jsonwebtoken";
 import { dataProvider } from "../../database/provider";
 import { sendError, sendSuccess } from "../http-response";
 
 const router = Router();
+const JWT_SECRET = process.env.JWT_SECRET || "voicesecure-local-dev-secret-change-this";
 
 // POST /api/auth/login  (student password-based login)
 router.post("/login", async (req: Request, res: Response) => {
@@ -17,10 +19,19 @@ router.post("/login", async (req: Request, res: Response) => {
       sendError(res, "Invalid credentials", 401);
       return;
     }
+
+    const studentId = student.studentId || student.rollNumber || "unknown";
+    const token = jwt.sign(
+      { studentId, email: student.email, rollNumber: student.rollNumber },
+      JWT_SECRET,
+      { expiresIn: "8h" },
+    );
+
     sendSuccess(res, {
       authenticated: true,
+      token,
       student: {
-        studentId: student.studentId || student.rollNumber,
+        studentId,
         name: student.name,
         email: student.email,
         rollNumber: student.rollNumber,
@@ -51,11 +62,18 @@ router.post("/face-recognize", async (req: Request, res: Response) => {
       return;
     }
     const student = await dataProvider.findStudentById(result.studentId || '');
+    const studentId = result.studentId || student?.studentId || student?.rollNumber || "unknown";
+    const token = jwt.sign(
+      { studentId, email: student?.email, rollNumber: student?.rollNumber },
+      JWT_SECRET,
+      { expiresIn: "8h" },
+    );
     sendSuccess(res, {
       matched: true,
-      studentId: result.studentId,
+      studentId,
+      token,
       student: student ? {
-        studentId: student.studentId || student.rollNumber,
+        studentId,
         name: student.name,
         email: student.email,
         rollNumber: student.rollNumber,

@@ -17,6 +17,8 @@ import { mongoService } from "../database/mongo-client";
 import { mockMongoService } from "../database/mock-mongo";
 import { seedDatabase } from "../database/seed";
 import { startExpressServer } from "./server";
+import { connectAtlas, disconnectAtlas } from "../voicesecure/core/db/mongoose";
+import { initializeVoiceSecureDefaults } from "../voicesecure/init";
 
 async function main(): Promise<void> {
   const useMockDb = process.env.USE_MOCK_DB === "true";
@@ -25,6 +27,8 @@ async function main(): Promise<void> {
     await mockMongoService.connect();
   } else {
     await mongoService.connect();
+    await connectAtlas();
+    await initializeVoiceSecureDefaults();
     await seedDatabase();
   }
   
@@ -40,11 +44,13 @@ main().catch((err) => {
 // Graceful shutdown
 process.on("SIGINT", async () => {
   console.log("\n[Standalone] Shutting down...");
+  await disconnectAtlas();
   await mongoService.disconnect();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
+  await disconnectAtlas();
   await mongoService.disconnect();
   process.exit(0);
 });

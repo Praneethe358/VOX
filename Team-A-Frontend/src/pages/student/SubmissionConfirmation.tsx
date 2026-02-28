@@ -1,18 +1,48 @@
 /**
  * SubmissionConfirmation.tsx - Post-exam submission confirmation and result summary
+ *
+ * Voice-enabled: Auto-reads submission summary, navigation commands.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useExamContext } from '../../context/ExamContext';
 import apiService from '../../services/student/api.service';
+import { useVoiceContext } from '../../context/VoiceContext';
+import { useAutoSpeak } from '../../hooks/useAutoSpeak';
+import { useVoiceNavigation } from '../../hooks/useVoiceNavigation';
+import { VoiceListener } from '../../components/student/VoiceListener';
+import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
+import { VoiceCommandEngine } from '../../components/student/VoiceCommandEngine';
 
 export function SubmissionConfirmation() {
   const navigate = useNavigate();
   const { exam, session } = useExamContext();
   const [submissionData, setSubmissionData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(true);
+  const { speak } = useVoiceContext();
+
+  // ── Voice: auto-speak submission result ────────────────────────────────
+  useAutoSpeak(
+    () => {
+      if (isSubmitting || !submissionData) return null;
+      return (
+        `Exam submitted successfully. ${submissionData.examTitle}. ` +
+        `You answered ${submissionData.answeredQuestions} out of ${submissionData.totalQuestions} questions. ` +
+        `Estimated score: ${submissionData.estimatedScore} out of ${submissionData.totalMarks}. ` +
+        `Say "dashboard" to go back, or "take exam" for another exam.`
+      );
+    },
+    [isSubmitting, submissionData],
+    { delay: 800, rate: 0.9 },
+  );
+
+  // ── Voice: navigation ──────────────────────────────────────────────────
+  const { isListening, lastCommand } = useVoiceNavigation({
+    enabled: !isSubmitting,
+    pageName: 'the submission confirmation page',
+  });
 
   useEffect(() => {
     if (!session || !exam) {
@@ -87,6 +117,19 @@ export function SubmissionConfirmation() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-4">
+      {/* Voice UI overlays */}
+      <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
+      <VoiceSpeaker position="bottom-center" />
+      <VoiceCommandEngine
+        isListening={isListening}
+        lastCommand={lastCommand}
+        position="bottom-right"
+        hints={[
+          { command: '"Dashboard"',  icon: '🏠', description: 'Go to dashboard' },
+          { command: '"Take exam"',  icon: '📝', description: 'Browse more exams' },
+          { command: '"Results"',    icon: '📊', description: 'View all results' },
+        ]}
+      />
       <div className="max-w-2xl mx-auto">
         {/* Success Banner */}
         <motion.div

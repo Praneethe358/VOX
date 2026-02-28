@@ -10,13 +10,25 @@ interface SttResult {
 }
 
 export class SpeechService {
+  private ensureFfmpegOnPath(): void {
+    const ffmpegBin = process.env.FFMPEG_BIN;
+    if (!ffmpegBin) return;
+
+    const ffmpegDir = path.dirname(ffmpegBin);
+    const currentPath = process.env.PATH ?? "";
+    if (!currentPath.toLowerCase().includes(ffmpegDir.toLowerCase())) {
+      process.env.PATH = `${ffmpegDir};${currentPath}`;
+    }
+  }
+
   private async transcribeWithWhisper(audioBuffer: Buffer): Promise<SttResult> {
+    this.ensureFfmpegOnPath();
+
     const whisperBin = process.env.WHISPER_BIN ?? "whisper";
     const whisperModel = process.env.WHISPER_MODEL_PATH ?? "base";
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mindkraft-whisper-"));
-    const inputPath = path.join(tempDir, `${randomUUID()}.wav`);
-    const outputBase = path.join(tempDir, "output");
-    const outputJson = `${outputBase}.json`;
+    const inputPath = path.join(tempDir, "output.wav");
+    const outputJson = path.join(tempDir, "output.json");
 
     await fs.writeFile(inputPath, audioBuffer);
 
@@ -30,8 +42,6 @@ export class SpeechService {
       "json",
       "--output_dir",
       tempDir,
-      "--output_file",
-      "output",
     ];
 
     const text = await new Promise<string>((resolve) => {

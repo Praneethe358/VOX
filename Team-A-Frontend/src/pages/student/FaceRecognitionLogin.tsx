@@ -1,14 +1,21 @@
 /**
  * FaceRecognitionLogin.tsx — 100% hands-free face-auth page for VoiceSecure.
  *
- * Flow:
+ * Upgraded flow with embedding-based verification:
  *   1. Page mounts → TTS "Please look at the camera."
  *   2. Camera opens, auto-captures every 2 s while scanning
- *   3. Match → TTS "Authentication successful. Welcome <name>." → briefing
- *   4. Fail  → TTS "Face not recognized. Please reposition." (up to 3 tries)
- *   5. 3 fails → TTS lockout message, session locked
+ *   3. Extracts 128D face embedding via face-api.js
+ *   4. Sends to /api/face/verify (exam-wide) or /api/face/verify-by-id (student-specific)
+ *   5. Match → TTS "Authentication successful. Welcome <name>." → redirect
+ *   6. Fail  → TTS "Face not recognized." (up to 5 tries; rate-limited server-side)
+ *   7. 5 fails → TTS lockout message, session locked
  *
- * No buttons.  No keyboard interaction.  No mouse required.
+ * Security:
+ *   - Multi-face rejection (only 1 face allowed in frame)
+ *   - Basic liveness detection (movement tracking across frames)
+ *   - Server-side rate limiting (5 attempts per 15-minute window)
+ *
+ * No buttons. No keyboard interaction. No mouse required.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -17,7 +24,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useFaceRecognition } from '../../hooks/student/useFaceRecognition';
 import { useExamContext } from '../../context/ExamContext';
 import { useVoiceContext } from '../../context/VoiceContext';
-import apiService from '../../services/student/api.service';
 import type { StudentProfile } from '../../types/student/student.types';
 
 // ─── Status enum ─────────────────────────────────────────────────────────────
@@ -29,6 +35,11 @@ type AuthStatus =
   | 'SUCCESS'
   | 'RETRY'
   | 'LOCKED';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const MAX_ATTEMPTS = 5;
+const CONFIDENCE_THRESHOLD = 0.80; // cosine similarity threshold (backend uses 0.85)
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -45,14 +56,25 @@ export function FaceRecognitionLogin() {
     startScanning,
     stopScanning,
     captureAndMatchFace,
+    captureAndMatchById,
+    faceCount,
+    livenessScore,
+    error: hookError,
   } = useFaceRecognition();
 
   const [authStatus, setAuthStatus] = useState<AuthStatus>('INITIALIZING');
   const [studentName, setStudentName] = useState('');
-  const [attemptsLeft, setAttemptsLeft] = useState(3);
+  const [attemptsLeft, setAttemptsLeft] = useState(MAX_ATTEMPTS);
   const [examCode] = useState('TECH101');
+  const [lastError, setLastError] = useState('');
   const hasSpokenWelcome = useRef(false);
   const captureScheduledRef = useRef(false);
+
+  // Optional: if studentId is available (e.g., from query params or session), use verify-by-id
+  const studentIdRef = useRef<string | null>(
+    new URLSearchParams(window.location.search).get('studentId') ||
+    sessionStorage.getItem('pendingStudentId')
+  );
 
   // ── Step 1: Start camera + speak welcome ─────────────────────────────────
 
@@ -60,7 +82,6 @@ export function FaceRecognitionLogin() {
     voiceTransition('FACE_AUTH');
     startScanning();
 
-    // Speak welcome after a short delay (let camera warm up)
     const t = setTimeout(async () => {
       if (hasSpokenWelcome.current) return;
       hasSpokenWelcome.current = true;
@@ -93,16 +114,22 @@ export function FaceRecognitionLogin() {
   const handleCapture = async () => {
     if (authStatus !== 'SCANNING') return;
     setAuthStatus('PROCESSING');
+    setLastError('');
 
-    const result = await captureAndMatchFace(examCode);
+    // Choose endpoint based on whether we have a known studentId
+    let result;
+    if (studentIdRef.current) {
+      result = await captureAndMatchById(studentIdRef.current);
+    } else {
+      result = await captureAndMatchFace(examCode);
+    }
 
-    if (result?.matched && (result.confidence ?? 0) > 0.75) {
+    if (result?.matched && (result.confidence ?? 0) >= CONFIDENCE_THRESHOLD) {
       // ── Success ──────────────────────────────────────────────────────────
       playBeep('success');
       setAuthStatus('SUCCESS');
 
-      // Build student profile from result
-      let profile: StudentProfile = buildProfile(result);
+      const profile: StudentProfile = buildProfile(result);
       setStudentName(profile.name);
       setFaceAttempts(0);
 
@@ -113,26 +140,35 @@ export function FaceRecognitionLogin() {
         faceVerified: true,
         loginTimestamp: new Date(),
       });
+      sessionStorage.setItem('studentAuth', 'true');
+      sessionStorage.setItem('studentId', profile.studentId);
+      sessionStorage.setItem('studentData', JSON.stringify(profile));
+      sessionStorage.removeItem('pendingStudentId');
       stopScanning();
 
-      await speak(`Authentication successful. Welcome, ${profile.name}.`);
+      const confPct = Math.round((result.confidence ?? 0) * 100);
+      await speak(`Authentication successful. Welcome, ${profile.name}. Confidence ${confPct} percent.`);
       setTimeout(() => navigate('/student/exams'), 500);
     } else {
       // ── Failure ──────────────────────────────────────────────────────────
       playBeep('error');
       const remaining = attemptsLeft - 1;
       setAttemptsLeft(remaining);
-      setFaceAttempts(a => a + 1);
+      setFaceAttempts((a: number) => a + 1);
+
+      const errorDetail = hookError || 'Face not recognized.';
+      setLastError(errorDetail);
 
       if (remaining <= 0) {
         setAuthStatus('LOCKED');
+        stopScanning();
         await speak(
-          'Authentication failed. Maximum attempts exceeded. Please contact your administrator.',
+          'Authentication failed. Maximum attempts exceeded. Your session has been locked. Please contact your administrator.',
         );
       } else {
         setAuthStatus('RETRY');
         await speak(
-          `Face not recognized. Please reposition your face and ensure good lighting. ${remaining} attempt${remaining > 1 ? 's' : ''} remaining.`,
+          `${errorDetail} ${remaining} attempt${remaining > 1 ? 's' : ''} remaining. Please reposition your face.`,
         );
         // Resume scanning after a pause
         setTimeout(() => setAuthStatus('SCANNING'), 2500);
@@ -146,7 +182,7 @@ export function FaceRecognitionLogin() {
     const ms = result?.matchedStudent;
     return {
       studentId: ms?.studentId ?? result?.studentId ?? 'UNKNOWN',
-      name: ms?.name ?? ms?.fullName ?? 'Student',
+      name: ms?.name ?? ms?.fullName ?? ms?.studentName ?? 'Student',
       email: ms?.email ?? '',
       phoneNumber: ms?.phoneNumber ?? '',
       enrollmentDate: ms?.enrollmentDate ? new Date(ms.enrollmentDate) : new Date(),
@@ -188,6 +224,9 @@ export function FaceRecognitionLogin() {
     setStudentName(demo.name);
     setStudent(demo);
     updateAuthState({ isAuthenticated: true, student: demo, faceVerified: true, loginTimestamp: new Date() });
+    sessionStorage.setItem('studentAuth', 'true');
+    sessionStorage.setItem('studentId', demo.studentId);
+    sessionStorage.setItem('studentData', JSON.stringify(demo));
     stopScanning();
     await speak('Demo login successful. Welcome, Demo Student.');
     navigate('/student/exams');
@@ -200,9 +239,12 @@ export function FaceRecognitionLogin() {
     SCANNING:     'Looking for your face…',
     PROCESSING:   'Verifying identity…',
     SUCCESS:      `Welcome, ${studentName || 'Student'}!`,
-    RETRY:        'Repositioning…',
+    RETRY:        lastError || 'Repositioning…',
     LOCKED:       'Access Denied. Contact administrator.',
   };
+
+  const livenessColor =
+    livenessScore > 0.6 ? 'bg-green-400' : livenessScore > 0.3 ? 'bg-yellow-400' : 'bg-red-400';
 
   // ── JSX ───────────────────────────────────────────────────────────────────
 
@@ -229,17 +271,40 @@ export function FaceRecognitionLogin() {
           <canvas ref={canvasRef} width={640} height={480} className="hidden" />
 
           {/* Face frame overlay */}
-          {authStatus === 'SCANNING' || authStatus === 'PROCESSING' ? (
+          {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <motion.div
                 className={`w-40 h-48 rounded-xl border-2 ${
-                  authStatus === 'PROCESSING' ? 'border-yellow-400' : 'border-green-400'
+                  faceCount > 1
+                    ? 'border-red-500'
+                    : authStatus === 'PROCESSING'
+                    ? 'border-yellow-400'
+                    : faceCount === 1
+                    ? 'border-green-400'
+                    : 'border-slate-500'
                 }`}
                 animate={{ scale: authStatus === 'PROCESSING' ? [1, 1.04, 1] : [1, 1.02, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               />
             </div>
-          ) : null}
+          )}
+
+          {/* Multi-face warning badge */}
+          {faceCount > 1 && authStatus === 'SCANNING' && (
+            <div className="absolute top-3 left-3 bg-red-600/90 text-white text-xs px-2 py-1 rounded-lg font-medium">
+              ⚠ {faceCount} faces — only 1 allowed
+            </div>
+          )}
+
+          {/* Liveness indicator */}
+          {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
+            <div className="absolute top-3 right-3 flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${livenessColor}`} />
+              <span className="text-[10px] text-slate-300 font-mono">
+                Liveness {Math.round(livenessScore * 100)}%
+              </span>
+            </div>
+          )}
 
           {/* Processing spinner */}
           {(isProcessing || authStatus === 'PROCESSING') && (
@@ -301,7 +366,7 @@ export function FaceRecognitionLogin() {
         {/* Attempt dots */}
         {authStatus !== 'LOCKED' && authStatus !== 'SUCCESS' && (
           <div className="flex justify-center gap-2" aria-label={`${attemptsLeft} attempts remaining`}>
-            {[...Array(3)].map((_, i) => (
+            {[...Array(MAX_ATTEMPTS)].map((_, i) => (
               <div
                 key={i}
                 className={`w-3 h-3 rounded-full transition-colors duration-300 ${

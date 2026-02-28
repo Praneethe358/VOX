@@ -108,10 +108,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   // AudioContext ref for beeps (lazy-init to satisfy browser autoplay policy)
   const audioCtxRef = useRef<AudioContext | null>(null);
-  // Current utterance ref so we can cancel
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  // Currently playing audio element for TTS
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   // Resolve/reject of current speak() promise
   const speakResolveRef = useRef<(() => void) | null>(null);
+  // Abort controller for in-flight TTS fetch
+  const ttsAbortRef = useRef<AbortController | null>(null);
 
   // Lazy-init AudioContext on first user gesture
   const getAudioCtx = useCallback((): AudioContext => {
@@ -148,11 +150,24 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     [getAudioCtx],
   );
 
-  // ── TTS ───────────────────────────────────────────────────────────────────
+  // ── TTS via backend espeak-ng ───────────────────────────────────────────
+
+  const TTS_API_URL =
+    (import.meta.env.VITE_API_URL as string | undefined) ||
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+    'http://localhost:3000/api';
 
   const stopSpeaking = useCallback(() => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    // Abort any in-flight TTS fetch
+    if (ttsAbortRef.current) {
+      ttsAbortRef.current.abort();
+      ttsAbortRef.current = null;
+    }
+    // Stop any playing audio
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.src = '';
+      ttsAudioRef.current = null;
     }
     setIsSpeaking(false);
     if (speakResolveRef.current) {
@@ -163,52 +178,91 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const speak = useCallback(
     (text: string, options: SpeakOptions = {}): Promise<void> => {
-      return new Promise(resolve => {
-        if (!('speechSynthesis' in window)) {
-          resolve();
-          return;
-        }
-
-        const { rate = 0.95, pitch = 1, lang = 'en-US', interrupt = true } = options;
+      console.log('[TTS/espeak] Speaking:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
+      return new Promise(async (resolve) => {
+        const { rate = 0.95, interrupt = true } = options;
 
         if (interrupt) {
-          window.speechSynthesis.cancel();
+          // Stop any currently playing TTS
+          if (ttsAbortRef.current) {
+            ttsAbortRef.current.abort();
+            ttsAbortRef.current = null;
+          }
+          if (ttsAudioRef.current) {
+            ttsAudioRef.current.pause();
+            ttsAudioRef.current.src = '';
+            ttsAudioRef.current = null;
+          }
+          if (speakResolveRef.current) {
+            speakResolveRef.current();
+            speakResolveRef.current = null;
+          }
         }
 
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = rate;
-        utterance.pitch = pitch;
-        utterance.lang = lang;
+        // Map speech rate (0.5-2.0) to espeak-ng words-per-minute (80-300)
+        const speed = Math.round(80 + (rate - 0.5) * (300 - 80) / (2.0 - 0.5));
 
-        utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => {
-          setIsSpeaking(false);
-          speakResolveRef.current = null;
-          resolve();
-        };
-        utterance.onerror = () => {
-          setIsSpeaking(false);
-          speakResolveRef.current = null;
-          resolve();
-        };
-
+        const abortController = new AbortController();
+        ttsAbortRef.current = abortController;
         speakResolveRef.current = resolve;
-        utteranceRef.current = utterance;
-        window.speechSynthesis.speak(utterance);
+
+        try {
+          setIsSpeaking(true);
+          console.log('[TTS/espeak] Fetching audio from backend, speed:', speed);
+
+          const response = await fetch(`${TTS_API_URL}/ai/tts-speak`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, speed }),
+            signal: abortController.signal,
+          });
+
+          if (!response.ok) {
+            throw new Error(`TTS API returned ${response.status}`);
+          }
+
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          ttsAudioRef.current = audio;
+
+          audio.onended = () => {
+            console.log('[TTS/espeak] Audio playback ended');
+            URL.revokeObjectURL(audioUrl);
+            ttsAudioRef.current = null;
+            ttsAbortRef.current = null;
+            setIsSpeaking(false);
+            speakResolveRef.current = null;
+            resolve();
+          };
+
+          audio.onerror = () => {
+            console.error('[TTS/espeak] Audio playback error');
+            URL.revokeObjectURL(audioUrl);
+            ttsAudioRef.current = null;
+            ttsAbortRef.current = null;
+            setIsSpeaking(false);
+            speakResolveRef.current = null;
+            resolve();
+          };
+
+          await audio.play();
+          console.log('[TTS/espeak] Audio playback started');
+        } catch (err: any) {
+          if (err?.name === 'AbortError') {
+            console.log('[TTS/espeak] Fetch aborted (interrupted)');
+          } else {
+            console.error('[TTS/espeak] Error:', err);
+          }
+          ttsAbortRef.current = null;
+          setIsSpeaking(false);
+          speakResolveRef.current = null;
+          resolve();
+        }
       });
     },
     [],
   );
-
-  // Chrome bug: long TTS gets cut off. Keep it alive.
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (window.speechSynthesis && window.speechSynthesis.speaking) {
-        window.speechSynthesis.resume();
-      }
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
 
   // ── State Transition ──────────────────────────────────────────────────────
 

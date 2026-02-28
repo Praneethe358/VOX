@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { adminApi } from "../api/apiService";
+import { useAuth } from "../context/AuthContext";
 
 /* ── Mountain SVG component ── */
 const MountainSilhouette = () => (
@@ -27,6 +28,7 @@ const MountainSilhouette = () => (
 
 export default function LoginFaceID() {
   const navigate = useNavigate();
+  const { onLoginSuccess } = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +36,7 @@ export default function LoginFaceID() {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  /* ── Credential login handler ── */
+  /* ── Credential login handler — tries V1 JWT first, falls back to legacy ── */
   const handleCredentialLogin = useCallback(async () => {
     setError("");
     if (!username.trim() || !password.trim()) {
@@ -45,23 +47,45 @@ export default function LoginFaceID() {
     setIsLoading(true);
     
     try {
+      // Try V1 JWT login first (with 3s timeout — skip if V1 isn't available)
+      try {
+        const v1Promise = adminApi.v1Login(username, password);
+        const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+        const v1Result = await Promise.race([v1Promise, timeout]);
+        if (v1Result.success && v1Result.data?.token) {
+          const admin = v1Result.data.admin;
+          onLoginSuccess(v1Result.data.token, {
+            id: admin.id,
+            name: admin.name,
+            email: admin.email,
+            role: admin.role,
+            mfaEnabled: admin.mfaEnabled,
+          });
+          sessionStorage.setItem('adminAuth', 'true');
+          setSuccess(true);
+          setTimeout(() => navigate("/admin"), 800);
+          return;
+        }
+      } catch {
+        // V1 unavailable or timed out — fall through to legacy
+      }
+
+      // Fallback to legacy login
       const result = await adminApi.login(username, password);
-      
       if (result.success) {
-        setSuccess(true);
-        // Store login state in sessionStorage
-        sessionStorage.setItem('adminLoggedIn', 'true');
+        sessionStorage.setItem('adminAuth', 'true');
         sessionStorage.setItem('adminUsername', username);
-        setTimeout(() => navigate("/admin"), 1200);
+        setSuccess(true);
+        setTimeout(() => navigate("/admin"), 800);
       } else {
         setError(result.error || "Invalid username or password");
         setIsLoading(false);
       }
-    } catch (error) {
+    } catch {
       setError("Connection error. Please check if the backend is running.");
       setIsLoading(false);
     }
-  }, [username, password, navigate]);
+  }, [username, password, navigate, onLoginSuccess]);
 
   /* ── Enter-key shortcut ── */
   useEffect(() => {
