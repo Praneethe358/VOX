@@ -16,6 +16,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as faceapi from 'face-api.js';
+import { loadFaceApiModels } from '../../utils/faceApiLoader';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -80,13 +81,15 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
   const loadModels = useCallback(async () => {
     if (modelsLoadedRef.current) return;
     setStatus('LOADING_MODELS');
-    const MODEL_URL = '/models';
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-    ]);
-    modelsLoadedRef.current = true;
+    try {
+      console.log('[Face Registration] Loading models via centralized loader');
+      await loadFaceApiModels();
+      modelsLoadedRef.current = true;
+      console.log('[Face Registration] Models loaded successfully');
+    } catch (err) {
+      console.error('[Face Registration] Failed to load models:', err);
+      throw new Error(`Failed to load face detection models: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   }, []);
 
   // ─── Camera ───────────────────────────────────────────────────────────────
@@ -94,7 +97,19 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
   const startCamera = useCallback(async () => {
     try {
       setError('');
-      await loadModels();
+      
+      // Load models with timeout
+      const loadTimeout = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Model loading timed out after 30 seconds')), 30000)
+      );
+      
+      try {
+        await Promise.race([loadModels(), loadTimeout]);
+      } catch (modelErr) {
+        console.error('[Face Registration] Model loading error:', modelErr);
+        throw new Error(`Failed to load face detection models. ${modelErr instanceof Error ? modelErr.message : 'Check console for details.'}`);
+      }
+      
       setStatus('CAMERA_STARTING');
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -118,6 +133,7 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
       capturingRef.current = false;
       startDetectionLoop();
     } catch (err: any) {
+      console.error('[Face Registration] Start camera error:', err);
       setError(err.message || 'Camera access denied');
       setStatus('ERROR');
     }

@@ -22,6 +22,20 @@ export class TtsService {
     );
   }
 
+  /** Check if the espeak-ng binary exists and log a warning at startup if not. */
+  async checkBinExists(): Promise<void> {
+    try {
+      await fs.access(this.bin);
+      console.log(`[TTS] espeak-ng found at: ${this.bin}`);
+    } catch {
+      console.warn(
+        `[TTS] WARNING: espeak-ng binary not found at "${this.bin}".\n` +
+        `  TTS will fail. Set ESPEAK_BIN or ESPEAK_NG_BIN env var to the correct path.\n` +
+        `  Download: https://github.com/espeak-ng/espeak-ng/releases`
+      );
+    }
+  }
+
   /** Fire-and-forget: play on server speakers (legacy). */
   speak(text: string): void {
     if (!text.trim()) return;

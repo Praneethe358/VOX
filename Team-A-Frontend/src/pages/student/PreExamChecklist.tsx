@@ -63,7 +63,7 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
     } else if (exam) {
       const storedId = student?.studentId ||
         sessionStorage.getItem('studentId') ||
-        'DEMO_STUDENT_001';
+        '';
       // Initialize exam in context
       setExam(exam);
       setSession({

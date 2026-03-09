@@ -420,6 +420,10 @@ class UnifiedApiClient {
       headers: this.getAuthHeaders(),
       body: formData,
     });
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      throw new Error(errBody?.error ?? `STT failed with status ${response.status}`);
+    }
     const raw = await response.json().catch(() => ({}));
     const payload = raw?.data ?? raw;
     return { text: payload?.text ?? '', confidence: payload?.confidence ?? 0 };
@@ -433,6 +437,10 @@ class UnifiedApiClient {
       headers: this.getAuthHeaders(),
       body: formData,
     });
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      throw new Error(errBody?.error ?? `STT command failed with status ${response.status}`);
+    }
     const raw = await response.json().catch(() => ({}));
     const payload = raw?.data ?? raw;
     return { text: payload?.text ?? '', confidence: payload?.confidence ?? 0 };

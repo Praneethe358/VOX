@@ -1,9 +1,11 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
 import { AuthProvider } from "./context/AuthContext";
 import { ExamProvider } from "./context/ExamContext";
 import { VoiceProvider } from "./context/VoiceContext";
 import { ToastProvider } from "./components/Toast";
 import { ProtectedRoute, StudentProtectedRoute } from "./components/ProtectedRoute";
+import { loadFaceApiModels } from "./utils/faceApiLoader";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
@@ -24,6 +26,13 @@ import PasswordFallbackLogin from "./pages/student/PasswordFallbackLogin";
 import ExamBriefing from "./pages/student/ExamBriefing";
 
 export default function App() {
+  // Preload face-api.js models on app start
+  useEffect(() => {
+    loadFaceApiModels().catch((err) => {
+      console.warn('[App] Face API models could not be preloaded:', err);
+    });
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>

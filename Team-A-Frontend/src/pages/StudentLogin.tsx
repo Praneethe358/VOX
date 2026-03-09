@@ -135,18 +135,6 @@ export default function StudentLogin() {
     }
   };
 
-  // Fallback: Manual login (for testing without face recognition)
-  const handleManualLogin = () => {
-    if (!studentName.trim()) {
-      setError('Please enter your name');
-      return;
-    }
-    
-    sessionStorage.setItem('studentAuth', 'true');
-    sessionStorage.setItem('studentName', studentName);
-    sessionStorage.setItem('studentId', 'DEMO_STUDENT_001');
-    navigate('/student/dashboard');
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-6">
@@ -247,25 +235,6 @@ export default function StudentLogin() {
                 </div>
               )}
 
-              {/* Fallback Manual Login */}
-              <div className="pt-6 border-t border-slate-700/50">
-                <p className="text-slate-400 text-sm mb-3">Or login manually (for testing):</p>
-                <div className="flex gap-3">
-                  <input
-                    type="text"
-                    value={studentName}
-                    onChange={(e) => setStudentName(e.target.value)}
-                    placeholder="Enter your name"
-                    className="flex-1 px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
-                  />
-                  <button
-                    onClick={handleManualLogin}
-                    className="px-6 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-medium transition-all"
-                  >
-                    Login
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </motion.div>

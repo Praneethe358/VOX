@@ -111,13 +111,25 @@ const StudentManagementSection: React.FC = () => {
                     <td className="px-4 py-3 text-sm text-indigo-300 font-mono">{s.studentId || '-'}</td>
                     <td className="px-4 py-3 text-sm text-white font-medium">{s.studentName || s.name || s.fullName || '-'}</td>
                     <td className="px-4 py-3 text-sm">
+                      {(() => {
+                        const hasVector = Boolean(
+                          s.hasEmbedding ||
+                          s.facialEmbedding ||
+                          s.normalizedEmbedding ||
+                          s.faceDescriptor ||
+                          (typeof s.frameCount === 'number' && s.frameCount > 0),
+                        );
+
+                        return (
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        s.hasEmbedding || s.facialEmbedding || s.normalizedEmbedding || s.faceDescriptor
+                        hasVector
                           ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'
                       }`}>
-                        {s.hasEmbedding || s.facialEmbedding || s.normalizedEmbedding || s.faceDescriptor
+                        {hasVector
                           ? '✓ 128D Vector' : 'No Data'}
                       </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <button

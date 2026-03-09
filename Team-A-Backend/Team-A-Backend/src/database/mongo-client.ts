@@ -68,9 +68,23 @@ export class MongoService {
 
   // ── Student ───────────────────────────────────────────
   async registerStudent(student: StudentDocument): Promise<void> {
+    const registerNumber = String((student as any).registerNumber || student.studentId || "").trim();
+    const fullName = String((student as any).fullName || student.name || "").trim();
+    const email = String((student as any).email || `${registerNumber || student.studentId}@mindkraft.local`).trim().toLowerCase();
+
+    if (!registerNumber) {
+      throw new Error("registerStudent requires studentId/registerNumber");
+    }
+
     await this.col("students").replaceOne(
-      { studentId: student.studentId },
-      student,
+      { $or: [{ studentId: student.studentId }, { registerNumber }, { email }] },
+      {
+        ...student,
+        registerNumber,
+        studentId: student.studentId || registerNumber,
+        fullName,
+        email,
+      },
       { upsert: true },
     );
   }
@@ -78,6 +92,52 @@ export class MongoService {
   // ── Response ──────────────────────────────────────────
   async saveResponse(response: ResponseDocument): Promise<void> {
     await this.col("responses").insertOne({ ...response });
+  }
+
+  // ── Dashboard / Stats ───────────────────────────────────
+  async getDashboardStats(): Promise<{ totalExams: number; totalSubmissions: number; pendingReview: number; averageScore: number }> {
+    const totalExams = await this.col("exams").countDocuments();
+    const totalSubmissions = await this.col("responses").countDocuments();
+    // pendingReview and averageScore require business logic; return 0 for now
+    return { totalExams, totalSubmissions, pendingReview: 0, averageScore: 0 };
+  }
+
+  async getRecentActivity(): Promise<{ message: string }[]> {
+    const docs = await this.col("audits").find({}).sort({ timestamp: -1 }).limit(20).toArray();
+    return docs.map(d => ({ message: `${d.action} by ${d.studentId || 'system'}` }));
+  }
+
+  async getSubmissions(): Promise<any[]> {
+    return await this.col("responses").find({}).toArray();
+  }
+
+  async getStudentsForScoring(): Promise<any[]> {
+    return await this.col("students").find({}).toArray();
+  }
+
+  async setStudentScore(idOrRoll: string, score: number): Promise<void> {
+    await this.col("students").updateOne(
+      { $or: [{ studentId: idOrRoll }, { rollNumber: idOrRoll }] },
+      { $set: { score } },
+    );
+  }
+
+  async getStudentAnswers(idOrRoll: string): Promise<any[]> {
+    return await this.col("responses").find({ rollNumber: idOrRoll }).toArray();
+  }
+
+  async getStudentDashboardStats(idOrRoll: string): Promise<{ completedExams: number; upcomingExams: number; averageScore: number; totalTimeSpent: number }> {
+    const completedExams = await this.col("responses").countDocuments({ rollNumber: idOrRoll });
+    return { completedExams, upcomingExams: 0, averageScore: 0, totalTimeSpent: 0 };
+  }
+
+  // ── Results ──────────────────────────────────────────
+  async getAllResults(): Promise<any[]> {
+    return await this.col("results").find({}).toArray();
+  }
+
+  async getResultBySession(sessionId: string): Promise<any | null> {
+    return (await this.col("results").findOne({ sessionId })) as any | null;
   }
 
   // ── Audit ─────────────────────────────────────────────

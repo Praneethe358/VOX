@@ -142,7 +142,9 @@ export function useSpeechToText(): UseSpeechToTextReturn {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
+        // Use the actual recorded MIME type — browser records webm/opus, not wav
+        const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         await sendToBackend(audioBlob);
       };
 

@@ -18,7 +18,7 @@ export async function seedDatabase(): Promise<void> {
   if (examCount === 0) {
     await db.collection("exams").insertOne({
       code: "TECH101",
-      title: "Introduction to AI (Demo)",
+      title: "Introduction to AI",
       durationMinutes: 30,
       status: "active",
       questions: [
@@ -27,6 +27,6 @@ export async function seedDatabase(): Promise<void> {
         { id: 3, text: "Who is known as the father of Artificial Intelligence?" },
       ],
     });
-    console.log("🌱 Seeded demo exam: TECH101");
+    console.log("🌱 Seeded exam: TECH101");
   }
 }

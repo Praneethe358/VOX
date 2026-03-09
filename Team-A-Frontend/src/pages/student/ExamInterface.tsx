@@ -20,6 +20,8 @@ import StatusBar from '../../components/student/StatusBar';
 import TimerDisplay from '../../components/student/TimerDisplay';
 import SubmissionGate from '../../components/student/SubmissionGate';
 import FormattedAnswerReview from '../../components/student/FormattedAnswerReview';
+import LiveTranscript from '../../components/student/LiveTranscript';
+
 import { studentApi, unifiedApiClient } from '../../api/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -144,7 +146,7 @@ export function ExamInterface() {
     } finally { setIsFormatting(false); }
   }, [speak, transition, setRawTranscript, setFormattedAnswer, currentQuestion]);
 
-  const { isRecording, interimText, lastError: dictationError, start: startDictation, stop: stopDictation, reset: resetDictation } =
+  const { isRecording, interimText, finalText: dictationFinalText, lastError: dictationError, start: startDictation, stop: stopDictation, reset: resetDictation } =
     useDictation({ onDictationEnd: handleDictationEnd, silenceTimeout: 3500 });
 
   // ── Command handler ─────────────────────────────────────────────────────────
@@ -238,6 +240,8 @@ export function ExamInterface() {
     stop: stopEngine,
     failCount,
     isListening,
+    lastRawText,
+    interimRawText,
     lastError: voiceEngineError,
     isSupported: isVoiceSupported,
   } = useVoiceEngine(handleCommand as any);
@@ -338,6 +342,17 @@ export function ExamInterface() {
 
         <ModeIndicator voiceState={voiceState} isListening={isListening || isRecording} interimText={interimText} />
 
+        {/* Live transcript during dictation */}
+        <AnimatePresence>
+          {voiceState === 'DICTATION_MODE' && (
+            <LiveTranscript
+              finalText={dictationFinalText}
+              interimText={interimText}
+              isRecording={isRecording}
+            />
+          )}
+        </AnimatePresence>
+
         <div className="flex justify-center">
           <TimerDisplay remainingSeconds={remaining} isPaused={isPaused} />
         </div>
@@ -418,6 +433,29 @@ export function ExamInterface() {
             />
           )}
         </AnimatePresence>
+
+        {/* Last heard text feedback */}
+        {voiceState === 'COMMAND_MODE' && (interimRawText || lastRawText) && (
+          <motion.div
+            key={interimRawText || lastRawText}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="bg-slate-800/40 border border-slate-700/30 rounded-xl px-4 py-2 flex items-center gap-2"
+          >
+            <span className="text-slate-500 text-xs uppercase tracking-widest shrink-0">
+              {interimRawText ? 'Hearing' : 'Heard'}
+            </span>
+            <span className={`text-sm italic truncate ${
+              interimRawText ? 'text-indigo-300/80' : 'text-slate-300'
+            }`}>
+              {interimRawText || lastRawText}
+            </span>
+            {!interimRawText && failCount > 0 && (
+              <span className="ml-auto text-yellow-400/70 text-xs shrink-0">no match</span>
+            )}
+          </motion.div>
+        )}
 
         {/* Command hints */}
         {voiceState === 'COMMAND_MODE' && (

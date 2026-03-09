@@ -2,14 +2,13 @@
   "name": "mindkraft-backend",
   "version": "1.0.0",
   "private": true,
-  "description": "Backend process for MindKraft exam platform",
+  "description": "Backend process for MindKraft exam platform (production-ready, no mock mode)",
   "main": "dist/main.js",
   "scripts": {
     "dev": "npm run build && electron dist/main.js",
     "build": "tsc -p tsconfig.json",
     "start": "electron dist/main.js",
-    "server": "npm run build && node dist/server/standalone.js",
-    "server:mock": "npm run build && node dist/server/standalone-mock.js"
+    "server": "npm run build && node dist/server/standalone.js"
   },
   "dependencies": {
     "@types/mongodb": "^4.0.6",

@@ -126,13 +126,6 @@ export function useDictation({
         return;
       }
 
-      // Wait for TTS to finish before starting recognition
-      if (isSpeakingRef.current) {
-        console.log('[Dictation] TTS is speaking, delaying recognition start...');
-        setTimeout(createRecognition, 200);
-        return;
-      }
-
       console.log('[Dictation] Creating new SpeechRecognition instance');
       const r = new SR();
       recognitionRef.current = r;

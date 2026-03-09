@@ -47,11 +47,13 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'start_answering',
-    phrases: ['start answering', 'begin answering', 'answer now', 'start answer', 'begin answer'],
+    phrases: ['start answering', 'begin answering', 'answer now', 'start answer', 'begin answer',
+      'answer question', 'i want to answer', 'record answer', 'start recording', 'begin recording'],
   },
   {
     action: 'stop_dictating',
-    phrases: ['stop dictating', 'done', 'finished speaking', 'stop', 'i am done', 'end dictation'],
+    phrases: ['stop dictating', 'done', 'finished speaking', 'stop', 'i am done', 'end dictation',
+      'stop speaking', 'finish speaking', 'i have finished', 'done speaking'],
   },
   {
     action: 'repeat_question',
@@ -59,7 +61,8 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'next_question',
-    phrases: ['next question', 'go next', 'move forward', 'next', 'skip question', 'forward'],
+    phrases: ['next question', 'go next', 'move forward', 'next', 'skip question', 'forward',
+      'go to next', 'move to next', 'go forward'],
   },
   {
     action: 'previous_question',
@@ -70,6 +73,8 @@ const COMMAND_TABLE: CommandEntry[] = [
       'back',
       'previous',
       'go previous',
+      'prior question',
+      'move back',
     ],
   },
   {
@@ -142,7 +147,7 @@ function fuzzyRatio(a: string, b: string): number {
   return 1 - dist / Math.max(a.length, b.length, 1);
 }
 
-const FUZZY_THRESHOLD = 0.78;
+const FUZZY_THRESHOLD = 0.72;
 
 export function matchCommand(raw: string): { action: CommandAction; confidence: number } | null {
   const normalized = raw
@@ -187,6 +192,7 @@ export function matchCommand(raw: string): { action: CommandAction; confidence: 
 export interface UseVoiceEngineReturn {
   isListening: boolean;
   lastRawText: string;
+  interimRawText: string;
   failCount: number;
   lastError: string | null;
   isSupported: boolean;
@@ -200,6 +206,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
   const { voiceState, playBeep, isSpeaking } = useVoiceContext();
   const [isListening, setIsListening] = useState(false);
   const [lastRawText, setLastRawText] = useState('');
+  const [interimRawText, setInterimRawText] = useState('');
   const [failCount, setFailCount] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
 
@@ -339,12 +346,14 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     }
 
     // Proactively request microphone permission so failures are visible to UI.
+    // Note: we keep the stream open until recognition starts to avoid
+    // Windows audio device releasing/re-acquiring causing no-audio on SpeechRecognition.
+    let permStream: MediaStream | null = null;
     try {
       console.log('[VoiceEngine] Requesting microphone permission...');
       if (navigator.mediaDevices?.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        permStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log('[VoiceEngine] Microphone permission granted');
-        stream.getTracks().forEach(track => track.stop());
       }
     } catch (err) {
       console.error('[VoiceEngine] Microphone permission denied:', err);
@@ -357,15 +366,13 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     isActiveRef.current = true;
 
     const createRecognition = () => {
+      // Release permission stream once recognition is about to start
+      if (permStream) {
+        permStream.getTracks().forEach(t => t.stop());
+        permStream = null;
+      }
       if (!isActiveRef.current) {
         console.log('[VoiceEngine] Not active, stopping createRecognition loop');
-        return;
-      }
-
-      // Pause recognition while TTS is speaking to avoid capturing TTS audio as commands
-      if (isSpeakingRef.current) {
-        console.log('[VoiceEngine] TTS is speaking, delaying recognition start...');
-        setTimeout(createRecognition, 200);
         return;
       }
 
@@ -374,25 +381,41 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
       recognitionRef.current = r;
 
       r.continuous = false;
-      r.interimResults = false;
+      r.interimResults = true;
       r.lang = 'en-US';
       r.maxAlternatives = 3;
 
       r.onstart = () => {
         console.log('[VoiceEngine] SpeechRecognition started');
         setIsListening(true);
+        setInterimRawText('');
       };
 
       r.onresult = (event: any) => {
         console.log('[VoiceEngine] SpeechRecognition result received', event.results);
-        const results: string[] = [];
+        const finals: string[] = [];
+        let interim = '';
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          for (let j = 0; j < event.results[i].length; j++) {
-            results.push(event.results[i][j].transcript);
+          if (event.results[i].isFinal) {
+            for (let j = 0; j < event.results[i].length; j++) {
+              finals.push(event.results[i][j].transcript);
+            }
+          } else {
+            interim += event.results[i][0].transcript;
           }
         }
 
-        console.log('[VoiceEngine] Transcripts:', results);
+        // Show interim text immediately so user sees the mic is working
+        if (interim) setInterimRawText(interim);
+
+        // Only try to match on final results
+        if (finals.length === 0) return;
+
+        setInterimRawText('');
+        console.log('[VoiceEngine] Final transcripts:', finals);
+
+        const results = finals;
 
         let matched: { action: CommandAction; confidence: number } | null = null;
         let matchedRaw = '';
@@ -425,7 +448,8 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
         // Auto-restart while active (IVR-style always-on listening)
         if (isActiveRef.current) {
           console.log('[VoiceEngine] Auto-restarting recognition...');
-          setTimeout(createRecognition, 300);
+          // Delay slightly longer if TTS might be speaking to avoid echo
+          setTimeout(createRecognition, isSpeakingRef.current ? 400 : 150);
         }
       };
 
@@ -479,5 +503,5 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     return () => stop();
   }, [stop]);
 
-  return { isListening, lastRawText, failCount, lastError, isSupported, start, stop };
+  return { isListening, lastRawText, interimRawText, failCount, lastError, isSupported, start, stop };
 }

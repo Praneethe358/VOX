@@ -4,7 +4,7 @@
  * Fully display-only.  No interactive elements.
  */
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { VoiceSystemState } from '../../context/VoiceContext';
 
 interface ModeIndicatorProps {
@@ -95,20 +95,7 @@ export default function ModeIndicator({
         )}
       </div>
 
-      {/* Interim transcript (shown during dictation) */}
-      <AnimatePresence>
-        {interimText && voiceState === 'DICTATION_MODE' && (
-          <motion.p
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="text-sm text-red-200/80 italic truncate max-w-xl"
-            aria-live="off"
-          >
-            "{interimText}"
-          </motion.p>
-        )}
-      </AnimatePresence>
+      {/* Live transcript is rendered separately by LiveTranscript component */}
     </div>
   );
 }

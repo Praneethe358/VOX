@@ -1,9 +1,9 @@
 import { mongoService } from './mongo-client';
-import { mockMongoService } from './mock-mongo';
 import { faceService } from '../services/face.service';
 import { ResponseDocument } from './models/Response';
 
-const USE_MOCK_DB = process.env.USE_MOCK_DB === 'true';
+// In production the provider always delegates to mongoService/faceService.
+// Mock database code has been removed as all testing features are disabled.
 
 type AuditPayload = {
   studentId: string;
@@ -13,221 +13,136 @@ type AuditPayload = {
 };
 
 class DataProvider {
-  private async withFallback<T>(primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
-    if (USE_MOCK_DB) {
-      return fallback();
-    }
-
-    try {
-      return await primary();
-    } catch {
-      return fallback();
-    }
+  // fallback helper is no longer used, left in case additional data layers are added later
+  private async withFallback<T>(primary: () => Promise<T>, _fallback: () => Promise<T>): Promise<T> {
+    // always call primary in real mode
+    return primary();
   }
 
   async adminLogin(username: string, password: string): Promise<boolean> {
-    if (USE_MOCK_DB) {
-      return mockMongoService.adminLogin(username, password);
-    }
-    try {
-      const result = await mongoService.adminLogin(username, password);
-      if (result) return true;
-      // Primary returned false — could be wrong creds or DB not connected; try mock as fallback
-      return await mockMongoService.adminLogin(username, password);
-    } catch {
-      return mockMongoService.adminLogin(username, password);
-    }
+    return mongoService.adminLogin(username, password);
   }
 
   async saveExam(exam: any): Promise<void> {
-    await this.withFallback(
-      () => mongoService.saveExam(exam),
-      () => mockMongoService.saveExam(exam),
-    );
+    await mongoService.saveExam(exam);
   }
 
   async publishExam(code: string): Promise<void> {
-    await this.withFallback(
-      () => mongoService.publishExam(code),
-      () => mockMongoService.publishExam(code),
-    );
+    await mongoService.publishExam(code);
   }
 
   async getExamByCode(code: string): Promise<any | null> {
-    return this.withFallback(
-      () => mongoService.getExamByCode(code),
-      () => mockMongoService.getExamByCode(code),
-    );
+    return mongoService.getExamByCode(code);
   }
 
   async getAllExams(): Promise<any[]> {
-    return this.withFallback(
-      () => mongoService.getAllExams(),
-      () => mockMongoService.getAllExams(),
-    );
+    return mongoService.getAllExams();
   }
 
   async getActiveExams(): Promise<any[]> {
-    return this.withFallback(
-      () => mongoService.getActiveExams(),
-      () => mockMongoService.getActiveExams(),
-    );
+    return mongoService.getActiveExams();
   }
 
   async registerStudent(student: any): Promise<void> {
-    await this.withFallback(
-      () => mongoService.registerStudent(student),
-      () => mockMongoService.registerStudent(student),
-    );
+    await mongoService.registerStudent(student);
   }
 
   async verifyFace(examCode: string, liveDescriptor: number[]): Promise<{ success: boolean; studentId?: string; confidence?: number; distance?: number; student?: any }> {
-    if (USE_MOCK_DB) {
-      return mockMongoService.verifyFace(examCode, liveDescriptor);
-    }
-
-    try {
-      return await faceService.verifyFace(examCode, liveDescriptor);
-    } catch {
-      return mockMongoService.verifyFace(examCode, liveDescriptor);
-    }
+    return faceService.verifyFace(examCode, liveDescriptor);
   }
 
   async saveResponse(response: ResponseDocument): Promise<void> {
-    await this.withFallback(
-      () => mongoService.saveResponse(response),
-      () => mockMongoService.saveResponse(response as any),
-    );
+    await mongoService.saveResponse(response);
   }
 
   async logAudit(entry: AuditPayload): Promise<void> {
-    await this.withFallback(
-      () => mongoService.logAudit(entry),
-      () => mockMongoService.logAudit(entry),
-    );
+    await mongoService.logAudit(entry);
   }
 
   async submitExam(studentId: string, examCode: string): Promise<void> {
-    await this.withFallback(
-      () => mongoService.submitExam(studentId, examCode),
-      () => mockMongoService.submitExam(studentId, examCode),
-    );
+    await mongoService.submitExam(studentId, examCode);
   }
 
   // ── Exam Sessions ────────────────────────────────────
   async startExamSession(examCode: string, rollNumber: string, studentId?: string): Promise<string> {
-    return this.withFallback(
-      async () => { await mongoService.logAudit({ studentId: rollNumber, examCode, action: 'EXAM_START' }); return rollNumber; },
-      () => mockMongoService.startExamSession(examCode, rollNumber, studentId),
-    );
+    await mongoService.logAudit({ studentId: rollNumber, examCode, action: 'EXAM_START' });
+    return rollNumber;
   }
 
   async saveSessionAnswer(data: { rollNumber: string; examCode: string; questionIndex: number; answer: string }): Promise<void> {
-    await this.withFallback(
-      () => mongoService.saveResponse({ ...data, timestamp: new Date().toISOString() } as any),
-      () => mockMongoService.saveSessionAnswer(data),
-    );
+    await mongoService.saveResponse({ ...data, timestamp: new Date().toISOString() } as any);
   }
 
   async endExamSession(rollNumber: string, examCode: string): Promise<{ sessionId: string; estimatedScore: number }> {
-    return this.withFallback(
-      async () => { await mongoService.submitExam(rollNumber, examCode); return { sessionId: rollNumber, estimatedScore: 0 }; },
-      () => mockMongoService.endExamSession(rollNumber, examCode),
-    );
+    await mongoService.submitExam(rollNumber, examCode);
+    return { sessionId: rollNumber, estimatedScore: 0 };
   }
 
   async submitFullExam(sessionData: any): Promise<{ sessionId: string; estimatedScore: number }> {
-    return this.withFallback(
-      async () => { await mongoService.submitExam(sessionData.rollNumber, sessionData.examCode); return { sessionId: sessionData.rollNumber, estimatedScore: 0 }; },
-      () => mockMongoService.submitFullExam(sessionData),
-    );
+    await mongoService.submitExam(sessionData.rollNumber, sessionData.examCode);
+    return { sessionId: sessionData.rollNumber, estimatedScore: 0 };
   }
 
   async autoSaveSession(sessionData: any): Promise<void> {
-    await this.withFallback(
-      async () => {},
-      () => mockMongoService.autoSaveSession(sessionData),
-    );
+    // auto-save currently a no-op in real DB mode
   }
 
   // ── Auth ─────────────────────────────────────────────
   async findStudentByCredentials(email: string, password: string): Promise<any | null> {
-    return this.withFallback(
-      async () => null,
-      () => mockMongoService.findStudentByCredentials(email, password),
-    );
+    // not currently used; can be implemented as needed
+    return null;
   }
 
   async findStudentById(idOrRoll: string): Promise<any | null> {
-    return this.withFallback(
-      async () => null,
-      () => mockMongoService.findStudentById(idOrRoll),
-    );
+    // simple pass-through to mongoService lookup
+    try {
+      const db = mongoService.getDb();
+      let student = await db.collection('students').findOne({ studentId: idOrRoll });
+      if (!student) {
+        student = await db.collection('students').findOne({ rollNumber: idOrRoll });
+      }
+      return student;
+    } catch {
+      return null;
+    }
   }
 
   // ── Dashboard / Stats ────────────────────────────────
   async getDashboardStats(): Promise<{ totalExams: number; totalSubmissions: number; pendingReview: number; averageScore: number }> {
-    return this.withFallback(
-      async () => ({ totalExams: 0, totalSubmissions: 0, pendingReview: 0, averageScore: 0 }),
-      () => mockMongoService.getDashboardStats(),
-    );
+    return mongoService.getDashboardStats();
   }
 
   async getRecentActivity(): Promise<{ message: string }[]> {
-    return this.withFallback(
-      async () => [],
-      () => mockMongoService.getRecentActivity(),
-    );
+    return mongoService.getRecentActivity();
   }
 
   async getSubmissions(): Promise<any[]> {
-    return this.withFallback(
-      async () => [],
-      () => mockMongoService.getSubmissions(),
-    );
+    return mongoService.getSubmissions();
   }
 
   async getStudentsForScoring(): Promise<any[]> {
-    return this.withFallback(
-      async () => [],
-      () => mockMongoService.getStudentsForScoring(),
-    );
+    return mongoService.getStudentsForScoring();
   }
 
   async setStudentScore(idOrRoll: string, score: number): Promise<void> {
-    await this.withFallback(
-      async () => {},
-      () => mockMongoService.setStudentScore(idOrRoll, score),
-    );
+    await mongoService.setStudentScore(idOrRoll, score);
   }
 
   async getStudentAnswers(idOrRoll: string): Promise<any[]> {
-    return this.withFallback(
-      async () => [],
-      () => mockMongoService.getStudentAnswers(idOrRoll),
-    );
+    return mongoService.getStudentAnswers(idOrRoll);
   }
 
   async getStudentDashboardStats(idOrRoll: string): Promise<{ completedExams: number; upcomingExams: number; averageScore: number; totalTimeSpent: number }> {
-    return this.withFallback(
-      async () => ({ completedExams: 0, upcomingExams: 0, averageScore: 0, totalTimeSpent: 0 }),
-      () => mockMongoService.getStudentDashboardStats(idOrRoll),
-    );
+    return mongoService.getStudentDashboardStats(idOrRoll);
   }
 
   // ── Results ──────────────────────────────────────────
   async getAllResults(): Promise<any[]> {
-    return this.withFallback(
-      async () => [],
-      () => mockMongoService.getAllResults(),
-    );
+    return mongoService.getAllResults();
   }
 
   async getResultBySession(sessionId: string): Promise<any | null> {
-    return this.withFallback(
-      async () => null,
-      () => mockMongoService.getResultBySession(sessionId),
-    );
+    return mongoService.getResultBySession(sessionId);
   }
 
   // ── Face Embeddings ──────────────────────────────────
@@ -240,14 +155,7 @@ class DataProvider {
     method: string;
     student?: any;
   }> {
-    if (USE_MOCK_DB) {
-      return mockMongoService.verifyFaceById(studentId, liveDescriptor);
-    }
-    try {
-      return await faceService.verifyFaceByStudentId(studentId, liveDescriptor);
-    } catch {
-      return mockMongoService.verifyFaceById(studentId, liveDescriptor);
-    }
+    return faceService.verifyFaceByStudentId(studentId, liveDescriptor);
   }
 
   async registerFaceEmbedding(data: {
@@ -258,27 +166,11 @@ class DataProvider {
     descriptors: number[][];
     qualityScore?: number;
   }): Promise<{ registered: boolean; studentId: string; embeddingSize: number; frameCount: number }> {
-    if (USE_MOCK_DB) {
-      return mockMongoService.registerFaceEmbedding(data);
-    }
-    try {
-      return await faceService.registerFaceEmbedding(data);
-    } catch {
-      return mockMongoService.registerFaceEmbedding(data);
-    }
+    return faceService.registerFaceEmbedding(data);
   }
 
   async getAllRegisteredStudents(): Promise<any[]> {
-    if (USE_MOCK_DB) {
-      return mockMongoService.getAllRegisteredStudents();
-    }
-    try {
-      const students = await faceService.getRegisteredStudents();
-      if (students.length > 0) return students;
-      return mockMongoService.getAllRegisteredStudents();
-    } catch {
-      return mockMongoService.getAllRegisteredStudents();
-    }
+    return faceService.getRegisteredStudents();
   }
 }
 

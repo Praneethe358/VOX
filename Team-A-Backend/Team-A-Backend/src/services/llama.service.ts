@@ -4,7 +4,7 @@ export class LlamaService {
   async formatExamAnswer(rawText: string): Promise<string> {
     try {
       const baseUrl = process.env.OLLAMA_URL ?? "http://localhost:11434";
-      const model = process.env.OLLAMA_MODEL ?? "llama3.2:3b";
+      const model = process.env.OLLAMA_MODEL ?? "llama3:latest";
 
       const prompt =
         `You are formatting an exam answer.\n` +

@@ -106,14 +106,18 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [currentQuestionText, setCurrentQuestionText] = useState('');
   const [faceAttempts, setFaceAttempts] = useState(0);
 
-  // AudioContext ref for beeps (lazy-init to satisfy browser autoplay policy)
+  // AudioContext ref for beeps AND TTS (lazy-init to satisfy browser autoplay policy)
   const audioCtxRef = useRef<AudioContext | null>(null);
-  // Currently playing audio element for TTS
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
-  // Resolve/reject of current speak() promise
+  // Currently playing AudioBufferSourceNode for TTS
+  const ttsSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  // Resolve of current speak() promise (legacy — kept for stopSpeaking compat)
   const speakResolveRef = useRef<(() => void) | null>(null);
   // Abort controller for in-flight TTS fetch
   const ttsAbortRef = useRef<AbortController | null>(null);
+  // Serial queue — non-interrupt calls wait for the previous one to finish
+  const speakQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Monotonically increasing generation — _doSpeak aborts if superseded
+  const speakGenRef = useRef(0);
 
   // Lazy-init AudioContext on first user gesture
   const getAudioCtx = useCallback((): AudioContext => {
@@ -158,17 +162,20 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     'http://localhost:3000/api';
 
   const stopSpeaking = useCallback(() => {
+    // Advance generation — any in-progress _doSpeak will self-cancel at next await
+    speakGenRef.current += 1;
     // Abort any in-flight TTS fetch
     if (ttsAbortRef.current) {
       ttsAbortRef.current.abort();
       ttsAbortRef.current = null;
     }
-    // Stop any playing audio
-    if (ttsAudioRef.current) {
-      ttsAudioRef.current.pause();
-      ttsAudioRef.current.src = '';
-      ttsAudioRef.current = null;
+    // Stop any playing AudioBufferSourceNode
+    if (ttsSourceRef.current) {
+      try { ttsSourceRef.current.stop(); } catch { /* already stopped */ }
+      ttsSourceRef.current = null;
     }
+    // Reset queue so next speak() starts immediately
+    speakQueueRef.current = Promise.resolve();
     setIsSpeaking(false);
     if (speakResolveRef.current) {
       speakResolveRef.current();
@@ -176,92 +183,89 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Internal: synthesize + play one utterance.
+  // Checks generation at every async boundary to bail if superseded by a newer call.
+  const _doSpeak = useCallback(
+    async (text: string, speed: number, gen: number): Promise<void> => {
+      // Already superseded before we even started
+      if (speakGenRef.current !== gen) return;
+
+      const abortController = new AbortController();
+      ttsAbortRef.current = abortController;
+
+      try {
+        setIsSpeaking(true);
+        console.log('[TTS] Fetching:', text.substring(0, 60));
+
+        const response = await fetch(`${TTS_API_URL}/ai/tts-speak`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, speed }),
+          signal: abortController.signal,
+        });
+
+        if (speakGenRef.current !== gen) return; // superseded during fetch
+        if (!response.ok) throw new Error(`TTS API returned ${response.status}`);
+
+        const arrayBuffer = await response.arrayBuffer();
+        if (speakGenRef.current !== gen) return; // superseded during read
+
+        const ctx = getAudioCtx();
+        if (ctx.state === 'suspended') await ctx.resume();
+        if (speakGenRef.current !== gen) return; // superseded during resume
+
+        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+        if (speakGenRef.current !== gen) return; // superseded during decode
+
+        const source = ctx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(ctx.destination);
+        ttsSourceRef.current = source;
+
+        await new Promise<void>((resolvePlayback) => {
+          source.onended = () => {
+            ttsSourceRef.current = null;
+            resolvePlayback();
+          };
+          source.start(0);
+          console.log('[TTS] Playback started');
+        });
+
+        console.log('[TTS] Playback ended');
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') console.error('[TTS] Error:', err);
+      } finally {
+        // Only clear isSpeaking if we are still the active generation
+        if (speakGenRef.current === gen) {
+          setIsSpeaking(false);
+        }
+        ttsAbortRef.current = null;
+        ttsSourceRef.current = null;
+        speakResolveRef.current = null;
+      }
+    },
+    [getAudioCtx],
+  );
+
   const speak = useCallback(
     (text: string, options: SpeakOptions = {}): Promise<void> => {
-      console.log('[TTS/espeak] Speaking:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
-      return new Promise(async (resolve) => {
-        const { rate = 0.95, interrupt = true } = options;
+      const { rate = 0.95, interrupt = true } = options;
+      const speed = Math.round(80 + (rate - 0.5) * (300 - 80) / (2.0 - 0.5));
 
-        if (interrupt) {
-          // Stop any currently playing TTS
-          if (ttsAbortRef.current) {
-            ttsAbortRef.current.abort();
-            ttsAbortRef.current = null;
-          }
-          if (ttsAudioRef.current) {
-            ttsAudioRef.current.pause();
-            ttsAudioRef.current.src = '';
-            ttsAudioRef.current = null;
-          }
-          if (speakResolveRef.current) {
-            speakResolveRef.current();
-            speakResolveRef.current = null;
-          }
-        }
+      if (interrupt) {
+        // Advance generation and clear any in-flight audio, reset queue
+        stopSpeaking();
+      }
 
-        // Map speech rate (0.5-2.0) to espeak-ng words-per-minute (80-300)
-        const speed = Math.round(80 + (rate - 0.5) * (300 - 80) / (2.0 - 0.5));
+      // Capture generation AFTER the potential stopSpeaking() increment
+      const myGen = ++speakGenRef.current;
 
-        const abortController = new AbortController();
-        ttsAbortRef.current = abortController;
-        speakResolveRef.current = resolve;
-
-        try {
-          setIsSpeaking(true);
-          console.log('[TTS/espeak] Fetching audio from backend, speed:', speed);
-
-          const response = await fetch(`${TTS_API_URL}/ai/tts-speak`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, speed }),
-            signal: abortController.signal,
-          });
-
-          if (!response.ok) {
-            throw new Error(`TTS API returned ${response.status}`);
-          }
-
-          const audioBlob = await response.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          ttsAudioRef.current = audio;
-
-          audio.onended = () => {
-            console.log('[TTS/espeak] Audio playback ended');
-            URL.revokeObjectURL(audioUrl);
-            ttsAudioRef.current = null;
-            ttsAbortRef.current = null;
-            setIsSpeaking(false);
-            speakResolveRef.current = null;
-            resolve();
-          };
-
-          audio.onerror = () => {
-            console.error('[TTS/espeak] Audio playback error');
-            URL.revokeObjectURL(audioUrl);
-            ttsAudioRef.current = null;
-            ttsAbortRef.current = null;
-            setIsSpeaking(false);
-            speakResolveRef.current = null;
-            resolve();
-          };
-
-          await audio.play();
-          console.log('[TTS/espeak] Audio playback started');
-        } catch (err: any) {
-          if (err?.name === 'AbortError') {
-            console.log('[TTS/espeak] Fetch aborted (interrupted)');
-          } else {
-            console.error('[TTS/espeak] Error:', err);
-          }
-          ttsAbortRef.current = null;
-          setIsSpeaking(false);
-          speakResolveRef.current = null;
-          resolve();
-        }
-      });
+      // Chain onto the serial queue — guarantees only one utterance plays at a time
+      const queued = speakQueueRef.current.then(() => _doSpeak(text, speed, myGen));
+      speakQueueRef.current = queued.catch(() => {});
+      return queued;
     },
-    [],
+    [_doSpeak, stopSpeaking],
   );
 
   // ── State Transition ──────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ export class AIService {
 
   async formatAnswer(rawText: string): Promise<string> {
     const ollamaUrl = process.env.OLLAMA_URL ?? "http://localhost:11434";
-    const model = process.env.OLLAMA_MODEL ?? "llama3.2:3b";
+    const model = process.env.OLLAMA_MODEL ?? "llama3:latest";
 
     const response = await axios.post(`${ollamaUrl}/api/generate`, {
       model,

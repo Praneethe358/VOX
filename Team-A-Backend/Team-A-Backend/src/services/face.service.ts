@@ -112,12 +112,15 @@ export class FaceService {
       );
       // Also update legacy students collection for backward compat
       await this.db.collection("students").updateOne(
-        { studentId },
+        { $or: [{ studentId }, { registerNumber: studentId }, { email: email || `${studentId}@mindkraft.local` }] },
         {
           $set: {
+            studentId,
+            registerNumber: studentId,
             name: studentName,
+            fullName: studentName,
             examCode,
-            email,
+            email: email || `${studentId}@mindkraft.local`,
             faceDescriptor: averaged,
             registeredAt: now,
           },
@@ -287,11 +290,16 @@ export class FaceService {
 
   async getRegisteredStudents(): Promise<FaceEmbeddingDocument[]> {
     if (!this.db) return [];
-    return (await this.db
+    const docs = await this.db
       .collection("face_embeddings")
       .find({})
       .project({ normalizedEmbedding: 0, facialEmbedding: 0 })
-      .toArray()) as unknown as FaceEmbeddingDocument[];
+      .toArray();
+
+    return docs.map((doc: any) => ({
+      ...doc,
+      hasEmbedding: true,
+    })) as unknown as FaceEmbeddingDocument[];
   }
 
   async getFaceEmbedding(studentId: string): Promise<FaceEmbeddingDocument | null> {

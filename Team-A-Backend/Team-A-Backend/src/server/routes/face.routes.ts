@@ -49,17 +49,6 @@ router.post("/register", async (req: Request, res: Response) => {
       qualityScore,
     });
 
-    // Also register in the legacy student store for backward compat
-    const averaged = faceService.averageDescriptors(descriptors);
-    await dataProvider.registerStudent({
-      studentId,
-      name: studentName,
-      examCode: examCode || "TECH101",
-      email,
-      faceDescriptor: averaged,
-      registeredAt: new Date().toISOString(),
-    });
-
     console.log(`[face/register] ✅ Registered ${studentId} (${studentName}), embedding size: ${result.embeddingSize}, frames: ${result.frameCount}`);
     sendSuccess(res, result);
   } catch (error) {

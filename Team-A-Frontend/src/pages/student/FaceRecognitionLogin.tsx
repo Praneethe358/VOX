@@ -199,38 +199,6 @@ export function FaceRecognitionLogin() {
     };
   }
 
-  // ── Demo login (development only) ────────────────────────────────────────
-
-  const handleDemoLogin = async () => {
-    playBeep('success');
-    setAuthStatus('SUCCESS');
-    const demo: StudentProfile = {
-      studentId: 'DEMO_STUDENT_001',
-      name: 'Demo Student',
-      email: 'demo@student.local',
-      phoneNumber: '',
-      enrollmentDate: new Date(),
-      disabilityType: 'other',
-      faceDescriptor: [],
-      accessibilityProfile: {
-        requiresVoiceNavigation: true,
-        preferredLanguage: 'en',
-        speechRate: 1,
-        fontSize: 16,
-        highContrast: false,
-        textToSpeech: true,
-      },
-    };
-    setStudentName(demo.name);
-    setStudent(demo);
-    updateAuthState({ isAuthenticated: true, student: demo, faceVerified: true, loginTimestamp: new Date() });
-    sessionStorage.setItem('studentAuth', 'true');
-    sessionStorage.setItem('studentId', demo.studentId);
-    sessionStorage.setItem('studentData', JSON.stringify(demo));
-    stopScanning();
-    await speak('Demo login successful. Welcome, Demo Student.');
-    navigate('/student/exams');
-  };
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -389,15 +357,6 @@ export function FaceRecognitionLogin() {
           </button>
         </div>
 
-        {/* Demo login (dev only) */}
-        {(import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true') && (
-          <button
-            onClick={handleDemoLogin}
-            className="w-full mt-1 px-4 py-2 rounded-lg border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 transition-colors text-sm"
-          >
-            ⚡ Demo Login
-          </button>
-        )}
       </motion.div>
     </div>
   );
