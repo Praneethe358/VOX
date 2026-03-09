@@ -24,6 +24,17 @@ export class MongoService {
     this.db = DB_NAME ? this.client.db(DB_NAME) : this.client.db();
     faceService.setDb(this.db);
     console.log(`Connected to MongoDB: ${redactMongoUri(MONGO_URI)} | db=${this.db.databaseName}`);
+
+    // Drop stale unique index on examId that causes E11000 duplicate-key errors
+    try {
+      const indexes = await this.db.collection("exams").indexes();
+      if (indexes.some((idx: any) => idx.name === "examId_1")) {
+        await this.db.collection("exams").dropIndex("examId_1");
+        console.log("Dropped stale examId_1 index from exams collection");
+      }
+    } catch (e) {
+      // Ignore if index doesn't exist or collection not yet created
+    }
   }
 
   private col(name: string) {
@@ -42,11 +53,32 @@ export class MongoService {
 
   // ── Exam ─────────────────────────────────────────────
   async saveExam(exam: ExamDocument): Promise<void> {
-    await this.col("exams").insertOne({ ...exam });
+    // Upsert by code so duplicate exam codes overwrite instead of erroring
+    await this.col("exams").replaceOne(
+      { code: exam.code },
+      { ...exam, createdAt: exam.createdAt ?? new Date().toISOString() },
+      { upsert: true },
+    );
   }
 
   async publishExam(code: string): Promise<void> {
     await this.col("exams").updateOne({ code }, { $set: { status: "active" } });
+  }
+
+  async unpublishExam(code: string): Promise<void> {
+    await this.col("exams").updateOne({ code }, { $set: { status: "draft" } });
+  }
+
+  async deleteExam(code: string): Promise<boolean> {
+    const result = await this.col("exams").deleteOne({ code });
+    return (result.deletedCount ?? 0) > 0;
+  }
+
+  async updateExam(code: string, update: Partial<ExamDocument>): Promise<boolean> {
+    // Strip code from update to prevent code changes
+    const { code: _ignore, ...rest } = update as any;
+    const result = await this.col("exams").updateOne({ code }, { $set: rest });
+    return (result.matchedCount ?? 0) > 0;
   }
 
   async getExamByCode(code: string): Promise<ExamDocument | null> {
@@ -57,12 +89,12 @@ export class MongoService {
   }
 
   async getAllExams(): Promise<ExamDocument[]> {
-    const docs = await this.col("exams").find({}).toArray();
+    const docs = await this.col("exams").find({}).sort({ createdAt: -1 }).toArray();
     return docs as unknown as ExamDocument[];
   }
 
   async getActiveExams(): Promise<ExamDocument[]> {
-    const docs = await this.col("exams").find({ status: "active" }).toArray();
+    const docs = await this.col("exams").find({ status: "active" }).sort({ createdAt: -1 }).toArray();
     return docs as unknown as ExamDocument[];
   }
 

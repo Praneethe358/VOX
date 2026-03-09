@@ -231,13 +231,14 @@ class UnifiedApiClient {
     return response;
   }
 
-  async uploadExamPdf(pdfFile: File, examData: { code: string; title: string; durationMinutes: number }): Promise<ApiResponse<{ questionCount: number; code: string }>> {
+  async uploadExamPdf(pdfFile: File, examData: { code: string; title: string; durationMinutes: number; instructions?: string }): Promise<ApiResponse<{ questionCount: number; mcqCount: number; code: string }>> {
     const formData = new FormData();
     formData.append('pdf', pdfFile);
     formData.append('code', examData.code);
     formData.append('title', examData.title);
     formData.append('durationMinutes', String(examData.durationMinutes));
-    return this.requestMultipart<{ questionCount: number; code: string }>('/admin/upload-exam-pdf', formData);
+    if (examData.instructions) formData.append('instructions', examData.instructions);
+    return this.requestMultipart<{ questionCount: number; mcqCount: number; code: string }>('/admin/upload-exam-pdf', formData);
   }
 
   async publishExam(code: string): Promise<ApiResponse<{ published: boolean; code: string }>> {
@@ -269,9 +270,22 @@ class UnifiedApiClient {
     title: string;
     code?: string;
     durationMinutes: number;
-    questions?: Array<{ id?: number; text: string }>;
-  }): Promise<ApiResponse<{ code: string; questionCount: number }>> {
+    instructions?: string;
+    questions?: Array<{ id?: number; text: string; type?: 'mcq' | 'descriptive'; options?: string[]; correctAnswer?: number }>;
+  }): Promise<ApiResponse<{ code: string; questionCount: number; mcqCount: number }>> {
     return this.request('/admin/create-exam', 'POST', exam);
+  }
+
+  async unpublishExam(code: string): Promise<ApiResponse<{ unpublished: boolean; code: string }>> {
+    return this.request('/admin/unpublish-exam', 'POST', { code });
+  }
+
+  async deleteExam(code: string): Promise<ApiResponse<{ deleted: boolean; code: string }>> {
+    return this.request(`/admin/exam/${code}`, 'DELETE');
+  }
+
+  async updateExam(code: string, data: Record<string, unknown>): Promise<ApiResponse<{ updated: boolean; code: string }>> {
+    return this.request(`/admin/exam/${code}`, 'PUT', data);
   }
 
   async getSubmissions(): Promise<ApiResponse<any[]>> {
@@ -635,6 +649,9 @@ export const adminApi = {
   getRecentActivity: unifiedApiClient.getRecentActivity.bind(unifiedApiClient),
   getExams: unifiedApiClient.getExams.bind(unifiedApiClient),
   createExam: unifiedApiClient.createExam.bind(unifiedApiClient),
+  unpublishExam: unifiedApiClient.unpublishExam.bind(unifiedApiClient),
+  deleteExam: unifiedApiClient.deleteExam.bind(unifiedApiClient),
+  updateExam: unifiedApiClient.updateExam.bind(unifiedApiClient),
   getSubmissions: unifiedApiClient.getSubmissions.bind(unifiedApiClient),
   getStudentsForScoring: unifiedApiClient.getStudentsForScoring.bind(unifiedApiClient),
   submitStudentScore: unifiedApiClient.submitStudentScore.bind(unifiedApiClient),

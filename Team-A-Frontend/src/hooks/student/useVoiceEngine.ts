@@ -33,7 +33,11 @@ export type CommandAction =
   | 'submit_exam'
   | 'confirm_submission'
   | 'im_ready'
-  | 'start_exam';
+  | 'start_exam'
+  | 'option_1'
+  | 'option_2'
+  | 'option_3'
+  | 'option_4';
 
 interface CommandEntry {
   action: CommandAction;
@@ -121,6 +125,27 @@ const COMMAND_TABLE: CommandEntry[] = [
     action: 'im_ready',
     phrases: ["i'm ready", 'i am ready', 'ready', 'still here', 'yes i am here'],
   },
+  // ─── MCQ option selection commands ──────────────────────────────────
+  {
+    action: 'option_1',
+    phrases: ['option 1', 'option one', 'first option', 'answer 1', 'answer one',
+      'choice 1', 'choice one', 'option a', 'answer a', 'select 1', 'select one', 'select a', '1', 'one', 'a'],
+  },
+  {
+    action: 'option_2',
+    phrases: ['option 2', 'option two', 'second option', 'answer 2', 'answer two',
+      'choice 2', 'choice two', 'option b', 'answer b', 'select 2', 'select two', 'select b', '2', 'two', 'b'],
+  },
+  {
+    action: 'option_3',
+    phrases: ['option 3', 'option three', 'third option', 'answer 3', 'answer three',
+      'choice 3', 'choice three', 'option c', 'answer c', 'select 3', 'select three', 'select c', '3', 'three', 'c'],
+  },
+  {
+    action: 'option_4',
+    phrases: ['option 4', 'option four', 'fourth option', 'answer 4', 'answer four',
+      'choice 4', 'choice four', 'option d', 'answer d', 'select 4', 'select four', 'select d', '4', 'four', 'd'],
+  },
 ];
 
 // ─── Fuzzy match (Levenshtein ratio) ─────────────────────────────────────────
@@ -148,6 +173,15 @@ function fuzzyRatio(a: string, b: string): number {
 }
 
 const FUZZY_THRESHOLD = 0.72;
+
+// Known Whisper hallucinations — phantom text generated from silence/ambient noise
+const WHISPER_HALLUCINATIONS = new Set([
+  'you', 'thank you', 'thanks for watching', 'the', 'bye',
+  'hmm', 'um', 'uh', 'ah', 'oh', 'so', 'yeah', 'okay',
+  'thank you for watching', 'thanks for listening',
+  'subscribe', 'like and subscribe',
+  'i', 'a', 'the end', 'silence',
+]);
 
 export function matchCommand(raw: string): { action: CommandAction; confidence: number } | null {
   const normalized = raw
@@ -259,20 +293,32 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
   const startBackendSttLoop = useCallback(async () => {
     if (!isActiveRef.current) return;
     usingBackendSttRef.current = true;
+    console.log('[VoiceEngine] Starting backend Whisper STT loop');
 
     try {
       if (!mediaStreamRef.current) {
         mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('[VoiceEngine] Mic stream acquired for backend STT');
       }
-    } catch {
+    } catch (err) {
+      console.error('[VoiceEngine] Mic permission denied for backend STT:', err);
       setLastError('Microphone permission denied. Allow mic access in browser settings.');
       setIsListening(false);
       usingBackendSttRef.current = false;
       return;
     }
 
+    // Clear the browser-recognition error now that Whisper is starting
+    setLastError(null);
+
     const runOneChunk = async () => {
       if (!isActiveRef.current || !usingBackendSttRef.current || !mediaStreamRef.current) return;
+
+      // Pause while TTS is speaking to avoid echo
+      if (isSpeakingRef.current) {
+        backendLoopTimerRef.current = setTimeout(runOneChunk, 400);
+        return;
+      }
 
       const chunks: BlobPart[] = [];
       const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType: 'audio/webm' });
@@ -283,6 +329,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
       };
 
       recorder.onstart = () => {
+        console.log('[VoiceEngine] Backend STT: recording chunk...');
         setIsListening(true);
       };
 
@@ -291,22 +338,31 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
 
         try {
           const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          console.log('[VoiceEngine] Backend STT: sending', audioBlob.size, 'bytes to /api/ai/stt-command');
           const result = await apiService.convertCommandToText(audioBlob);
           const raw = (result?.text ?? '').trim();
+          console.log('[VoiceEngine] Backend STT result:', raw || '(empty)');
 
-          if (raw) {
+          // Filter out Whisper hallucinations (phantom text from silence/noise)
+          const normalized = raw.toLowerCase().replace(/[^\w\s]/g, '').trim();
+          if (raw && normalized.length >= 3 && !WHISPER_HALLUCINATIONS.has(normalized)) {
             setLastRawText(raw);
             const matched = matchCommand(raw);
             if (matched) {
+              console.log('[VoiceEngine] Backend STT matched command:', matched.action);
               setFailCount(0);
               setLastError(null);
               playBeep('command');
               onCommandRef.current(matched.action, matched.confidence, raw);
             } else {
+              console.log('[VoiceEngine] Backend STT no command match for:', raw);
               setFailCount(c => c + 1);
             }
+          } else if (raw) {
+            console.log('[VoiceEngine] Backend STT: ignoring hallucination/noise:', raw);
           }
-        } catch {
+        } catch (err) {
+          console.error('[VoiceEngine] Backend STT request failed:', err);
           setLastError('Whisper command recognition failed. Check backend and try again.');
         }
 
@@ -319,7 +375,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
         recorder.start();
         setTimeout(() => {
           if (recorder.state !== 'inactive') recorder.stop();
-        }, 2200);
+        }, 3500);
       } catch {
         setLastError('Unable to start backend speech capture.');
         setIsListening(false);
@@ -331,169 +387,17 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
 
   const start = useCallback(() => {
     const bootstrap = async () => {
-    console.log('[VoiceEngine] Bootstrapping...');
-    const SR = getSR();
-    if (!SR) {
-      console.warn('[VoiceEngine] SpeechRecognition not supported, falling back to backend STT');
-      setLastError('Browser speech recognition unavailable. Using backend Whisper fallback.');
-      isActiveRef.current = true;
-      void startBackendSttLoop();
-      return;
-    }
+    console.log('[VoiceEngine] Bootstrapping — using backend Whisper STT directly');
     if (isActiveRef.current) {
       console.log('[VoiceEngine] Already active, skipping bootstrap');
       return;
     }
-
-    // Proactively request microphone permission so failures are visible to UI.
-    // Note: we keep the stream open until recognition starts to avoid
-    // Windows audio device releasing/re-acquiring causing no-audio on SpeechRecognition.
-    let permStream: MediaStream | null = null;
-    try {
-      console.log('[VoiceEngine] Requesting microphone permission...');
-      if (navigator.mediaDevices?.getUserMedia) {
-        permStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('[VoiceEngine] Microphone permission granted');
-      }
-    } catch (err) {
-      console.error('[VoiceEngine] Microphone permission denied:', err);
-      setLastError('Microphone permission denied. Allow mic access in the browser and reload the page.');
-      playBeep('error');
-      return;
-    }
-
-    setLastError(null);
     isActiveRef.current = true;
-
-    const createRecognition = () => {
-      // Release permission stream once recognition is about to start
-      if (permStream) {
-        permStream.getTracks().forEach(t => t.stop());
-        permStream = null;
-      }
-      if (!isActiveRef.current) {
-        console.log('[VoiceEngine] Not active, stopping createRecognition loop');
-        return;
-      }
-
-      console.log('[VoiceEngine] Creating new SpeechRecognition instance');
-      const r = new SR();
-      recognitionRef.current = r;
-
-      r.continuous = false;
-      r.interimResults = true;
-      r.lang = 'en-US';
-      r.maxAlternatives = 3;
-
-      r.onstart = () => {
-        console.log('[VoiceEngine] SpeechRecognition started');
-        setIsListening(true);
-        setInterimRawText('');
-      };
-
-      r.onresult = (event: any) => {
-        console.log('[VoiceEngine] SpeechRecognition result received', event.results);
-        const finals: string[] = [];
-        let interim = '';
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            for (let j = 0; j < event.results[i].length; j++) {
-              finals.push(event.results[i][j].transcript);
-            }
-          } else {
-            interim += event.results[i][0].transcript;
-          }
-        }
-
-        // Show interim text immediately so user sees the mic is working
-        if (interim) setInterimRawText(interim);
-
-        // Only try to match on final results
-        if (finals.length === 0) return;
-
-        setInterimRawText('');
-        console.log('[VoiceEngine] Final transcripts:', finals);
-
-        const results = finals;
-
-        let matched: { action: CommandAction; confidence: number } | null = null;
-        let matchedRaw = '';
-
-        for (const raw of results) {
-          const m = matchCommand(raw);
-          if (m && (!matched || m.confidence > matched.confidence)) {
-            matched = m;
-            matchedRaw = raw;
-          }
-        }
-
-        if (matched) {
-          console.log('[VoiceEngine] Matched command:', matched.action, 'with confidence:', matched.confidence);
-          setLastRawText(matchedRaw);
-          setFailCount(0);
-          setLastError(null);
-          playBeep('command');
-          onCommandRef.current(matched.action, matched.confidence, matchedRaw);
-        } else {
-          console.log('[VoiceEngine] No command match found for:', results[0]);
-          setFailCount(c => c + 1);
-          setLastRawText(results[0] || '');
-        }
-      };
-
-      r.onend = () => {
-        console.log('[VoiceEngine] SpeechRecognition ended');
-        setIsListening(false);
-        // Auto-restart while active (IVR-style always-on listening)
-        if (isActiveRef.current) {
-          console.log('[VoiceEngine] Auto-restarting recognition...');
-          // Delay slightly longer if TTS might be speaking to avoid echo
-          setTimeout(createRecognition, isSpeakingRef.current ? 400 : 150);
-        }
-      };
-
-      r.onerror = (e: any) => {
-        console.error('[VoiceEngine] SpeechRecognition error:', e.error);
-        if (e.error === 'no-speech' || e.error === 'aborted') {
-          // Restart silently
-          setIsListening(false);
-          if (isActiveRef.current) {
-            setTimeout(createRecognition, 400);
-          }
-          return;
-        }
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-          setLastError('Microphone blocked for browser recognition. Switching to backend Whisper fallback.');
-          playBeep('warning');
-          setIsListening(false);
-          void startBackendSttLoop();
-          return;
-        }
-        if (e.error === 'audio-capture') {
-          setLastError('No microphone detected. Please connect or enable a microphone.');
-        } else if (e.error === 'network') {
-          setLastError('Speech recognition network error. Check internet and retry.');
-        } else {
-          setLastError('Voice recognition failed. Retrying automatically.');
-        }
-        setIsListening(false);
-        if (isActiveRef.current) {
-          setTimeout(createRecognition, 1000);
-        }
-      };
-
-      try {
-        r.start();
-      } catch (err) {
-        console.error('[VoiceEngine] Error starting SpeechRecognition:', err);
-      }
-    };
-
-    createRecognition();
+    setLastError(null);
+    void startBackendSttLoop();
     };
     void bootstrap();
-  }, [getSR, playBeep, startBackendSttLoop]);
+  }, [playBeep, startBackendSttLoop]);
 
   // Keep isSpeakingRef in sync with TTS state so recognition pauses during speech
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);

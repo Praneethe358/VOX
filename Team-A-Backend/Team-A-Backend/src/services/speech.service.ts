@@ -40,13 +40,51 @@ export class SpeechService {
       }
     }
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mindkraft-whisper-"));
+    const rawInputPath = path.join(tempDir, "input_raw");
     const inputPath = path.join(tempDir, "output.wav");
     const outputJson = path.join(tempDir, "output.json");
 
     console.log(`[STT] Temp dir: ${tempDir}`);
-    console.log(`[STT] Input audio: ${inputPath}`);
 
-    await fs.writeFile(inputPath, audioBuffer);
+    // Write the raw incoming audio (may be webm, wav, ogg, etc.)
+    await fs.writeFile(rawInputPath, audioBuffer);
+
+    // ── Convert to 16kHz mono WAV using ffmpeg (required for Whisper) ────────
+    const ffmpegBin = process.env.FFMPEG_BIN ?? "ffmpeg";
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const ffArgs = [
+          "-y",
+          "-i", rawInputPath,
+          "-ar", "16000",
+          "-ac", "1",
+          "-sample_fmt", "s16",
+          "-f", "wav",
+          inputPath,
+        ];
+        console.log(`[STT] Converting audio with ffmpeg:`, ffArgs.join(" "));
+        const ff = spawn(ffmpegBin, ffArgs, { stdio: ["ignore", "pipe", "pipe"] });
+        let ffStderr = "";
+        ff.stderr.on("data", (c: Buffer) => { ffStderr += c.toString(); });
+        ff.on("error", (err) => reject(new Error(`ffmpeg spawn failed: ${err.message}`)));
+        ff.on("close", (code) => {
+          if (code === 0) {
+            console.log(`[STT] ffmpeg conversion succeeded`);
+            resolve();
+          } else {
+            console.error(`[STT] ffmpeg exited with code ${code}: ${ffStderr.slice(-500)}`);
+            reject(new Error(`ffmpeg conversion failed (code ${code})`));
+          }
+        });
+      });
+    } catch (ffErr) {
+      console.error(`[STT] ffmpeg conversion error:`, (ffErr as Error).message);
+      // Fallback: use the raw buffer as-is (in case it's already wav)
+      await fs.copyFile(rawInputPath, inputPath);
+      console.log(`[STT] Using raw audio as fallback (no conversion)`);
+    }
+
+    console.log(`[STT] Input audio for Whisper: ${inputPath}`);
 
     const args = [
       inputPath,

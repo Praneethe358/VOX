@@ -58,8 +58,14 @@ export default function SettingsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-4">
-      {/* Voice UI overlays */}
+    <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden">
+      {/* Ambient */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-indigo-600/[0.05] rounded-full blur-[120px]" />
+        <div className="absolute bottom-1/4 right-1/4 w-[350px] h-[350px] bg-violet-600/[0.04] rounded-full blur-[100px]" />
+      </div>
+
+      {/* Voice UI */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
       <VoiceSpeaker position="bottom-center" />
       <VoiceCommandEngine
@@ -72,58 +78,90 @@ export default function SettingsPage() {
           { command: '"Help"',      icon: '❓', description: 'List commands' },
         ]}
       />
-      <div className="max-w-2xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-white">Settings</h1>
+
+      {/* Header */}
+      <header className="relative z-10 glass border-b border-white/[0.04]">
+        <div className="max-w-2xl mx-auto px-6 py-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Settings</h1>
+            <p className="text-slate-500 text-sm mt-1">Preferences & accessibility</p>
+          </div>
           <button
             onClick={() => navigate('/student/dashboard')}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-lg"
+            className="glass-card px-4 py-2.5 rounded-xl text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
           >
-            Back
+            <span className="text-lg">‹</span> Back
           </button>
         </div>
+      </header>
 
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 space-y-5">
-          <div>
-            <label className="block text-slate-300 mb-2">Preferred Language</label>
+      <main className="relative z-10 max-w-2xl mx-auto px-6 py-8 space-y-5">
+        {/* Language Setting */}
+        <div className="glass-card rounded-2xl p-6">
+          <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-4">Language</p>
+          <label className="text-sm text-slate-300 mb-2 block">Preferred Language</label>
+          <div className="relative">
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 text-white rounded"
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.06] text-white rounded-xl appearance-none focus:outline-none focus:border-indigo-500/[0.3] transition-colors text-sm"
             >
-              <option value="en">English</option>
-              <option value="hi">Hindi</option>
-              <option value="mr">Marathi</option>
+              <option value="en" className="bg-[#0a0e1a]">English</option>
+              <option value="hi" className="bg-[#0a0e1a]">Hindi</option>
+              <option value="mr" className="bg-[#0a0e1a]">Marathi</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-slate-300 mb-2">Speech Rate: {speechRate.toFixed(1)}x</label>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={speechRate}
-              onChange={(e) => setSpeechRate(Number(e.target.value))}
-              className="w-full"
-            />
-          </div>
-
-          <p className="text-slate-400 text-sm">
-            Profile preference updates require backend save support and will sync automatically once endpoint is available.
-          </p>
-
-          {/* Voice accessibility info */}
-          <div className="mt-4 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
-            <h3 className="text-indigo-300 font-semibold text-sm mb-2">🎙️ Voice Navigation Active</h3>
-            <p className="text-slate-400 text-xs">
-              All pages support voice commands. Say "help" at any time to hear available commands.
-              Your speech rate setting affects how fast the system speaks to you.
-            </p>
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-xs pointer-events-none">▾</span>
           </div>
         </div>
-      </div>
+
+        {/* Speech Rate */}
+        <div className="glass-card rounded-2xl p-6">
+          <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-4">Voice</p>
+          <div className="flex items-center justify-between mb-3">
+            <label className="text-sm text-slate-300">Speech Rate</label>
+            <span className="text-sm font-semibold text-indigo-300 bg-indigo-500/[0.08] px-2.5 py-1 rounded-lg border border-indigo-500/[0.1]">
+              {speechRate.toFixed(1)}×
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={speechRate}
+            onChange={(e) => setSpeechRate(Number(e.target.value))}
+            className="w-full h-1.5 bg-white/[0.06] rounded-full appearance-none cursor-pointer
+              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4
+              [&::-webkit-slider-thumb]:bg-indigo-400 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg
+              [&::-webkit-slider-thumb]:shadow-indigo-500/30"
+          />
+          <div className="flex justify-between text-[10px] text-slate-600 mt-1.5">
+            <span>0.5× Slow</span>
+            <span>1.0× Normal</span>
+            <span>2.0× Fast</span>
+          </div>
+        </div>
+
+        {/* Info */}
+        <div className="glass-card rounded-2xl p-6 border-indigo-500/[0.06]">
+          <div className="flex gap-3">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/[0.08] border border-indigo-500/[0.1] flex items-center justify-center flex-shrink-0">
+              <span className="text-indigo-400 text-sm">◉</span>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-300 mb-1">Voice Navigation Active</p>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                All pages support voice commands. Say "help" at any time to hear available commands. 
+                Your speech rate setting affects how fast the system speaks to you.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-slate-600 text-center">
+          Settings sync automatically when the backend is available
+        </p>
+      </main>
     </div>
   );
 }

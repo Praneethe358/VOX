@@ -26,7 +26,736 @@ const health = await adminApi.getDashboardStats();        setBackendStatus(healt
 // ═══════════════════════════════════════════════════════════════════════════════
 //  EXAM MANAGEMENT SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
-const ExamManagementSection: React.FC = () => {  const toast = useToast();  const fileInputRef = useRef<HTMLInputElement>(null);  const [examName, setExamName] = useState('');  const [examCode, setExamCode] = useState('');  const [manualQuestions, setManualQuestions] = useState('');  const [durationMinutes, setDurationMinutes] = useState('');  const [selectedFile, setSelectedFile] = useState<File | null>(null);  const [isDragging, setIsDragging] = useState(false);  const [isCreating, setIsCreating] = useState(false);  const [exams, setExams] = useState<ExamRecord[]>([]);  const [loading, setLoading] = useState(true);  const loadExams = useCallback(async () => {    const response = await adminApi.getExams() as any;    const items = response?.data ?? response?.exams ?? [];    if (response?.success && Array.isArray(items)) {      setExams(        items.map((exam: any, index: number) => ({          id: exam.id ?? exam._id ?? index + 1,          name: exam.name ?? exam.title ?? exam.code ?? 'Untitled Exam',          questions: Array.isArray(exam.questions) ? exam.questions.length : Number(exam.questions ?? 0),          students: Number(exam.students ?? 0),          date: exam.date ?? exam.createdAt ?? '-',          status: exam.status,          code: exam.code,        })),      );    }    setLoading(false);  }, []);  useEffect(() => { loadExams(); }, [loadExams]);  const handleExamNameChange = (value: string) => {    setExamName(value);    setExamCode(value.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20));  };  const handleFileSelect = (file: File) => { setSelectedFile(file); };  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {    const f = e.target.files?.[0];    if (f) handleFileSelect(f);  };  const handleRemoveFile = () => {    setSelectedFile(null);    if (fileInputRef.current) fileInputRef.current.value = '';  };  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };  const handleDragLeave = () => setIsDragging(false);  const handleDrop = (e: React.DragEvent) => {    e.preventDefault();    setIsDragging(false);    const f = e.dataTransfer.files[0];    if (f) handleFileSelect(f);  };  const handleCreateExam = async () => {    if (!examName.trim()) { toast.warning('Validation', 'Exam name is required'); return; }    if (!durationMinutes.trim() || Number(durationMinutes) < 5) { toast.warning('Validation', 'Duration must be at least 5 minutes'); return; }    setIsCreating(true);    try {      let result: any;      if (selectedFile) {        result = await adminApi.uploadExamPdf(selectedFile, {          code: examCode,          title: examName.trim(),          durationMinutes: Number(durationMinutes),        });      } else {        const questions = manualQuestions          .split('\n')          .map((l) => l.trim())          .filter((l) => l.length > 3)          .map((l, i) => ({ id: i + 1, text: l.replace(/^[\d]+[.):\s]+/, '').trim() || l }));        if (questions.length === 0 && !selectedFile) {          toast.warning('No Questions', 'Add questions manually or upload a file');          setIsCreating(false);          return;        }        result = await adminApi.createExam({          code: examCode,          title: examName.trim(),          durationMinutes: Number(durationMinutes),          questions,        });      }      if (result?.success) {        const qCount = result?.data?.questionCount ?? 0;        toast.success('Exam Created', `"${examName.trim()}" created with ${qCount} question${qCount !== 1 ? 's' : ''}`);        setExamName(''); setExamCode(''); setManualQuestions(''); setDurationMinutes('');        handleRemoveFile();        await loadExams();      } else {        toast.error('Failed', result?.error || 'Could not create exam');      }    } catch (err: any) {      toast.error('Error', err?.message || 'Unknown error');    } finally {      setIsCreating(false);    }  };  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">      {/* Create Exam Card */}      <motion.div        initial={{ opacity: 0, y: 20 }}        animate={{ opacity: 1, y: 0 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-8"      >        <h3 className="text-lg font-semibold text-white mb-4">Create New Exam</h3>        <div className="space-y-4">          {/* Name + Code */}          <div className="grid grid-cols-2 gap-4">            <div>              <label className="block text-sm font-medium text-slate-300 mb-2">Exam Name <span className="text-red-400">*</span></label>              <input                type="text" placeholder="e.g., Advanced Machine Learning"                value={examName} onChange={(e) => handleExamNameChange(e.target.value)}                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"              />            </div>            <div>              <label className="block text-sm font-medium text-slate-300 mb-2">Exam Code (auto)</label>              <input                type="text" placeholder="TECH101" value={examCode}                onChange={(e) => setExamCode(e.target.value.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, ''))}                className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none font-mono"              />            </div>          </div>          {/* Duration */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">Duration (minutes) <span className="text-red-400">*</span></label>            <input              type="number" placeholder="90" min="5" value={durationMinutes}              onChange={(e) => setDurationMinutes(e.target.value)}              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"            />          </div>          {/* Manual Questions */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">              Questions <span className="text-slate-500 font-normal">(one per line — optional if uploading a file)</span>            </label>            <textarea              rows={5}              placeholder={"1. What is the full form of AI?\n2. Define Machine Learning.\n3. Who is the father of AI?"}              value={manualQuestions} onChange={(e) => setManualQuestions(e.target.value)}              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-indigo-500 outline-none resize-y text-sm font-mono"            />            {manualQuestions.trim() && (              <p className="text-xs text-slate-400 mt-1">                {manualQuestions.split('\n').filter((l) => l.trim().length > 3).length} question(s) detected              </p>            )}          </div>          {/* File Upload */}          <div>            <label className="block text-sm font-medium text-slate-300 mb-2">              Upload File <span className="text-slate-500 font-normal">(PDF, JSON, TXT, CSV)</span>            </label>            <input ref={fileInputRef} type="file" accept=".json,.csv,.txt,.pdf" onChange={handleFileInput} className="hidden" />            <motion.div              onClick={() => fileInputRef.current?.click()}              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}              whileHover={{ scale: 1.005 }}              className={`cursor-pointer rounded-lg border-2 border-dashed transition-all ${                isDragging ? 'border-indigo-400 bg-indigo-500/10'                  : selectedFile ? 'border-green-500 bg-green-500/10'                  : 'border-slate-600 bg-slate-700/20 hover:border-indigo-500 hover:bg-slate-700/40'              }`}            >              <div className="py-5 px-6 text-center">                {selectedFile ? (                  <div className="flex items-center justify-between">                    <div className="flex items-center gap-3">                      <span className="text-2xl text-green-400">✓</span>                      <div className="text-left">                        <p className="text-green-400 font-medium text-sm">{selectedFile.name}</p>                        <p className="text-slate-400 text-xs">{(selectedFile.size / 1024).toFixed(1)} KB</p>                      </div>                    </div>                    <button                      onClick={(e) => { e.stopPropagation(); handleRemoveFile(); }}                      className="px-3 py-1 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"                    >Remove</button>                  </div>                ) : (                  <div>                    <span className="text-3xl">{isDragging ? '📥' : '📤'}</span>                    <p className="text-slate-300 text-sm mt-2">{isDragging ? 'Drop here' : 'Click to browse or drag & drop'}</p>                    <p className="text-slate-500 text-xs mt-1">PDF, JSON, TXT, CSV</p>                  </div>                )}              </div>            </motion.div>          </div>          <motion.button            whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}            onClick={handleCreateExam}            disabled={isCreating || !examName.trim() || !durationMinutes.trim()}            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all disabled:opacity-60 disabled:cursor-not-allowed"          >            {isCreating ? (              <span className="flex items-center justify-center gap-2"><Spinner size="w-4 h-4" /> Creating...</span>            ) : 'Create & Publish Exam'}          </motion.button>        </div>      </motion.div>      {/* Exam List */}      <motion.div        initial={{ opacity: 0, y: 20 }}        animate={{ opacity: 1, y: 0 }}        transition={{ delay: 0.1 }}        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"      >        <h4 className="text-lg font-semibold text-white mb-4">Existing Exams</h4>        {loading ? <LoadingOverlay /> : exams.length === 0 ? (          <p className="text-slate-400 text-sm text-center py-6">No exams yet. Create one above.</p>        ) : (          <div className="space-y-3">            {exams.map((exam, idx) => (              <motion.div                key={exam.id}                initial={{ x: -20, opacity: 0 }}                animate={{ x: 0, opacity: 1 }}                transition={{ delay: 0.2 + idx * 0.05 }}                className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg border border-slate-600/30 hover:border-indigo-500/30 transition-all"              >                <div>                  <p className="font-medium text-white">{exam.name}</p>                  <p className="text-xs text-slate-400 mt-1">                    {exam.code && <span className="font-mono mr-2 text-indigo-300">{exam.code}</span>}                    {exam.questions} question{exam.questions !== 1 ? 's' : ''}                    {exam.date && exam.date !== '-' && ` · ${exam.date}`}                  </p>                  {exam.status && (                    <span className={`inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-medium ${                      exam.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'                    }`}>                      {exam.status === 'active' ? '● Active' : exam.status}                    </span>                  )}                </div>              </motion.div>            ))}          </div>        )}      </motion.div>    </motion.div>  );};
+
+interface MCQOption {
+  text: string;
+}
+
+interface ManualQuestion {
+  text: string;
+  type: 'mcq' | 'descriptive';
+  options: string[];
+  correctAnswer: number;
+}
+
+interface ExamDetailRecord {
+  id: number | string;
+  name: string;
+  code: string;
+  questions: any[];
+  questionCount: number;
+  mcqCount: number;
+  descriptiveCount: number;
+  durationMinutes: number;
+  status: string;
+  instructions: string;
+  createdAt: string;
+}
+
+const ExamManagementSection: React.FC = () => {
+  const toast = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ─── Wizard state ─────────────────────────────────────────────────────
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [examName, setExamName] = useState('');
+  const [examCode, setExamCode] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('30');
+  const [instructions, setInstructions] = useState('');
+
+  // Step 2: Questions
+  const [questionSource, setQuestionSource] = useState<'upload' | 'manual'>('upload');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [manualQuestions, setManualQuestions] = useState<ManualQuestion[]>([]);
+  const [parsedQuestions, setParsedQuestions] = useState<any[]>([]);
+  const [isParsing, setIsParsing] = useState(false);
+
+  // Step 3: Preview / Create
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Exam list
+  const [exams, setExams] = useState<ExamDetailRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedExam, setExpandedExam] = useState<string | null>(null);
+  const [deletingCode, setDeletingCode] = useState<string | null>(null);
+
+  const loadExams = useCallback(async () => {
+    try {
+      const response = await adminApi.getExams() as any;
+      const items = response?.data ?? response?.exams ?? [];
+      if (response?.success && Array.isArray(items)) {
+        setExams(
+          items.map((exam: any, index: number) => {
+            const qs = Array.isArray(exam.questions) ? exam.questions : [];
+            return {
+              id: exam.id ?? exam._id ?? index + 1,
+              name: exam.name ?? exam.title ?? exam.code ?? 'Untitled Exam',
+              code: exam.code ?? '',
+              questions: qs,
+              questionCount: qs.length,
+              mcqCount: qs.filter((q: any) => q.type === 'mcq').length,
+              descriptiveCount: qs.filter((q: any) => q.type !== 'mcq').length,
+              durationMinutes: exam.durationMinutes ?? 30,
+              status: exam.status ?? 'draft',
+              instructions: exam.instructions ?? '',
+              createdAt: exam.createdAt ?? '-',
+            };
+          }),
+        );
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadExams(); }, [loadExams]);
+
+  // ─── Step 1 helpers ───────────────────────────────────────────────────
+  const handleExamNameChange = (value: string) => {
+    setExamName(value);
+    setExamCode(value.trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '').slice(0, 20));
+  };
+
+  const goToStep2 = () => {
+    if (!examName.trim()) { toast.warning('Validation', 'Exam name is required'); return; }
+    if (!durationMinutes.trim() || Number(durationMinutes) < 5) { toast.warning('Validation', 'Duration must be at least 5 minutes'); return; }
+    setStep(2);
+  };
+
+  // ─── Step 2 helpers ───────────────────────────────────────────────────
+  const handleFileSelect = (file: File) => { setSelectedFile(file); };
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) handleFileSelect(f);
+  };
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setParsedQuestions([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const f = e.dataTransfer.files[0];
+    if (f) handleFileSelect(f);
+  };
+
+  // Upload & parse file — preview questions before creating
+  const handleParseFile = async () => {
+    if (!selectedFile) return;
+    setIsParsing(true);
+    try {
+      const result = await adminApi.uploadExamPdf(selectedFile, {
+        code: examCode || 'PREVIEW',
+        title: examName.trim() || 'Preview',
+        durationMinutes: Number(durationMinutes),
+        instructions: instructions.trim(),
+      });
+      if (result?.success) {
+        // Re-fetch exams to get parsed questions
+        const examsRes = await adminApi.getExams() as any;
+        const items = examsRes?.data ?? [];
+        const created = items.find((e: any) => e.code === (examCode || 'PREVIEW'));
+        if (created && Array.isArray(created.questions)) {
+          setParsedQuestions(created.questions);
+          toast.success('Parsed', `${created.questions.length} questions extracted (${created.questions.filter((q: any) => q.type === 'mcq').length} MCQ)`);
+        } else {
+          setParsedQuestions([]);
+          toast.info('Uploaded', `${result.data?.questionCount ?? 0} questions saved`);
+        }
+      } else {
+        toast.error('Parse Failed', result?.error || 'Could not parse file');
+      }
+    } catch (err: any) {
+      toast.error('Error', err?.message || 'File upload failed');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  // Manual question management
+  const addManualQuestion = () => {
+    setManualQuestions(prev => [...prev, { text: '', type: 'mcq', options: ['', '', '', ''], correctAnswer: 0 }]);
+  };
+  const removeManualQuestion = (idx: number) => {
+    setManualQuestions(prev => prev.filter((_, i) => i !== idx));
+  };
+  const updateManualQuestion = (idx: number, field: string, value: any) => {
+    setManualQuestions(prev => prev.map((q, i) => i === idx ? { ...q, [field]: value } : q));
+  };
+  const updateOption = (qIdx: number, optIdx: number, value: string) => {
+    setManualQuestions(prev => prev.map((q, i) => {
+      if (i !== qIdx) return q;
+      const opts = [...q.options];
+      opts[optIdx] = value;
+      return { ...q, options: opts };
+    }));
+  };
+
+  const getAllQuestions = (): any[] => {
+    if (questionSource === 'upload') return parsedQuestions;
+    return manualQuestions
+      .filter(q => q.text.trim().length > 0)
+      .map((q, i) => ({
+        id: i + 1,
+        text: q.text,
+        type: q.type,
+        ...(q.type === 'mcq' ? { options: q.options.filter(o => o.trim()), correctAnswer: q.correctAnswer } : {}),
+      }));
+  };
+
+  const goToStep3 = () => {
+    const qs = getAllQuestions();
+    if (qs.length === 0) {
+      toast.warning('No Questions', questionSource === 'upload' ? 'Upload and parse a file first' : 'Add at least one question');
+      return;
+    }
+    setStep(3);
+  };
+
+  // ─── Step 3: Create exam ──────────────────────────────────────────────
+  const handleCreateExam = async () => {
+    setIsCreating(true);
+    try {
+      const questions = getAllQuestions();
+      if (questionSource === 'upload' && parsedQuestions.length > 0) {
+        // Already uploaded via parse — just reload
+        toast.success('Exam Saved', `"${examName}" saved as draft with ${questions.length} questions`);
+        resetWizard();
+        await loadExams();
+        setIsCreating(false);
+        return;
+      }
+      const result = await adminApi.createExam({
+        code: examCode,
+        title: examName.trim(),
+        durationMinutes: Number(durationMinutes),
+        instructions: instructions.trim(),
+        questions,
+      });
+      if (result?.success) {
+        const qCount = result.data?.questionCount ?? 0;
+        const mcqCount = result.data?.mcqCount ?? 0;
+        toast.success('Exam Created', `"${examName.trim()}" saved as draft — ${qCount} questions (${mcqCount} MCQ)`);
+        resetWizard();
+        await loadExams();
+      } else {
+        toast.error('Failed', result?.error || 'Could not create exam');
+      }
+    } catch (err: any) {
+      toast.error('Error', err?.message || 'Unknown error');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const resetWizard = () => {
+    setStep(1);
+    setExamName('');
+    setExamCode('');
+    setDurationMinutes('30');
+    setInstructions('');
+    setSelectedFile(null);
+    setParsedQuestions([]);
+    setManualQuestions([]);
+    setQuestionSource('upload');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // ─── Exam actions ─────────────────────────────────────────────────────
+  const handlePublish = async (code: string) => {
+    try {
+      const res = await adminApi.publishExam(code);
+      if (res?.success) {
+        toast.success('Published', `Exam ${code} is now active`);
+        await loadExams();
+      } else {
+        toast.error('Failed', (res as any)?.error || 'Could not publish');
+      }
+    } catch (err: any) { toast.error('Error', err?.message || 'Publish failed'); }
+  };
+
+  const handleUnpublish = async (code: string) => {
+    try {
+      const res = await adminApi.unpublishExam(code);
+      if (res?.success) {
+        toast.success('Unpublished', `Exam ${code} is now draft`);
+        await loadExams();
+      } else {
+        toast.error('Failed', (res as any)?.error || 'Could not unpublish');
+      }
+    } catch (err: any) { toast.error('Error', err?.message || 'Unpublish failed'); }
+  };
+
+  const handleDelete = async (code: string) => {
+    setDeletingCode(code);
+    try {
+      const res = await adminApi.deleteExam(code);
+      if (res?.success) {
+        toast.success('Deleted', `Exam ${code} removed`);
+        await loadExams();
+      } else {
+        toast.error('Failed', (res as any)?.error || 'Could not delete');
+      }
+    } catch (err: any) { toast.error('Error', err?.message || 'Delete failed'); }
+    setDeletingCode(null);
+  };
+
+  // ─── Wizard steps indicator ───────────────────────────────────────────
+  const StepIndicator = () => (
+    <div className="flex items-center justify-center gap-2 mb-8">
+      {[
+        { num: 1, label: 'Exam Details' },
+        { num: 2, label: 'Add Questions' },
+        { num: 3, label: 'Preview & Save' },
+      ].map((s, idx) => (
+        <React.Fragment key={s.num}>
+          {idx > 0 && <div className={`w-12 h-0.5 ${step >= s.num ? 'bg-indigo-500' : 'bg-slate-600'}`} />}
+          <div className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+              step === s.num
+                ? 'bg-indigo-600 text-white ring-2 ring-indigo-400/50'
+                : step > s.num
+                ? 'bg-green-600 text-white'
+                : 'bg-slate-700 text-slate-400'
+            }`}>
+              {step > s.num ? '✓' : s.num}
+            </div>
+            <span className={`text-xs font-medium hidden sm:inline ${step >= s.num ? 'text-white' : 'text-slate-500'}`}>
+              {s.label}
+            </span>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  RENDER
+  // ═══════════════════════════════════════════════════════════════════════
+  const previewQuestions = getAllQuestions();
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+
+      {/* ── Create Exam Wizard ──────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-8"
+      >
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold text-white">Create New Exam</h3>
+          {step > 1 && (
+            <button onClick={resetWizard} className="text-xs text-slate-400 hover:text-white transition-colors">
+              ✕ Cancel
+            </button>
+          )}
+        </div>
+        <StepIndicator />
+
+        <AnimatePresence mode="wait">
+          {/* ── STEP 1: Exam Details ──────────────────────────────────── */}
+          {step === 1 && (
+            <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Exam Name <span className="text-red-400">*</span></label>
+                  <input type="text" placeholder="e.g., Advanced Machine Learning" value={examName}
+                    onChange={(e) => handleExamNameChange(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Exam Code (auto)</label>
+                  <input type="text" placeholder="TECH101" value={examCode}
+                    onChange={(e) => setExamCode(e.target.value.toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, ''))}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none font-mono" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Duration (minutes) <span className="text-red-400">*</span></label>
+                  <input type="number" placeholder="30" min="5" value={durationMinutes}
+                    onChange={(e) => setDurationMinutes(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Instructions <span className="text-slate-500 font-normal">(optional)</span></label>
+                  <input type="text" placeholder="e.g., Answer all questions" value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none" />
+                </div>
+              </div>
+              <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }} onClick={goToStep2}
+                className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-semibold transition-all">
+                Next → Add Questions
+              </motion.button>
+            </motion.div>
+          )}
+
+          {/* ── STEP 2: Add Questions ────────────────────────────────── */}
+          {step === 2 && (
+            <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+              {/* Source toggle */}
+              <div className="flex gap-3">
+                {(['upload', 'manual'] as const).map(src => (
+                  <button key={src} onClick={() => setQuestionSource(src)}
+                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all border ${
+                      questionSource === src
+                        ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300'
+                        : 'bg-slate-700/30 border-slate-600/30 text-slate-400 hover:border-slate-500'
+                    }`}>
+                    {src === 'upload' ? '📄 Upload PDF / File' : '✏️ Add Manually'}
+                  </button>
+                ))}
+              </div>
+
+              {questionSource === 'upload' ? (
+                <div className="space-y-4">
+                  <input ref={fileInputRef} type="file" accept=".json,.csv,.txt,.pdf" onChange={handleFileInput} className="hidden" />
+                  <motion.div onClick={() => fileInputRef.current?.click()}
+                    onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+                    whileHover={{ scale: 1.005 }}
+                    className={`cursor-pointer rounded-lg border-2 border-dashed transition-all ${
+                      isDragging ? 'border-indigo-400 bg-indigo-500/10'
+                        : selectedFile ? 'border-green-500 bg-green-500/10'
+                        : 'border-slate-600 bg-slate-700/20 hover:border-indigo-500'
+                    }`}>
+                    <div className="py-6 px-6 text-center">
+                      {selectedFile ? (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl text-green-400">✓</span>
+                            <div className="text-left">
+                              <p className="text-green-400 font-medium text-sm">{selectedFile.name}</p>
+                              <p className="text-slate-400 text-xs">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                          </div>
+                          <button onClick={(e) => { e.stopPropagation(); handleRemoveFile(); }}
+                            className="px-3 py-1 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30">Remove</button>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-4xl">{isDragging ? '📥' : '📤'}</span>
+                          <p className="text-slate-300 text-sm mt-3">{isDragging ? 'Drop here' : 'Click to browse or drag & drop your MCQ PDF'}</p>
+                          <p className="text-slate-500 text-xs mt-1">Supports PDF, JSON, TXT, CSV — MCQ options (A/B/C/D) auto-detected</p>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+
+                  {selectedFile && parsedQuestions.length === 0 && (
+                    <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                      onClick={handleParseFile} disabled={isParsing}
+                      className="w-full px-4 py-2.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 font-medium hover:bg-indigo-600/30 transition-all disabled:opacity-50">
+                      {isParsing ? <span className="flex items-center justify-center gap-2"><Spinner size="w-4 h-4" /> Parsing...</span> : '🔍 Parse & Extract Questions'}
+                    </motion.button>
+                  )}
+
+                  {/* Parsed questions preview */}
+                  {parsedQuestions.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-green-400">
+                          ✓ {parsedQuestions.length} questions extracted
+                          <span className="text-slate-400 ml-2">
+                            ({parsedQuestions.filter((q: any) => q.type === 'mcq').length} MCQ, {parsedQuestions.filter((q: any) => q.type !== 'mcq').length} Descriptive)
+                          </span>
+                        </p>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto space-y-2 pr-2">
+                        {parsedQuestions.map((q: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-slate-700/30 rounded-lg border border-slate-600/20">
+                            <div className="flex items-start gap-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 ${
+                                q.type === 'mcq' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-amber-500/20 text-amber-300'
+                              }`}>{q.type === 'mcq' ? 'MCQ' : 'DESC'}</span>
+                              <div className="flex-1">
+                                <p className="text-sm text-white">{q.text}</p>
+                                {q.type === 'mcq' && Array.isArray(q.options) && (
+                                  <div className="mt-2 grid grid-cols-2 gap-1">
+                                    {q.options.map((opt: string, oi: number) => (
+                                      <span key={oi} className={`text-xs px-2 py-1 rounded ${
+                                        q.correctAnswer === oi
+                                          ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                                          : 'bg-slate-600/30 text-slate-400'
+                                      }`}>
+                                        {String.fromCharCode(65 + oi)}) {opt}
+                                        {q.correctAnswer === oi && ' ✓'}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Manual question entry */
+                <div className="space-y-4">
+                  {manualQuestions.length === 0 && (
+                    <p className="text-slate-400 text-sm text-center py-4">No questions added yet. Click below to start.</p>
+                  )}
+                  <div className="max-h-[400px] overflow-y-auto space-y-4 pr-2">
+                    {manualQuestions.map((q, idx) => (
+                      <motion.div key={idx}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        className="p-4 bg-slate-700/20 rounded-lg border border-slate-600/30 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium text-slate-300">Question {idx + 1}</span>
+                          <div className="flex items-center gap-3">
+                            <select value={q.type}
+                              onChange={(e) => updateManualQuestion(idx, 'type', e.target.value)}
+                              className="px-2 py-1 bg-slate-600/50 border border-slate-500/30 rounded text-xs text-white outline-none">
+                              <option value="mcq">MCQ</option>
+                              <option value="descriptive">Descriptive</option>
+                            </select>
+                            <button onClick={() => removeManualQuestion(idx)}
+                              className="text-red-400 hover:text-red-300 text-xs">✕ Remove</button>
+                          </div>
+                        </div>
+                        <input type="text" placeholder="Enter question text..." value={q.text}
+                          onChange={(e) => updateManualQuestion(idx, 'text', e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none text-sm" />
+                        {q.type === 'mcq' && (
+                          <div className="space-y-2">
+                            <p className="text-xs text-slate-400">Options (select correct answer):</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {q.options.map((opt, oi) => (
+                                <div key={oi} className="flex items-center gap-2">
+                                  <input type="radio" name={`correct-${idx}`} checked={q.correctAnswer === oi}
+                                    onChange={() => updateManualQuestion(idx, 'correctAnswer', oi)}
+                                    className="w-4 h-4 accent-green-500" />
+                                  <span className="text-xs text-slate-400 w-4">{String.fromCharCode(65 + oi)})</span>
+                                  <input type="text" placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                                    value={opt} onChange={(e) => updateOption(idx, oi, e.target.value)}
+                                    className="flex-1 px-3 py-1.5 bg-slate-700/50 border border-slate-600 rounded text-white placeholder-slate-500 focus:border-indigo-500 outline-none text-sm" />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                    onClick={addManualQuestion}
+                    className="w-full px-4 py-2.5 rounded-lg border-2 border-dashed border-slate-600 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all text-sm font-medium">
+                    + Add Question
+                  </motion.button>
+                </div>
+              )}
+
+              {/* Step 2 navigation */}
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setStep(1)}
+                  className="flex-1 px-4 py-3 rounded-lg border border-slate-600 text-slate-300 font-medium hover:bg-slate-700/50 transition-all">
+                  ← Back
+                </button>
+                <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                  onClick={goToStep3}
+                  className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 text-white font-semibold transition-all">
+                  Next → Preview
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── STEP 3: Preview & Save ───────────────────────────────── */}
+          {step === 3 && (
+            <motion.div key="step3" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+              {/* Summary card */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Title', value: examName, icon: '📝' },
+                  { label: 'Code', value: examCode, icon: '🔑' },
+                  { label: 'Duration', value: `${durationMinutes} min`, icon: '⏱️' },
+                  { label: 'Questions', value: `${previewQuestions.length} (${previewQuestions.filter(q => q.type === 'mcq').length} MCQ)`, icon: '📋' },
+                ].map((item) => (
+                  <div key={item.label} className="p-3 bg-slate-700/30 rounded-lg border border-slate-600/20">
+                    <p className="text-[10px] text-slate-500 uppercase tracking-wide">{item.icon} {item.label}</p>
+                    <p className="text-sm font-medium text-white mt-1 truncate">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Questions preview */}
+              <div className="max-h-72 overflow-y-auto space-y-2 pr-2">
+                {previewQuestions.map((q, idx) => (
+                  <div key={idx} className="p-3 bg-slate-700/20 rounded-lg border border-slate-600/20">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-mono text-slate-500 mt-0.5">Q{idx + 1}</span>
+                      <div className="flex-1">
+                        <p className="text-sm text-white">{q.text}</p>
+                        {q.type === 'mcq' && Array.isArray(q.options) && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {q.options.map((opt: string, oi: number) => (
+                              <span key={oi} className={`text-[11px] px-2 py-0.5 rounded ${
+                                q.correctAnswer === oi ? 'bg-green-500/20 text-green-300' : 'bg-slate-600/30 text-slate-400'
+                              }`}>
+                                {String.fromCharCode(65 + oi)}) {opt}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        q.type === 'mcq' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-amber-500/20 text-amber-300'
+                      }`}>{q.type === 'mcq' ? 'MCQ' : 'DESC'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-slate-700/20 rounded-lg p-3 border border-slate-600/20">
+                <p className="text-xs text-slate-400">
+                  💡 The exam will be saved as <span className="text-amber-300 font-medium">Draft</span>. You can publish it from the exam list below to make it visible to students.
+                </p>
+              </div>
+
+              {/* Step 3 navigation */}
+              <div className="flex gap-3">
+                <button onClick={() => setStep(2)}
+                  className="flex-1 px-4 py-3 rounded-lg border border-slate-600 text-slate-300 font-medium hover:bg-slate-700/50 transition-all">
+                  ← Back
+                </button>
+                <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
+                  onClick={handleCreateExam}
+                  disabled={isCreating}
+                  className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-semibold transition-all disabled:opacity-60">
+                  {isCreating ? (
+                    <span className="flex items-center justify-center gap-2"><Spinner size="w-4 h-4" /> Saving...</span>
+                  ) : '✓ Save as Draft'}
+                </motion.button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      {/* ── Exam List ───────────────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="text-lg font-semibold text-white">All Exams</h4>
+          <button onClick={() => loadExams()} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">↻ Refresh</button>
+        </div>
+        {loading ? <LoadingOverlay /> : exams.length === 0 ? (
+          <p className="text-slate-400 text-sm text-center py-6">No exams yet. Create one above.</p>
+        ) : (
+          <div className="space-y-3">
+            {exams.map((exam, idx) => (
+              <motion.div
+                key={exam.code || exam.id}
+                initial={{ x: -20, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                transition={{ delay: 0.1 + idx * 0.04 }}
+                className="bg-slate-700/20 rounded-lg border border-slate-600/30 hover:border-indigo-500/30 transition-all overflow-hidden"
+              >
+                {/* Exam header */}
+                <div className="flex items-center justify-between p-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-white truncate">{exam.name}</p>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        exam.status === 'active' ? 'bg-green-500/20 text-green-300' : 'bg-amber-500/20 text-amber-300'
+                      }`}>
+                        {exam.status === 'active' ? '● Live' : '○ Draft'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">
+                      <span className="font-mono text-indigo-300">{exam.code}</span>
+                      <span>{exam.questionCount} Q{exam.questionCount !== 1 ? 's' : ''}</span>
+                      {exam.mcqCount > 0 && <span className="text-indigo-400">{exam.mcqCount} MCQ</span>}
+                      {exam.descriptiveCount > 0 && <span className="text-amber-400">{exam.descriptiveCount} Desc</span>}
+                      <span>{exam.durationMinutes} min</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-3">
+                    {exam.status === 'active' ? (
+                      <button onClick={() => handleUnpublish(exam.code)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/20 transition-all">
+                        Unpublish
+                      </button>
+                    ) : (
+                      <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                        onClick={() => handlePublish(exam.code)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-300 hover:bg-green-500/20 border border-green-500/20 transition-all">
+                        Publish
+                      </motion.button>
+                    )}
+                    <button onClick={() => setExpandedExam(expandedExam === exam.code ? null : exam.code)}
+                      className="px-2 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-600/30 transition-all">
+                      {expandedExam === exam.code ? '▲' : '▼'}
+                    </button>
+                    <button onClick={() => handleDelete(exam.code)} disabled={deletingCode === exam.code}
+                      className="px-2 py-1.5 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-50">
+                      {deletingCode === exam.code ? '...' : '🗑'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Expanded question preview */}
+                <AnimatePresence>
+                  {expandedExam === exam.code && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="border-t border-slate-600/30 overflow-hidden"
+                    >
+                      <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
+                        {exam.instructions && (
+                          <p className="text-xs text-slate-400 italic mb-2">📋 {exam.instructions}</p>
+                        )}
+                        {exam.questions.map((q: any, qi: number) => (
+                          <div key={qi} className="flex items-start gap-2 p-2 bg-slate-700/30 rounded">
+                            <span className="text-[10px] font-mono text-slate-500 mt-0.5 w-6">Q{qi + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-white">{q.text}</p>
+                              {q.type === 'mcq' && Array.isArray(q.options) && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {q.options.map((opt: string, oi: number) => (
+                                    <span key={oi} className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                      q.correctAnswer === oi ? 'bg-green-500/20 text-green-300' : 'bg-slate-600/30 text-slate-500'
+                                    }`}>
+                                      {String.fromCharCode(65 + oi)}) {opt}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${
+                              q.type === 'mcq' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-amber-500/20 text-amber-300'
+                            }`}>{q.type === 'mcq' ? 'MCQ' : 'DESC'}</span>
+                          </div>
+                        ))}
+                        {exam.questions.length === 0 && (
+                          <p className="text-xs text-slate-500 text-center py-2">No questions</p>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 //  STUDENT MANAGEMENT SECTION (CRUD) — LIVE CAMERA REGISTRATION
 // ═══════════════════════════════════════════════════════════════════════════════

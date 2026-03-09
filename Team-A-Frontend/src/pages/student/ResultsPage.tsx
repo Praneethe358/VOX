@@ -82,8 +82,14 @@ export default function ResultsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-4">
-      {/* Voice UI overlays */}
+    <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden">
+      {/* Ambient */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-indigo-600/[0.06] rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 left-1/3 w-[400px] h-[400px] bg-violet-600/[0.04] rounded-full blur-[100px]" />
+      </div>
+
+      {/* Voice UI */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
       <VoiceSpeaker position="bottom-center" />
       <VoiceCommandEngine
@@ -97,51 +103,73 @@ export default function ResultsPage() {
           { command: '"Help"',         icon: '❓', description: 'List all commands' },
         ]}
       />
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-white">My Results</h1>
+
+      {/* Header */}
+      <header className="relative z-10 glass border-b border-white/[0.04]">
+        <div className="max-w-4xl mx-auto px-6 py-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Results</h1>
+            <p className="text-slate-500 text-sm mt-1">Your exam performance history</p>
+          </div>
           <button
             onClick={() => navigate('/student/dashboard')}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-lg"
+            className="glass-card px-4 py-2.5 rounded-xl text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
           >
-            Back
+            <span className="text-lg">‹</span> Back
           </button>
         </div>
+      </header>
 
+      <main className="relative z-10 max-w-4xl mx-auto px-6 py-8">
         {loading ? (
-          <p className="text-slate-300">Loading results...</p>
+          <div className="flex flex-col items-center justify-center py-24">
+            <div className="w-10 h-10 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin mb-4" />
+            <p className="text-slate-500 text-sm">Loading results...</p>
+          </div>
         ) : results.length === 0 ? (
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-slate-300">
-            No results available yet.
+          <div className="text-center py-24">
+            <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.04] flex items-center justify-center mx-auto mb-5">
+              <span className="text-2xl text-slate-600">◇</span>
+            </div>
+            <p className="text-lg text-slate-300 font-medium mb-1">No results yet</p>
+            <p className="text-sm text-slate-500">Complete an exam to see your results here</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {results.map((result, index) => (
-              <motion.div
-                key={result.sessionId + index}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-slate-800 border border-slate-700 rounded-lg p-4"
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-white font-semibold">{result.examTitle}</p>
-                    <p className="text-slate-400 text-sm">Session: {result.sessionId}</p>
-                    <p className="text-slate-400 text-sm">Submitted: {result.submittedAt}</p>
+            {results.map((result, index) => {
+              const pct = Math.round((result.score / Math.max(result.totalMarks, 1)) * 100);
+              const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
+              const gradeColor = pct >= 70 ? 'text-emerald-400' : pct >= 50 ? 'text-amber-400' : 'text-red-400';
+              return (
+                <motion.div
+                  key={result.sessionId + index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.04 }}
+                  className="glass-card rounded-2xl p-5 flex items-center gap-5"
+                >
+                  {/* Grade Circle */}
+                  <div className={`w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center flex-shrink-0`}>
+                    <span className={`text-lg font-bold ${gradeColor}`}>{grade}</span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-indigo-400 text-xl font-bold">{result.score}/{result.totalMarks}</p>
-                    <p className="text-slate-400 text-sm">
-                      {Math.round((result.score / Math.max(result.totalMarks, 1)) * 100)}%
-                    </p>
+
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{result.examTitle}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{result.submittedAt}</p>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+
+                  {/* Score */}
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-lg font-bold text-indigo-300">{result.score}<span className="text-slate-500 text-sm font-normal">/{result.totalMarks}</span></p>
+                    <p className="text-[11px] text-slate-500">{pct}%</p>
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

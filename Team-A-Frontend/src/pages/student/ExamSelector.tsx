@@ -199,7 +199,13 @@ export function ExamSelector() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900">
+    <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden">
+      {/* Ambient background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/[0.07] rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-violet-600/[0.05] rounded-full blur-[100px]" />
+      </div>
+
       {/* Voice UI overlays */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" />
       <VoiceSpeaker position="bottom-center" />
@@ -213,158 +219,149 @@ export function ExamSelector() {
           { command: '"Help"',          icon: '❓', description: 'List all commands' },
         ]}
       />
-      {/* Voice feedback bar */}
+
+      {/* Voice feedback toast */}
       {(lastHeard || voiceError) && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-sm w-full px-4">
-          <div className={`rounded-xl px-4 py-2 text-sm text-center backdrop-blur border ${
+          <div className={`glass rounded-2xl px-5 py-3 text-sm text-center ${
             voiceError
-              ? 'bg-red-900/80 border-red-500/50 text-red-200'
+              ? 'border-red-500/20 text-red-300'
               : lastHeard.startsWith('OK:')
-              ? 'bg-green-900/80 border-green-500/50 text-green-200'
-              : 'bg-slate-800/90 border-slate-600/50 text-slate-300'
+              ? 'border-emerald-500/20 text-emerald-300'
+              : 'text-slate-300'
           }`}>
             {voiceError ?? lastHeard}
           </div>
         </div>
       )}
-      {/* Header */}
-      <header className="bg-slate-800/50 backdrop-blur border-b border-slate-700">
-        <div className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Available Exams</h1>
-            <p className="text-slate-400 mt-1">Welcome, {student.name}</p>
-          </div>
 
+      {/* Header */}
+      <header className="relative z-10 glass border-b border-white/[0.04]">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Exam Library</h1>
+            <p className="text-slate-500 text-sm mt-1">Browse and select your exams</p>
+          </div>
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => navigate('/student/dashboard')}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition-colors"
+            className="glass-card px-4 py-2.5 rounded-xl text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
           >
-            Back to Dashboard
+            <span className="text-lg">‹</span> Dashboard
           </motion.button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        {/* Filter Tabs */}
-        <div className="flex gap-2 mb-6 flex-wrap">
+      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
+        {/* Filter Pills */}
+        <div className="flex gap-2 mb-8">
           {(['all', 'available', 'completed'] as const).map(tab => (
-            <motion.button
+            <button
               key={tab}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
               onClick={() => setFilter(tab)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                 filter === tab
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-indigo-500/[0.15] text-indigo-300 border border-indigo-500/[0.25] shadow-lg shadow-indigo-500/[0.08]'
+                  : 'text-slate-500 hover:text-slate-300 border border-transparent'
               }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </motion.button>
+              {tab === 'available' && !loading && (
+                <span className="ml-2 text-xs opacity-60">({exams.filter(e => getExamStatus(e) !== 'completed').length})</span>
+              )}
+            </button>
           ))}
         </div>
 
-        {/* Loading State */}
+        {/* Loading */}
         {loading && (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mx-auto mb-4"></div>
-            <p className="text-slate-400">Loading exams...</p>
+          <div className="flex flex-col items-center justify-center py-24">
+            <div className="w-10 h-10 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin mb-4" />
+            <p className="text-slate-500 text-sm">Loading exams...</p>
           </div>
         )}
 
-        {/* Exams Grid */}
+        {/* Exam Cards */}
         {!loading && filteredExams.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredExams.map((exam, idx) => (
-              <motion.div
-                key={exam.examCode}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="group bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-lg p-6 hover:border-indigo-500/50 transition-all hover:shadow-xl hover:shadow-indigo-500/20"
-              >
-                {/* Voice hint badge */}
-                <div className="mb-2">
-                  <span className="inline-block px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-xs font-mono rounded">
-                    🎙️ Say "Select exam {idx + 1}"
-                  </span>
-                </div>
-                {/* Header */}
-                <div className="mb-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <span className="inline-block px-3 py-1 bg-indigo-500/20 text-indigo-400 text-xs font-semibold rounded-full">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredExams.map((exam, idx) => {
+              const completed = getExamStatus(exam) === 'completed';
+              const questionCount = exam.sections.reduce((sum, s) => sum + s.questions.length, 0);
+              return (
+                <motion.div
+                  key={exam.examCode}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.06, duration: 0.4 }}
+                  className={`group glass-card rounded-2xl p-6 transition-all duration-300 hover:border-indigo-500/[0.15] hover:shadow-xl hover:shadow-indigo-500/[0.06] ${
+                    completed ? 'opacity-60' : ''
+                  }`}
+                >
+                  {/* Top Row: Subject + Voice hint */}
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="px-2.5 py-1 bg-indigo-500/[0.08] text-indigo-400 text-[11px] font-semibold uppercase tracking-wider rounded-lg border border-indigo-500/[0.08]">
                       {exam.subject}
                     </span>
-                    <span className="text-2xl">📝</span>
-                  </div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-indigo-300 transition-colors">
-                    {exam.title}
-                  </h3>
-                  <p className="text-sm text-slate-400 mt-1">{exam.description}</p>
-                </div>
-
-                {/* Stats */}
-                <div className="space-y-2 mb-4 pb-4 border-t border-slate-700">
-                  <div className="flex justify-between text-sm mt-4">
-                    <span className="text-slate-400">Duration</span>
-                    <span className="text-slate-200 font-semibold">{exam.durationMinutes} min</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Total Marks</span>
-                    <span className="text-slate-200 font-semibold">{exam.totalMarks}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Questions</span>
-                    <span className="text-slate-200 font-semibold">
-                      {exam.sections.reduce((sum, s) => sum + s.questions.length, 0)}
+                    <span className="text-[11px] text-slate-600 font-mono">
+                      🎙 exam {idx + 1}
                     </span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Total Marks</span>
-                    <span className="text-slate-200 font-semibold">{exam.totalMarks}</span>
-                  </div>
-                </div>
 
-                {/* Sections Preview */}
-                <div className="mb-4">
-                  <p className="text-xs text-slate-400 mb-2">Sections:</p>
-                  <div className="flex flex-wrap gap-1">
+                  {/* Title */}
+                  <h3 className="text-[15px] font-semibold text-white mb-1.5 group-hover:text-indigo-200 transition-colors leading-snug">
+                    {exam.title}
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-5 leading-relaxed line-clamp-2">{exam.description}</p>
+
+                  {/* Stats Row */}
+                  <div className="grid grid-cols-3 gap-3 mb-5">
+                    <div className="text-center p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                      <p className="text-xs text-slate-500 mb-0.5">Duration</p>
+                      <p className="text-sm font-semibold text-slate-200">{exam.durationMinutes}m</p>
+                    </div>
+                    <div className="text-center p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                      <p className="text-xs text-slate-500 mb-0.5">Questions</p>
+                      <p className="text-sm font-semibold text-slate-200">{questionCount}</p>
+                    </div>
+                    <div className="text-center p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                      <p className="text-xs text-slate-500 mb-0.5">Marks</p>
+                      <p className="text-sm font-semibold text-slate-200">{exam.totalMarks}</p>
+                    </div>
+                  </div>
+
+                  {/* Sections */}
+                  <div className="flex flex-wrap gap-1.5 mb-5">
                     {exam.sections.map(section => (
                       <span
                         key={section.sectionId}
-                        className="text-xs px-2 py-1 bg-slate-700/50 text-slate-300 rounded"
+                        className="text-[11px] px-2 py-0.5 bg-white/[0.03] text-slate-400 rounded-md border border-white/[0.04]"
                       >
                         {section.sectionName}
                       </span>
                     ))}
                   </div>
-                </div>
 
-                {/* Status Badge */}
-                <div className="mb-4">
-                  <span className={`inline-block px-3 py-1 text-xs font-semibold rounded-full ${
-                    getExamStatus(exam) === 'completed'
-                      ? 'bg-green-500/20 text-green-400'
-                      : 'bg-blue-500/20 text-blue-400'
-                  }`}>
-                    {getExamStatus(exam) === 'completed' ? '✓ Completed' : 'Available'}
-                  </span>
-                </div>
-
-                {/* Action Button */}
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleExamSelect(exam)}
-                  disabled={getExamStatus(exam) === 'completed'}
-                  className="w-full px-4 py-3 bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-700 hover:to-pink-700 disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 text-white rounded-lg font-semibold transition-all"
-                >
-                  {getExamStatus(exam) === 'completed' ? 'Already Completed' : 'Start Exam →'}
-                </motion.button>
-              </motion.div>
-            ))}
+                  {/* Status + Action */}
+                  <div className="flex items-center gap-3">
+                    {completed ? (
+                      <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/[0.1] text-emerald-400 text-sm font-medium">
+                        <span>✓</span> Completed
+                      </div>
+                    ) : (
+                      <motion.button
+                        whileHover={{ scale: 1.01 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => handleExamSelect(exam)}
+                        className="flex-1 py-2.5 rounded-xl bg-indigo-500/[0.12] hover:bg-indigo-500/[0.2] border border-indigo-500/[0.15] text-indigo-300 hover:text-indigo-200 text-sm font-semibold transition-all duration-200"
+                      >
+                        Start Exam →
+                      </motion.button>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         )}
 
@@ -373,11 +370,13 @@ export function ExamSelector() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center py-12"
+            className="text-center py-24"
           >
-            <p className="text-5xl mb-4">📚</p>
-            <p className="text-xl text-slate-400">No exams found</p>
-            <p className="text-slate-500 mt-2">Check back later for available exams</p>
+            <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.04] flex items-center justify-center mx-auto mb-5">
+              <span className="text-2xl">◇</span>
+            </div>
+            <p className="text-lg text-slate-300 font-medium mb-1">No exams found</p>
+            <p className="text-sm text-slate-500">Check back later for available exams</p>
           </motion.div>
         )}
       </main>

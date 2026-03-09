@@ -202,161 +202,202 @@ export function FaceRecognitionLogin() {
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  const STATUS_LABEL: Record<AuthStatus, string> = {
-    INITIALIZING: 'Initializing camera…',
-    SCANNING:     'Looking for your face…',
-    PROCESSING:   'Verifying identity…',
-    SUCCESS:      `Welcome, ${studentName || 'Student'}!`,
-    RETRY:        lastError || 'Repositioning…',
-    LOCKED:       'Access Denied. Contact administrator.',
+  const STATUS_CONFIG: Record<AuthStatus, { label: string; icon: string; colorClass: string; borderClass: string; bgClass: string }> = {
+    INITIALIZING: { label: 'Initializing camera…', icon: '◎', colorClass: 'text-slate-400', borderClass: 'border-slate-500/20', bgClass: 'bg-slate-500/5' },
+    SCANNING:     { label: 'Looking for your face…', icon: '◉', colorClass: 'text-indigo-400', borderClass: 'border-indigo-500/20', bgClass: 'bg-indigo-500/5' },
+    PROCESSING:   { label: 'Verifying identity…', icon: '⟳', colorClass: 'text-amber-400', borderClass: 'border-amber-500/20', bgClass: 'bg-amber-500/5' },
+    SUCCESS:      { label: `Welcome, ${studentName || 'Student'}!`, icon: '✓', colorClass: 'text-emerald-400', borderClass: 'border-emerald-500/20', bgClass: 'bg-emerald-500/5' },
+    RETRY:        { label: lastError || 'Repositioning…', icon: '↻', colorClass: 'text-amber-400', borderClass: 'border-amber-500/20', bgClass: 'bg-amber-500/5' },
+    LOCKED:       { label: 'Access Denied. Contact administrator.', icon: '⊘', colorClass: 'text-rose-400', borderClass: 'border-rose-500/20', bgClass: 'bg-rose-500/5' },
   };
 
-  const livenessColor =
-    livenessScore > 0.6 ? 'bg-green-400' : livenessScore > 0.3 ? 'bg-yellow-400' : 'bg-red-400';
+  const statusInfo = STATUS_CONFIG[authStatus];
+  const livenessBg = livenessScore > 0.6 ? 'bg-emerald-400' : livenessScore > 0.3 ? 'bg-amber-400' : 'bg-rose-400';
+  const livenessTextColor = livenessScore > 0.6 ? 'text-emerald-400' : livenessScore > 0.3 ? 'text-amber-400' : 'text-rose-400';
+
+  const scanBorderColor =
+    faceCount > 1
+      ? 'border-rose-500'
+      : authStatus === 'PROCESSING'
+      ? 'border-amber-400'
+      : faceCount === 1
+      ? 'border-emerald-400'
+      : 'border-slate-500/40';
 
   // ── JSX ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden flex items-center justify-center p-4">
+      {/* Ambient background glow */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-30%] left-[-15%] w-[60%] h-[60%] rounded-full bg-indigo-600/[0.04] blur-[100px]" />
+        <div className="absolute bottom-[-25%] right-[-10%] w-[55%] h-[55%] rounded-full bg-purple-600/[0.04] blur-[100px]" />
+        <div className="absolute top-[30%] right-[15%] w-[35%] h-[35%] rounded-full bg-cyan-600/[0.02] blur-[80px]" />
+      </div>
+      {/* Dot grid texture */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.3) 1px, transparent 0)', backgroundSize: '32px 32px' }}
+      />
+
       <motion.div
-        initial={{ opacity: 0, y: 24 }}
+        initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md flex flex-col gap-5"
+        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        className="relative w-full max-w-lg flex flex-col gap-6 z-10"
       >
         {/* Branding */}
-        <div className="text-center">
-          <h1 className="text-4xl font-black bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">
-            VoiceSecure
-          </h1>
-          <p className="text-slate-400 text-sm mt-1 tracking-wide">
-            AI-Powered Accessible Examination System
-          </p>
-        </div>
+        <motion.div className="text-center space-y-2" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 }}>
+          <h1 className="text-5xl font-black text-gradient tracking-tight">VoiceSecure</h1>
+          <p className="text-slate-500 text-xs tracking-[0.2em] uppercase font-medium">AI-Powered Accessible Examination</p>
+        </motion.div>
 
-        {/* Camera feed */}
-        <div className="relative rounded-2xl overflow-hidden border border-slate-700 bg-slate-900 aspect-video shadow-2xl">
-          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-          <canvas ref={canvasRef} width={640} height={480} className="hidden" />
+        {/* Camera card — glass morphism */}
+        <motion.div
+          initial={{ scale: 0.96, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="relative rounded-3xl overflow-hidden glass-card shadow-2xl shadow-indigo-500/[0.05]"
+        >
+          <div className="relative aspect-video bg-slate-950">
+            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+            <canvas ref={canvasRef} width={640} height={480} className="hidden" />
 
-          {/* Face frame overlay */}
-          {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <motion.div
-                className={`w-40 h-48 rounded-xl border-2 ${
-                  faceCount > 1
-                    ? 'border-red-500'
-                    : authStatus === 'PROCESSING'
-                    ? 'border-yellow-400'
-                    : faceCount === 1
-                    ? 'border-green-400'
-                    : 'border-slate-500'
-                }`}
-                animate={{ scale: authStatus === 'PROCESSING' ? [1, 1.04, 1] : [1, 1.02, 1] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              />
-            </div>
-          )}
+            {/* Scan frame with corner markers */}
+            {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <motion.div
+                  className={`w-44 h-52 rounded-2xl border-2 ${scanBorderColor}`}
+                  animate={{ scale: authStatus === 'PROCESSING' ? [1, 1.03, 1] : [1, 1.015, 1] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                {/* Corner brackets */}
+                <div className="absolute w-44 h-52">
+                  <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-indigo-400/60 rounded-tl-lg" />
+                  <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-indigo-400/60 rounded-tr-lg" />
+                  <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-indigo-400/60 rounded-bl-lg" />
+                  <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-indigo-400/60 rounded-br-lg" />
+                </div>
+                {/* Sweeping scan line */}
+                {authStatus === 'SCANNING' && (
+                  <motion.div
+                    className="absolute w-40 h-[2px] bg-gradient-to-r from-transparent via-indigo-400/70 to-transparent"
+                    animate={{ y: [-90, 90] }}
+                    transition={{ duration: 2.5, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
+                  />
+                )}
+              </div>
+            )}
 
-          {/* Multi-face warning badge */}
-          {faceCount > 1 && authStatus === 'SCANNING' && (
-            <div className="absolute top-3 left-3 bg-red-600/90 text-white text-xs px-2 py-1 rounded-lg font-medium">
-              ⚠ {faceCount} faces — only 1 allowed
-            </div>
-          )}
+            {/* Multi-face warning */}
+            {faceCount > 1 && authStatus === 'SCANNING' && (
+              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
+                className="absolute top-3 left-3 bg-rose-500/10 backdrop-blur-md border border-rose-500/20 rounded-xl px-3 py-1.5">
+                <span className="text-rose-400 text-xs font-semibold">⚠ {faceCount} faces — only 1 allowed</span>
+              </motion.div>
+            )}
 
-          {/* Liveness indicator */}
-          {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
-            <div className="absolute top-3 right-3 flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${livenessColor}`} />
-              <span className="text-[10px] text-slate-300 font-mono">
-                Liveness {Math.round(livenessScore * 100)}%
-              </span>
-            </div>
-          )}
+            {/* Liveness chip */}
+            {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
+              <div className="absolute top-3 right-3 bg-black/30 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 flex items-center gap-2">
+                <div className={`w-1.5 h-1.5 rounded-full ${livenessBg}`} />
+                <span className={`text-[10px] font-mono ${livenessTextColor}`}>{Math.round(livenessScore * 100)}%</span>
+              </div>
+            )}
 
-          {/* Processing spinner */}
-          {(isProcessing || authStatus === 'PROCESSING') && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-              <motion.div
-                className="w-14 h-14 rounded-full border-4 border-indigo-400 border-t-transparent"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              />
-            </div>
-          )}
+            {/* Processing overlay with dual spinner */}
+            {(isProcessing || authStatus === 'PROCESSING') && (
+              <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center">
+                <div className="relative">
+                  <motion.div className="w-16 h-16 rounded-full border-[3px] border-indigo-400/20 border-t-indigo-400"
+                    animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} />
+                  <motion.div className="absolute inset-1.5 rounded-full border-[3px] border-purple-400/15 border-b-purple-400"
+                    animate={{ rotate: -360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} />
+                </div>
+              </div>
+            )}
 
-          {/* Success overlay */}
-          {authStatus === 'SUCCESS' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="absolute inset-0 bg-green-900/60 flex items-center justify-center"
-            >
-              <span className="text-6xl select-none">✅</span>
-            </motion.div>
-          )}
+            {/* Success overlay */}
+            {authStatus === 'SUCCESS' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="absolute inset-0 bg-emerald-950/40 backdrop-blur-sm flex items-center justify-center">
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                  className="w-20 h-20 rounded-full bg-emerald-500/15 border-2 border-emerald-400/50 flex items-center justify-center">
+                  <span className="text-emerald-400 text-4xl font-bold">✓</span>
+                </motion.div>
+              </motion.div>
+            )}
 
-          {/* Locked overlay */}
-          {authStatus === 'LOCKED' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="absolute inset-0 bg-red-900/70 flex items-center justify-center"
-            >
-              <span className="text-6xl select-none">🔒</span>
-            </motion.div>
-          )}
-        </div>
+            {/* Locked overlay */}
+            {authStatus === 'LOCKED' && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="absolute inset-0 bg-rose-950/50 backdrop-blur-sm flex items-center justify-center">
+                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  className="w-20 h-20 rounded-full bg-rose-500/15 border-2 border-rose-400/50 flex items-center justify-center">
+                  <span className="text-rose-400 text-4xl">⊘</span>
+                </motion.div>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
 
-        {/* Status message */}
+        {/* Status card */}
         <AnimatePresence mode="wait">
           <motion.div
             key={authStatus}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className={`text-center p-4 rounded-xl border text-base font-medium ${
-              authStatus === 'SUCCESS'
-                ? 'bg-green-500/10 border-green-500/30 text-green-300'
-                : authStatus === 'LOCKED'
-                ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                : authStatus === 'RETRY'
-                ? 'bg-orange-500/10 border-orange-500/30 text-orange-300'
-                : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
-            }`}
-            role="status"
-            aria-live="polite"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25 }}
+            className={`${statusInfo.bgClass} ${statusInfo.borderClass} border rounded-2xl px-5 py-4 flex items-center gap-4 backdrop-blur-sm`}
+            role="status" aria-live="polite"
           >
-            {STATUS_LABEL[authStatus]}
+            <span className={`text-2xl font-bold ${statusInfo.colorClass}`}>{statusInfo.icon}</span>
+            <div className="flex-1 min-w-0">
+              <p className={`font-semibold text-sm ${statusInfo.colorClass}`}>{statusInfo.label}</p>
+              {authStatus === 'SCANNING' && <p className="text-slate-500 text-xs mt-0.5">Auto-capturing every 2 seconds</p>}
+            </div>
+            {authStatus === 'SCANNING' && (
+              <motion.div className="w-7 h-7 rounded-full border-2 border-indigo-500/25 border-t-indigo-400"
+                animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
+            )}
           </motion.div>
         </AnimatePresence>
 
         {/* Attempt dots */}
         {authStatus !== 'LOCKED' && authStatus !== 'SUCCESS' && (
-          <div className="flex justify-center gap-2" aria-label={`${attemptsLeft} attempts remaining`}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+            className="flex justify-center gap-2.5" aria-label={`${attemptsLeft} attempts remaining`}>
             {[...Array(MAX_ATTEMPTS)].map((_, i) => (
-              <div
-                key={i}
-                className={`w-3 h-3 rounded-full transition-colors duration-300 ${
-                  i < attemptsLeft ? 'bg-indigo-400' : 'bg-slate-700'
+              <motion.div key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4 + i * 0.04 }}
+                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                  i < attemptsLeft ? 'bg-indigo-400 shadow-sm shadow-indigo-400/30' : 'bg-slate-700/40'
                 }`}
               />
             ))}
-          </div>
+          </motion.div>
         )}
 
-        {/* Hidden fallback link — voice-inaccessible users can use keyboard to find it */}
-        <div className="text-center mt-2">
+        {/* Security badges */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
+          className="flex items-center justify-center gap-4 text-[10px] text-slate-600 uppercase tracking-[0.15em]">
+          <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-emerald-600/40" />End-to-end encrypted</span>
+          <span className="w-px h-3 bg-slate-700/30" />
+          <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-emerald-600/40" />Liveness detection</span>
+          <span className="w-px h-3 bg-slate-700/30" />
+          <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-emerald-600/40" />AI-powered</span>
+        </motion.div>
+
+        {/* Fallback link */}
+        <div className="text-center">
           <button
             onClick={() => navigate('/student/login-fallback')}
-            className="text-slate-600 hover:text-slate-400 text-xs underline transition-colors"
-            tabIndex={0}
-            aria-label="Fall back to password login"
+            className="text-slate-600 hover:text-slate-400 text-xs transition-colors duration-200"
+            tabIndex={0} aria-label="Fall back to password login"
           >
-            Use password login
+            Use password login instead
           </button>
         </div>
-
       </motion.div>
     </div>
   );

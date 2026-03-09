@@ -31,6 +31,18 @@ class DataProvider {
     await mongoService.publishExam(code);
   }
 
+  async unpublishExam(code: string): Promise<void> {
+    await mongoService.unpublishExam(code);
+  }
+
+  async deleteExam(code: string): Promise<boolean> {
+    return mongoService.deleteExam(code);
+  }
+
+  async updateExam(code: string, update: any): Promise<boolean> {
+    return mongoService.updateExam(code, update);
+  }
+
   async getExamByCode(code: string): Promise<any | null> {
     return mongoService.getExamByCode(code);
   }

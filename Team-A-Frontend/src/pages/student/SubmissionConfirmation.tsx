@@ -89,35 +89,39 @@ export function SubmissionConfirmation() {
 
   if (!exam) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-slate-400">Loading...</p>
+      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center">
+        <p className="text-slate-500 text-sm">Loading...</p>
       </div>
     );
   }
 
   if (isSubmitting) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-950 flex items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center"
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto mb-4"
-          />
-          <p className="text-xl text-slate-300 font-semibold">Submitting Exam...</p>
-          <p className="text-slate-400 text-sm mt-2">Please wait while we process your responses</p>
+      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[400px] h-[400px] bg-indigo-500/[0.06] rounded-full blur-[120px]" />
+        </div>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative z-10 text-center">
+          <div className="w-14 h-14 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin mx-auto mb-5" />
+          <p className="text-lg text-slate-300 font-medium">Submitting Exam...</p>
+          <p className="text-slate-500 text-sm mt-1">Processing your responses</p>
         </motion.div>
       </div>
     );
   }
 
+  const completionPct = submissionData ? Math.round((submissionData.answeredQuestions / submissionData.totalQuestions) * 100) : 0;
+  const timePct = submissionData ? Math.round((submissionData.timeSpent / exam.durationMinutes) * 100) : 0;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-4">
-      {/* Voice UI overlays */}
+    <div className="min-h-screen bg-[#0a0e1a] p-4 relative overflow-hidden">
+      {/* Ambient */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-emerald-600/[0.06] rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-indigo-600/[0.04] rounded-full blur-[100px]" />
+      </div>
+
+      {/* Voice overlays */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
       <VoiceSpeaker position="bottom-center" />
       <VoiceCommandEngine
@@ -130,118 +134,104 @@ export function SubmissionConfirmation() {
           { command: '"Results"',    icon: '📊', description: 'View all results' },
         ]}
       />
-      <div className="max-w-2xl mx-auto">
-        {/* Success Banner */}
+
+      <div className="relative z-10 max-w-2xl mx-auto pt-8">
+        {/* Success Header */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg p-6 text-center mb-6"
+          className="text-center mb-8"
         >
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200 }}
-            className="text-5xl mb-3"
+            transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
+            className="w-20 h-20 rounded-3xl bg-emerald-500/[0.1] border border-emerald-500/[0.15] flex items-center justify-center mx-auto mb-5"
           >
-            ✓
+            <span className="text-emerald-400 text-3xl">✓</span>
           </motion.div>
-          <h1 className="text-3xl font-bold text-white mb-2">Exam Submitted Successfully!</h1>
-          <p className="text-green-100">Your responses have been recorded and saved securely</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight mb-2">Exam Submitted</h1>
+          <p className="text-sm text-slate-500">Your responses have been recorded securely</p>
         </motion.div>
 
-        {/* Submission Details */}
+        {/* Summary Grid */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-slate-800 border border-slate-700 rounded-lg p-6 mb-6 space-y-4"
+          transition={{ delay: 0.15 }}
+          className="glass-card rounded-2xl p-6 mb-5"
         >
-          <h2 className="text-xl font-bold text-white mb-4">Submission Summary</h2>
+          <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-4">Submission Summary</p>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-900/50 rounded p-4">
-              <p className="text-slate-400 text-sm mb-1">Exam</p>
-              <p className="text-white font-semibold">{submissionData?.examTitle}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <p className="text-[11px] text-slate-500 mb-1">Exam</p>
+              <p className="text-sm text-white font-medium truncate">{submissionData?.examTitle}</p>
             </div>
-
-            <div className="bg-slate-900/50 rounded p-4">
-              <p className="text-slate-400 text-sm mb-1">Submitted</p>
-              <p className="text-white font-semibold">{submissionData?.submittedAt}</p>
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <p className="text-[11px] text-slate-500 mb-1">Submitted</p>
+              <p className="text-sm text-white font-medium">{submissionData?.submittedAt}</p>
             </div>
-
-            <div className="bg-slate-900/50 rounded p-4">
-              <p className="text-slate-400 text-sm mb-1">Questions Answered</p>
-              <p className="text-indigo-400 font-semibold">
-                {submissionData?.answeredQuestions}/{submissionData?.totalQuestions}
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <p className="text-[11px] text-slate-500 mb-1">Answered</p>
+              <p className="text-sm font-semibold text-indigo-300">
+                {submissionData?.answeredQuestions} / {submissionData?.totalQuestions}
               </p>
             </div>
-
-            <div className="bg-slate-900/50 rounded p-4">
-              <p className="text-slate-400 text-sm mb-1">Marked for Review</p>
-              <p className="text-yellow-400 font-semibold">
-                {submissionData?.markedForReview}
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <p className="text-[11px] text-slate-500 mb-1">Estimated Score</p>
+              <p className="text-sm font-semibold text-emerald-300">
+                {submissionData?.estimatedScore} / {submissionData?.totalMarks}
               </p>
             </div>
-
-            <div className="bg-slate-900/50 rounded p-4">
-              <p className="text-slate-400 text-sm mb-1">Time Spent</p>
-              <p className="text-white font-semibold">
-                {submissionData?.timeSpent} out of {exam.durationMinutes} minutes
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <p className="text-[11px] text-slate-500 mb-1">Time Used</p>
+              <p className="text-sm text-white font-medium">
+                {submissionData?.timeSpent} / {exam.durationMinutes} min
               </p>
             </div>
-
-            <div className="bg-slate-900/50 rounded p-4">
-              <p className="text-slate-400 text-sm mb-1">Estimated Score</p>
-              <p className="text-green-400 font-semibold">
-                {submissionData?.estimatedScore}/{submissionData?.totalMarks}
-              </p>
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <p className="text-[11px] text-slate-500 mb-1">Review Items</p>
+              <p className="text-sm text-white font-medium">{submissionData?.markedForReview ?? 0}</p>
             </div>
           </div>
         </motion.div>
 
-        {/* Answer Review */}
+        {/* Performance Bars */}
         {submissionData?.answeredQuestions > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-slate-800 border border-slate-700 rounded-lg p-6 mb-6"
+            transition={{ delay: 0.25 }}
+            className="glass-card rounded-2xl p-6 mb-5"
           >
-            <h3 className="text-lg font-bold text-white mb-4">Your Performance</h3>
-
-            <div className="space-y-3">
-              {/* Answer Completion */}
+            <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-4">Performance</p>
+            <div className="space-y-4">
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-slate-300">Questions Answered</span>
-                  <span className="text-indigo-400 font-semibold">
-                    {Math.round((submissionData?.answeredQuestions / submissionData?.totalQuestions) * 100)}%
-                  </span>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-slate-400">Completion</span>
+                  <span className="text-indigo-300 font-semibold">{completionPct}%</span>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-2">
-                  <div
-                    className="bg-indigo-500 h-2 rounded-full transition-all"
-                    style={{
-                      width: `${(submissionData?.answeredQuestions / submissionData?.totalQuestions) * 100}%`
-                    }}
+                <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${completionPct}%` }}
+                    transition={{ duration: 0.8, delay: 0.4 }}
+                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400"
                   />
                 </div>
               </div>
-
-              {/* Time Efficiency */}
               <div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-slate-300">Time Utilization</span>
-                  <span className="text-green-400 font-semibold">
-                    {Math.round((submissionData?.timeSpent / exam.durationMinutes) * 100)}%
-                  </span>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-slate-400">Time Utilization</span>
+                  <span className="text-emerald-300 font-semibold">{timePct}%</span>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full transition-all"
-                    style={{
-                      width: `${(submissionData?.timeSpent / exam.durationMinutes) * 100}%`
-                    }}
+                <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${timePct}%` }}
+                    transition={{ duration: 0.8, delay: 0.5 }}
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
                   />
                 </div>
               </div>
@@ -249,42 +239,42 @@ export function SubmissionConfirmation() {
           </motion.div>
         )}
 
-        {/* Important Notes */}
+        {/* Info Notice */}
         <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.35 }}
+          className="glass-card rounded-xl p-4 mb-6 border-indigo-500/[0.06]"
         >
-          <p className="text-sm text-blue-400 mb-2">
-            <strong>📌 Important Notes:</strong>
-          </p>
-          <ul className="text-sm text-blue-300 space-y-1">
-            <li>• Your exam has been submitted and cannot be modified</li>
-            <li>• Results will be available within 24-48 hours</li>
-            <li>• Check your email for result notifications</li>
-            <li>• Contact support if you have any concerns</li>
-          </ul>
+          <div className="flex gap-3">
+            <div className="w-5 h-5 rounded-md bg-indigo-500/[0.1] flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-indigo-400 text-[10px]">!</span>
+            </div>
+            <ul className="text-[11px] text-slate-400 space-y-1 leading-relaxed">
+              <li>Your exam has been submitted and cannot be modified</li>
+              <li>Results will be available within 24-48 hours</li>
+              <li>Check your email for result notifications</li>
+            </ul>
+          </div>
         </motion.div>
 
         {/* Action Buttons */}
-        <div className="flex gap-4">
+        <div className="flex gap-3">
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => navigate('/student/dashboard')}
-            className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold transition-colors"
+            className="flex-1 px-5 py-3 glass-card rounded-xl text-sm text-slate-300 hover:text-white font-medium transition-colors"
           >
-            Back to Dashboard
+            Dashboard
           </motion.button>
-
           <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => navigate('/student/exams')}
-            className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-700 hover:to-pink-700 text-white rounded-lg font-semibold transition-colors"
+            className="flex-1 px-5 py-3 rounded-xl bg-indigo-500/[0.12] hover:bg-indigo-500/[0.2] border border-indigo-500/[0.15] text-indigo-300 hover:text-indigo-200 text-sm font-semibold transition-all"
           >
-            View All Exams
+            More Exams
           </motion.button>
         </div>
 
@@ -293,10 +283,9 @@ export function SubmissionConfirmation() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
-          className="mt-8 text-center text-slate-400 text-sm"
+          className="mt-8 text-center text-slate-600 text-[11px] pb-6"
         >
-          <p>Thank you for using VoiceSecure Exam Platform</p>
-          <p className="mt-1">Reference ID: {submissionData?.examId}</p>
+          <p>VoiceSecure Exam Platform</p>
         </motion.div>
       </div>
     </div>

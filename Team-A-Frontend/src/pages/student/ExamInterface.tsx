@@ -26,8 +26,8 @@ import { studentApi, unifiedApiClient } from '../../api/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Question { id: number | string; text: string; marks?: number; }
-interface SavedAnswer { questionId: string | number; rawText: string; formattedText: string; }
+interface Question { id: number | string; text: string; marks?: number; type?: 'mcq' | 'descriptive'; options?: string[]; correctAnswer?: number; }
+interface SavedAnswer { questionId: string | number; rawText: string; formattedText: string; selectedOption?: number; }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -76,6 +76,9 @@ export function ExamInterface() {
             id: q.id ?? i + 1,
             text: q.text ?? q.question ?? `Question ${i + 1}`,
             marks: q.marks ?? 1,
+            type: q.type === 'mcq' ? 'mcq' : 'descriptive',
+            options: Array.isArray(q.options) ? q.options : undefined,
+            correctAnswer: q.correctAnswer,
           }));
           setQuestions(qs.length ? qs : [{ id: 1, text: 'Sample question.', marks: 1 }]);
         }
@@ -93,7 +96,12 @@ export function ExamInterface() {
     if (questionReadRef.current === currentQuestion.id) return;
     questionReadRef.current = currentQuestion.id;
     setCurrentQuestionText(currentQuestion.text);
-    speak(`Question ${currentIndex + 1} of ${questions.length}. ${currentQuestion.text}. Say start answering to record your answer.`, { rate: 0.9 });
+    if (currentQuestion.type === 'mcq' && currentQuestion.options?.length) {
+      const optionsText = currentQuestion.options.map((o, i) => `Option ${i + 1}: ${o}`).join('. ');
+      speak(`Question ${currentIndex + 1} of ${questions.length}. ${currentQuestion.text}. ${optionsText}. Say option 1, 2, 3, or 4 to answer.`, { rate: 0.9 });
+    } else {
+      speak(`Question ${currentIndex + 1} of ${questions.length}. ${currentQuestion.text}. Say start answering to record your answer.`, { rate: 0.9 });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, questions.length]);
 
@@ -163,16 +171,45 @@ export function ExamInterface() {
         break;
       case 'repeat_question':
         if (voiceState !== 'COMMAND_MODE' && voiceState !== 'ANSWER_REVIEW') return;
-        if (currentQuestion) speak(`Question ${currentIndex + 1}. ${currentQuestion.text}`);
+        if (currentQuestion) {
+          if (currentQuestion.type === 'mcq' && currentQuestion.options?.length) {
+            const optionsText = currentQuestion.options.map((o, i) => `Option ${i + 1}: ${o}`).join('. ');
+            speak(`Question ${currentIndex + 1}. ${currentQuestion.text}. ${optionsText}`);
+          } else {
+            speak(`Question ${currentIndex + 1}. ${currentQuestion.text}`);
+          }
+        }
         break;
       case 'start_answering':
         if (voiceState !== 'COMMAND_MODE') return;
+        if (currentQuestion?.type === 'mcq') { speak('This is a multiple choice question. Say option 1, 2, 3, or 4.'); return; }
         stopEngine();
         setRawTranscript(''); setFormattedAnswer(''); resetDictation();
         transition('DICTATION_MODE');
         await speak('Dictation active. Speak your answer now. I will stop after 3 seconds of silence.');
         startDictation();
         break;
+      case 'option_1': case 'option_2': case 'option_3': case 'option_4': {
+        if (voiceState !== 'COMMAND_MODE') return;
+        if (currentQuestion?.type !== 'mcq' || !currentQuestion.options?.length) {
+          speak('This question does not have options. Say start answering instead.');
+          return;
+        }
+        const optNum = parseInt(action.split('_')[1]) - 1;
+        if (optNum >= (currentQuestion.options?.length ?? 0)) { speak('Invalid option number.'); return; }
+        const optText = currentQuestion.options![optNum];
+        setAnswers(p => new Map(p).set(currentQuestion.id, {
+          questionId: currentQuestion.id,
+          rawText: `Option ${optNum + 1}: ${optText}`,
+          formattedText: `Option ${optNum + 1}: ${optText}`,
+          selectedOption: optNum,
+        }));
+        playBeep('success');
+        try { await studentApi.saveResponse({ studentId: (student as any)?.studentId ?? 'UNKNOWN', examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: `Option ${optNum + 1}`, formattedAnswer: optText, confidence: 1 }); } catch {}
+        await speak(`Option ${optNum + 1} selected: ${optText}. Answer saved.` + (currentIndex < questions.length - 1 ? ' Moving to next question.' : ''));
+        if (currentIndex < questions.length - 1) { questionReadRef.current = null; setCurrentIndex(i => i + 1); }
+        break;
+      }
       case 'stop_dictating':
         if (voiceState !== 'DICTATION_MODE') return;
         stopDictation();
@@ -255,9 +292,9 @@ export function ExamInterface() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceState]);
 
-  // Read hint when repeated failures
+  // Read hint when repeated failures (only once at threshold, not every increment)
   useEffect(() => {
-    if (failCount >= 3 && voiceState === 'COMMAND_MODE') {
+    if (failCount === 3 && voiceState === 'COMMAND_MODE') {
       speak('Available commands: Start answering, Next question, Previous question, Repeat question, Read my answer, Pause exam, Submit exam.');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -314,11 +351,16 @@ export function ExamInterface() {
   // ── Submitted screen ────────────────────────────────────────────────────────
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center space-y-4">
-          <div className="text-7xl">✅</div>
-          <h2 className="text-white text-2xl font-bold">Exam Submitted</h2>
-          <p className="text-slate-400">Redirecting…</p>
+      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[400px] h-[400px] bg-emerald-500/[0.08] rounded-full blur-[100px]" />
+        </div>
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative z-10 text-center space-y-5">
+          <div className="w-20 h-20 rounded-3xl bg-emerald-500/[0.1] border border-emerald-500/[0.15] flex items-center justify-center mx-auto">
+            <span className="text-emerald-400 text-3xl">✓</span>
+          </div>
+          <h2 className="text-white text-2xl font-bold tracking-tight">Exam Submitted</h2>
+          <p className="text-slate-500 text-sm">Redirecting to confirmation...</p>
         </motion.div>
       </div>
     );
@@ -326,7 +368,12 @@ export function ExamInterface() {
 
   // ── Main UI ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex flex-col select-none">
+    <div className="min-h-screen bg-[#0a0e1a] flex flex-col select-none relative overflow-hidden">
+      {/* Subtle ambient */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-600/[0.04] rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-violet-600/[0.03] rounded-full blur-[100px]" />
+      </div>
 
       <StatusBar
         currentQ={currentIndex + 1}
@@ -338,7 +385,7 @@ export function ExamInterface() {
         examTitle={examTitle}
       />
 
-      <div className="flex-1 flex flex-col gap-4 p-6 max-w-3xl mx-auto w-full">
+      <div className="flex-1 flex flex-col gap-4 p-6 max-w-3xl mx-auto w-full relative z-10">
 
         <ModeIndicator voiceState={voiceState} isListening={isListening || isRecording} interimText={interimText} />
 
@@ -362,30 +409,80 @@ export function ExamInterface() {
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3"
+            className={`glass-card rounded-xl px-4 py-3 ${voiceEngineError ? 'border-red-500/[0.1]' : 'border-amber-500/[0.1]'}`}
             role="alert"
           >
-            <p className="text-red-300 text-sm font-semibold mb-1">Voice input is unavailable</p>
-            <p className="text-red-200 text-xs leading-relaxed">
+            <p className={`${voiceEngineError ? 'text-red-300' : 'text-amber-300'} text-xs font-semibold mb-0.5`}>
+              {voiceEngineError ? 'Voice input issue' : 'Voice info'}
+            </p>
+            <p className={`${voiceEngineError ? 'text-red-400/70' : 'text-amber-400/70'} text-[11px] leading-relaxed`}>
               {voiceEngineError || dictationError || 'Speech recognition is not supported in this browser.'}
             </p>
-            {voiceEngineError?.toLowerCase().includes('whisper') && (
-              <p className="text-red-200/80 text-[11px] mt-1">
-                Whisper fallback needs backend `/api/ai/stt-command` and a working `whisper` binary on the server.
-              </p>
-            )}
           </motion.div>
         )}
 
         {/* Question card */}
         {currentQuestion && (
-          <motion.div key={currentQuestion.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-            className="bg-gradient-to-br from-slate-800/70 to-slate-900/70 border border-slate-700/50 rounded-2xl p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-indigo-400 font-mono text-sm">Q {currentIndex + 1} / {questions.length}</span>
-              {savedAnswer && <span className="ml-auto bg-green-500/20 text-green-300 text-xs px-2 py-0.5 rounded-full">✓ Answered</span>}
+          <motion.div key={currentQuestion.id} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
+            className="glass-card rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-xs font-mono text-slate-500 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.04]">
+                Q{currentIndex + 1}/{questions.length}
+              </span>
+              {currentQuestion.type === 'mcq' && (
+                <span className="text-[11px] text-indigo-400 bg-indigo-500/[0.08] px-2 py-0.5 rounded-lg border border-indigo-500/[0.1] font-semibold">MCQ</span>
+              )}
+              {currentQuestion.marks && (
+                <span className="text-[11px] text-slate-500">{currentQuestion.marks} mark{currentQuestion.marks > 1 ? 's' : ''}</span>
+              )}
+              {savedAnswer && (
+                <span className="ml-auto bg-emerald-500/[0.08] text-emerald-400 text-[11px] px-2.5 py-1 rounded-lg border border-emerald-500/[0.1] font-medium">
+                  ✓ {savedAnswer.selectedOption !== undefined ? `Option ${savedAnswer.selectedOption + 1}` : 'Answered'}
+                </span>
+              )}
             </div>
-            <p className="text-white text-xl leading-relaxed font-medium">{currentQuestion.text}</p>
+            <p className="text-white text-lg leading-relaxed font-medium">{currentQuestion.text}</p>
+
+            {/* MCQ Option Cards */}
+            {currentQuestion.type === 'mcq' && currentQuestion.options && currentQuestion.options.length > 0 && (
+              <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {currentQuestion.options.map((opt, oi) => {
+                  const isSelected = savedAnswer?.selectedOption === oi;
+                  return (
+                    <motion.div
+                      key={oi}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: oi * 0.08 }}
+                      className={`rounded-xl p-4 border transition-all ${
+                        isSelected
+                          ? 'bg-emerald-500/[0.08] border-emerald-500/[0.2] shadow-sm shadow-emerald-500/10'
+                          : 'bg-white/[0.02] border-white/[0.05] hover:border-indigo-400/[0.15]'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
+                          isSelected
+                            ? 'bg-emerald-500/[0.15] text-emerald-300 border border-emerald-500/[0.2]'
+                            : 'bg-indigo-500/[0.08] text-indigo-300 border border-indigo-500/[0.1]'
+                        }`}>
+                          {oi + 1}
+                        </div>
+                        <div className="flex-1">
+                          <p className={`text-sm leading-relaxed ${isSelected ? 'text-emerald-200 font-medium' : 'text-slate-300'}`}>
+                            {opt}
+                          </p>
+                          <p className="text-[10px] text-slate-600 mt-1 font-mono">
+                            Say "Option {oi + 1}"
+                          </p>
+                        </div>
+                        {isSelected && <span className="text-emerald-400 text-sm mt-1">✓</span>}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
           </motion.div>
         )}
 
@@ -403,9 +500,9 @@ export function ExamInterface() {
         <AnimatePresence>
           {voiceState === 'COMMAND_MODE' && savedAnswer && (
             <motion.div key="saved" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="bg-slate-800/40 border border-green-500/20 rounded-xl p-4">
-              <p className="text-slate-400 text-xs uppercase tracking-widest mb-2">Your Saved Answer</p>
-              <p className="text-slate-200 leading-relaxed">{savedAnswer.formattedText}</p>
+              className="glass-card rounded-xl p-4 border-emerald-500/[0.06]">
+              <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-2">Saved Answer</p>
+              <p className="text-slate-300 text-sm leading-relaxed">{savedAnswer.formattedText}</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -414,11 +511,13 @@ export function ExamInterface() {
         <AnimatePresence>
           {voiceState === 'PAUSE_MODE' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm flex items-center justify-center">
-              <div className="text-center space-y-4">
-                <div className="text-7xl">⏸</div>
-                <h2 className="text-white text-3xl font-bold">Exam Paused</h2>
-                <p className="text-yellow-300 text-lg font-mono">Say "Resume exam" to continue</p>
+              className="fixed inset-0 z-40 bg-[#0a0e1a]/90 backdrop-blur-md flex items-center justify-center">
+              <div className="text-center space-y-5">
+                <div className="w-20 h-20 rounded-3xl bg-amber-500/[0.08] border border-amber-500/[0.12] flex items-center justify-center mx-auto">
+                  <span className="text-amber-400 text-3xl">⏸</span>
+                </div>
+                <h2 className="text-white text-2xl font-bold tracking-tight">Exam Paused</h2>
+                <p className="text-amber-300/80 text-sm font-mono">Say "Resume exam" to continue</p>
               </div>
             </motion.div>
           )}
@@ -441,34 +540,39 @@ export function ExamInterface() {
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="bg-slate-800/40 border border-slate-700/30 rounded-xl px-4 py-2 flex items-center gap-2"
+            className="glass-card rounded-xl px-4 py-2.5 flex items-center gap-3"
           >
-            <span className="text-slate-500 text-xs uppercase tracking-widest shrink-0">
+            <span className="text-[10px] text-slate-600 uppercase tracking-widest shrink-0 font-semibold">
               {interimRawText ? 'Hearing' : 'Heard'}
             </span>
             <span className={`text-sm italic truncate ${
-              interimRawText ? 'text-indigo-300/80' : 'text-slate-300'
+              interimRawText ? 'text-indigo-300/70' : 'text-slate-400'
             }`}>
               {interimRawText || lastRawText}
             </span>
             {!interimRawText && failCount > 0 && (
-              <span className="ml-auto text-yellow-400/70 text-xs shrink-0">no match</span>
+              <span className="ml-auto text-amber-400/50 text-[10px] shrink-0 font-medium">no match</span>
             )}
           </motion.div>
         )}
 
         {/* Command hints */}
         {voiceState === 'COMMAND_MODE' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { cmd: '"Start answering"', icon: '🎙️' }, { cmd: '"Next question"', icon: '➡️' },
-              { cmd: '"Previous question"', icon: '⬅️' }, { cmd: '"Repeat question"', icon: '🔁' },
-              { cmd: '"Read my answer"', icon: '📖' }, { cmd: '"Clear answer"', icon: '🗑️' },
-              { cmd: '"Pause exam"', icon: '⏸' }, { cmd: '"Submit exam"', icon: '📤' },
-            ].map(item => (
-              <div key={item.cmd} className="bg-slate-800/30 border border-slate-700/30 rounded-lg px-3 py-2 flex items-center gap-2">
-                <span className="text-sm">{item.icon}</span>
-                <span className="text-slate-400 text-xs font-mono">{item.cmd}</span>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            {(currentQuestion?.type === 'mcq' ? [
+              { cmd: '"Option 1"', icon: '①' }, { cmd: '"Option 2"', icon: '②' },
+              { cmd: '"Option 3"', icon: '③' }, { cmd: '"Option 4"', icon: '④' },
+              { cmd: '"Next question"', icon: '→' }, { cmd: '"Previous"', icon: '←' },
+              { cmd: '"Repeat"', icon: '↻' }, { cmd: '"Submit exam"', icon: '↗' },
+            ] : [
+              { cmd: '"Start answering"', icon: '◉' }, { cmd: '"Next question"', icon: '→' },
+              { cmd: '"Previous"', icon: '←' }, { cmd: '"Repeat"', icon: '↻' },
+              { cmd: '"Read answer"', icon: '◈' }, { cmd: '"Clear answer"', icon: '⊘' },
+              { cmd: '"Pause exam"', icon: '‖' }, { cmd: '"Submit exam"', icon: '↗' },
+            ]).map(item => (
+              <div key={item.cmd} className="bg-white/[0.02] border border-white/[0.03] rounded-lg px-3 py-2 flex items-center gap-2">
+                <span className="text-indigo-400/40 text-xs">{item.icon}</span>
+                <span className="text-slate-500 text-[11px] font-mono">{item.cmd}</span>
               </div>
             ))}
           </motion.div>
@@ -476,16 +580,20 @@ export function ExamInterface() {
 
         {/* Progress dots */}
         {questions.length > 0 && questions.length <= 30 && (
-          <div className="flex flex-wrap gap-1.5 justify-center mt-2">
+          <div className="flex flex-wrap gap-1.5 justify-center mt-3">
             {questions.map((q, i) => (
-              <div key={q.id} className={`w-3 h-3 rounded-full transition-colors ${
-                i === currentIndex ? 'bg-indigo-400 scale-125' : answers.has(q.id) ? 'bg-green-500' : 'bg-slate-700'
+              <div key={q.id} className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                i === currentIndex
+                  ? 'bg-indigo-400 scale-125 shadow-sm shadow-indigo-400/50'
+                  : answers.has(q.id)
+                  ? 'bg-emerald-500/80'
+                  : 'bg-white/[0.06]'
               }`} />
             ))}
           </div>
         )}
 
-        <p className="text-center text-slate-600 text-xs mt-2">
+        <p className="text-center text-slate-600 text-[11px] mt-1 tracking-wide">
           {answers.size} of {questions.length} answered · Voice-only mode
         </p>
       </div>

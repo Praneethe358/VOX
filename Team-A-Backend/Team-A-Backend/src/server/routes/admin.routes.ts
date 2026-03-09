@@ -5,6 +5,7 @@ import fs from "fs";
 import { dataProvider } from "../../database/provider";
 import { pdfService } from "../../services/pdf.service";
 import { sendError, sendSuccess } from "../http-response";
+import { Question } from "../../database/models/Exam";
 
 const router = Router();
 
@@ -39,54 +40,74 @@ router.post("/login", async (req: Request, res: Response) => {
 });
 
 // POST /api/admin/create-exam
-// Pure JSON body — no file required. Used for quick exam creation without a PDF.
+// Pure JSON body — supports MCQ questions with options[] and correctAnswer
 router.post("/create-exam", async (req: Request, res: Response) => {
   try {
-    const { code, title, durationMinutes, questions: rawQuestions } = req.body as {
+    const { code, title, durationMinutes, questions: rawQuestions, instructions } = req.body as {
       code?: string;
       title: string;
       durationMinutes?: number | string;
-      questions?: Array<{ id?: number; text: string }>;
+      instructions?: string;
+      questions?: Array<{
+        id?: number;
+        text: string;
+        type?: "mcq" | "descriptive";
+        options?: string[];
+        correctAnswer?: number;
+      }>;
     };
     if (!title || !title.trim()) {
       sendError(res, "title is required", 400);
       return;
     }
     const examCode = (code || title).trim().toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "");
-    const questions = Array.isArray(rawQuestions)
-      ? rawQuestions.map((q, i) => ({ id: q.id ?? i + 1, text: q.text }))
+    const questions: Question[] = Array.isArray(rawQuestions)
+      ? rawQuestions.map((q, i) => {
+          const hasOptions = Array.isArray(q.options) && q.options.length >= 2;
+          return {
+            id: q.id ?? i + 1,
+            text: q.text,
+            type: q.type ?? (hasOptions ? "mcq" : "descriptive") as "mcq" | "descriptive",
+            ...(hasOptions ? { options: q.options } : {}),
+            ...(hasOptions && q.correctAnswer !== undefined ? { correctAnswer: q.correctAnswer } : {}),
+          };
+        })
       : [];
+    const mcqCount = questions.filter((q) => q.type === "mcq").length;
     await dataProvider.saveExam({
       code: examCode,
       title: title.trim(),
       questions,
       durationMinutes: Number(durationMinutes ?? 30),
-      status: "active",
+      status: "draft",
+      instructions: instructions?.trim() || "",
+      createdAt: new Date().toISOString(),
     });
-    sendSuccess(res, { code: examCode, questionCount: questions.length });
+    sendSuccess(res, { code: examCode, questionCount: questions.length, mcqCount });
   } catch (error) {
     sendError(res, String(error));
   }
 });
 
 // POST /api/admin/upload-exam-pdf
-// Accepts multipart/form-data with field "pdf" (or any file) + body fields: code, title, durationMinutes
+// Accepts multipart/form-data with field "pdf" (or any file) + body fields
 router.post(
   "/upload-exam-pdf",
   upload.single("pdf"),
   async (req: Request, res: Response) => {
     try {
-      const { code, title, durationMinutes } = req.body as {
+      const { code, title, durationMinutes, instructions } = req.body as {
         code: string;
         title: string;
         durationMinutes: string;
+        instructions?: string;
       };
       if (!title || !title.trim()) {
         sendError(res, "title is required", 400);
         return;
       }
       const examCode = (code || title).trim().toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "");
-      let questions: { id: number; text: string }[] = [];
+      let questions: Question[] = [];
 
       if (req.file) {
         const mime = req.file.mimetype;
@@ -97,31 +118,36 @@ router.post(
         } else if (mime === "application/json" || req.file.originalname.endsWith(".json")) {
           const parsed = JSON.parse(fileBuffer.toString("utf-8"));
           const arr = Array.isArray(parsed) ? parsed : parsed.questions ?? [];
-          questions = arr.map((q: any, i: number) => ({
-            id: q.id ?? i + 1,
-            text: typeof q === "string" ? q : (q.text ?? q.question ?? String(q)),
-          }));
+          questions = arr.map((q: any, i: number) => {
+            const text = typeof q === "string" ? q : (q.text ?? q.question ?? String(q));
+            const hasOptions = Array.isArray(q.options) && q.options.length >= 2;
+            return {
+              id: q.id ?? i + 1,
+              text,
+              type: q.type ?? (hasOptions ? "mcq" : "descriptive") as "mcq" | "descriptive",
+              ...(hasOptions ? { options: q.options } : {}),
+              ...(hasOptions && q.correctAnswer !== undefined ? { correctAnswer: q.correctAnswer } : {}),
+            };
+          });
         } else {
-          // Plain text / CSV / other: treat each non-empty line as a question
-          const lines = fileBuffer.toString("utf-8").split("\n").map((l: string) => l.trim()).filter(Boolean);
-          questions = lines
-            .filter((l: string) => l.length > 3)
-            .map((l: string, i: number) => ({
-              id: i + 1,
-              text: l.replace(/^[\d]+[.):] ?/, "").trim() || l,
-            }));
+          // Plain text / CSV / other: use the PDF parser's extractQuestions on raw text
+          const rawText = fileBuffer.toString("utf-8");
+          questions = pdfService.extractQuestions(rawText);
         }
         fs.unlink(req.file.path, () => {});
       }
 
+      const mcqCount = questions.filter((q) => q.type === "mcq").length;
       await dataProvider.saveExam({
         code: examCode,
         title: title.trim(),
         questions,
         durationMinutes: Number(durationMinutes ?? 30),
-        status: "active",
+        status: "draft",
+        instructions: instructions?.trim() || "",
+        createdAt: new Date().toISOString(),
       });
-      sendSuccess(res, { code: examCode, questionCount: questions.length });
+      sendSuccess(res, { code: examCode, questionCount: questions.length, mcqCount });
     } catch (error) {
       sendError(res, String(error));
     }
@@ -137,6 +163,47 @@ router.post("/publish-exam", async (req: Request, res: Response) => {
   }
   await dataProvider.publishExam(code);
   sendSuccess(res, { published: true, code });
+});
+
+// POST /api/admin/unpublish-exam
+router.post("/unpublish-exam", async (req: Request, res: Response) => {
+  const { code } = req.body as { code: string };
+  if (!code) {
+    sendError(res, "code required", 400);
+    return;
+  }
+  await dataProvider.unpublishExam(code);
+  sendSuccess(res, { unpublished: true, code });
+});
+
+// DELETE /api/admin/exam/:code
+router.delete("/exam/:code", async (req: Request, res: Response) => {
+  try {
+    const code = req.params.code as string;
+    const deleted = await dataProvider.deleteExam(code);
+    if (deleted) {
+      sendSuccess(res, { deleted: true, code });
+    } else {
+      sendError(res, "Exam not found", 404);
+    }
+  } catch (error) {
+    sendError(res, String(error));
+  }
+});
+
+// PUT /api/admin/exam/:code
+router.put("/exam/:code", async (req: Request, res: Response) => {
+  try {
+    const code = req.params.code as string;
+    const updated = await dataProvider.updateExam(code, req.body);
+    if (updated) {
+      sendSuccess(res, { updated: true, code });
+    } else {
+      sendError(res, "Exam not found", 404);
+    }
+  } catch (error) {
+    sendError(res, String(error));
+  }
 });
 
 // POST /api/admin/register-student-face

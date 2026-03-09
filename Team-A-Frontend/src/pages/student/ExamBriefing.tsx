@@ -190,18 +190,23 @@ export default function ExamBriefing() {
   // ── JSX ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-6">
+    <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Ambient */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-indigo-600/[0.06] rounded-full blur-[120px]" />
+      </div>
+
       <motion.div
-        initial={{ opacity: 0, scale: 0.96 }}
+        initial={{ opacity: 0, scale: 0.97 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-xl flex flex-col gap-6"
+        className="relative z-10 w-full max-w-xl flex flex-col gap-6"
       >
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-4xl font-black bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-            VoiceSecure
+          <h1 className="text-3xl font-bold text-white tracking-tight">
+            Voice<span className="text-indigo-400">Secure</span>
           </h1>
-          <p className="text-slate-400 text-sm mt-1">Exam Briefing</p>
+          <p className="text-slate-500 text-sm mt-1">Exam Briefing</p>
         </div>
 
         {/* Exam card */}
@@ -209,23 +214,23 @@ export default function ExamBriefing() {
           {selectedExam ? (
             <motion.div
               key="exam-card"
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-slate-700/50 rounded-2xl p-7 space-y-4"
+              className="glass-card rounded-2xl p-7 space-y-5"
             >
-              <h2 className="text-white text-2xl font-bold">{selectedExam.title}</h2>
+              <h2 className="text-white text-xl font-bold tracking-tight">{selectedExam.title}</h2>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
-                  <p className="text-slate-400 text-xs uppercase tracking-widest">Duration</p>
-                  <p className="text-white font-bold text-xl mt-0.5">{selectedExam.durationMinutes} min</p>
+                <div className="text-center p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Duration</p>
+                  <p className="text-white font-bold text-xl mt-1">{selectedExam.durationMinutes}<span className="text-sm font-normal text-slate-400"> min</span></p>
                 </div>
-                <div className="bg-slate-800/50 rounded-xl p-3 text-center">
-                  <p className="text-slate-400 text-xs uppercase tracking-widest">Questions</p>
-                  <p className="text-white font-bold text-xl mt-0.5">{selectedExam.questionCount}</p>
+                <div className="text-center p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Questions</p>
+                  <p className="text-white font-bold text-xl mt-1">{selectedExam.questionCount}</p>
                 </div>
               </div>
               {selectedExam.instructions && (
-                <p className="text-slate-300 text-sm leading-relaxed border-t border-slate-700/50 pt-3">
+                <p className="text-slate-400 text-sm leading-relaxed border-t border-white/[0.04] pt-4">
                   {selectedExam.instructions}
                 </p>
               )}
@@ -237,11 +242,7 @@ export default function ExamBriefing() {
               animate={{ opacity: 1 }}
               className="flex justify-center py-12"
             >
-              <motion.div
-                className="w-10 h-10 rounded-full border-4 border-indigo-400 border-t-transparent"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              />
+              <div className="w-10 h-10 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin" />
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -254,14 +255,14 @@ export default function ExamBriefing() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex items-center gap-3 bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3"
+              className="flex items-center gap-3 glass-card rounded-xl px-4 py-3 border-indigo-500/[0.08]"
             >
               <motion.div
-                className="w-3 h-3 rounded-full bg-blue-400"
-                animate={{ scale: [1, 1.4, 1] }}
-                transition={{ duration: 0.8, repeat: Infinity }}
+                className="w-2.5 h-2.5 rounded-full bg-indigo-400"
+                animate={{ scale: [1, 1.4, 1], opacity: [0.6, 1, 0.6] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
               />
-              <p className="text-blue-300 text-sm">Reading exam information aloud…</p>
+              <p className="text-indigo-300/80 text-sm">Reading exam information aloud...</p>
             </motion.div>
           )}
 
@@ -273,28 +274,27 @@ export default function ExamBriefing() {
               exit={{ opacity: 0 }}
               className="space-y-3"
             >
-              <div className="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/30 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between glass-card rounded-xl px-5 py-4 border-indigo-500/[0.1]">
                 <div className="flex items-center gap-3">
                   <motion.div
-                    className="w-3 h-3 rounded-full bg-indigo-400"
+                    className="w-2.5 h-2.5 rounded-full bg-indigo-400"
                     animate={{ scale: [1, 1.3, 1] }}
                     transition={{ duration: 1, repeat: Infinity }}
                   />
-                  <p className="text-indigo-300 font-medium">
+                  <p className="text-sm text-slate-300">
                     Say{' '}
-                    <span className="font-mono font-bold bg-indigo-500/20 px-1.5 py-0.5 rounded">
+                    <span className="font-mono font-semibold text-indigo-300 bg-indigo-500/[0.1] px-2 py-0.5 rounded-md">
                       "Start Exam"
-                    </span>{' '}
-                    to begin
+                    </span>
                   </p>
                 </div>
-                <span className="text-slate-400 text-sm font-mono">{countdown}s</span>
+                <span className="text-slate-500 text-sm font-mono tabular-nums">{countdown}s</span>
               </div>
 
               {/* Countdown bar */}
-              <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
+              <div className="w-full h-1 rounded-full bg-white/[0.04] overflow-hidden">
                 <motion.div
-                  className="h-full rounded-full bg-indigo-500"
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400"
                   animate={{ width: `${(countdown / 30) * 100}%` }}
                   transition={{ duration: 0.5 }}
                 />
@@ -305,24 +305,20 @@ export default function ExamBriefing() {
           {phase === 'starting' && (
             <motion.div
               key="starting"
-              initial={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-xl px-4 py-4 justify-center"
+              className="flex items-center gap-3 glass-card rounded-xl px-5 py-4 border-emerald-500/[0.1] justify-center"
             >
-              <motion.div
-                className="w-4 h-4 rounded-full border-2 border-green-400 border-t-transparent"
-                animate={{ rotate: 360 }}
-                transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-              />
-              <p className="text-green-300 font-bold text-lg">Starting exam…</p>
+              <div className="w-4 h-4 rounded-full border-2 border-emerald-400/40 border-t-emerald-400 animate-spin" />
+              <p className="text-emerald-300 font-semibold">Starting exam...</p>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Command hint */}
+        {/* Hint */}
         {phase !== 'starting' && phase !== 'loading' && (
-          <p className="text-center text-slate-500 text-xs">
-            Listening for voice commands • Briefing repeats every 30 s
+          <p className="text-center text-slate-600 text-[11px] tracking-wide">
+            Listening for voice commands · Briefing repeats every 30s
           </p>
         )}
       </motion.div>
