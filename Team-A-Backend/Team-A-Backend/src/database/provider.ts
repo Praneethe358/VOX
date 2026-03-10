@@ -91,8 +91,34 @@ class DataProvider {
   }
 
   async submitFullExam(sessionData: any): Promise<{ sessionId: string; estimatedScore: number }> {
-    await mongoService.submitExam(sessionData.rollNumber, sessionData.examCode);
-    return { sessionId: sessionData.rollNumber, estimatedScore: 0 };
+    const rollNumber = sessionData.rollNumber || sessionData.studentId;
+    const examCode = sessionData.examCode;
+    const answers = Array.isArray(sessionData.answers) ? sessionData.answers : [];
+    const answeredCount = answers.length;
+
+    // Store submission result with answer count
+    try {
+      const db = mongoService.getDb();
+      await db.collection('submissions').updateOne(
+        { studentId: rollNumber, examCode },
+        {
+          $set: {
+            studentId: rollNumber,
+            studentName: sessionData.studentName || rollNumber,
+            examCode,
+            answeredCount,
+            totalQuestions: sessionData.totalQuestions || answeredCount,
+            answers,
+            submittedAt: new Date().toISOString(),
+            status: 'submitted',
+          },
+        },
+        { upsert: true },
+      );
+    } catch {}
+
+    await mongoService.submitExam(rollNumber, examCode);
+    return { sessionId: rollNumber, estimatedScore: answeredCount };
   }
 
   async autoSaveSession(sessionData: any): Promise<void> {
@@ -140,8 +166,8 @@ class DataProvider {
     await mongoService.setStudentScore(idOrRoll, score);
   }
 
-  async getStudentAnswers(idOrRoll: string): Promise<any[]> {
-    return mongoService.getStudentAnswers(idOrRoll);
+  async getStudentAnswers(idOrRoll: string, examCode?: string): Promise<any[]> {
+    return mongoService.getStudentAnswers(idOrRoll, examCode);
   }
 
   async getStudentDashboardStats(idOrRoll: string): Promise<{ completedExams: number; upcomingExams: number; averageScore: number; totalTimeSpent: number }> {

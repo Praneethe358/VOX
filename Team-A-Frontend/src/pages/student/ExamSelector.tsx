@@ -245,10 +245,10 @@ export function ExamSelector() {
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/student/dashboard')}
+            onClick={() => navigate('/')}
             className="glass-card px-4 py-2.5 rounded-xl text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
           >
-            <span className="text-lg">‹</span> Dashboard
+            <span className="text-lg">‹</span> Home
           </motion.button>
         </div>
       </header>

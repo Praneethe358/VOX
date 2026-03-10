@@ -309,6 +309,11 @@ class UnifiedApiClient {
     return response.blob();
   }
 
+  async getStudentAnswers(studentId: number | string, examCode?: string): Promise<ApiResponse<any[]>> {
+    const query = examCode ? `?examCode=${encodeURIComponent(String(examCode))}` : '';
+    return this.request<any[]>(`/admin/answers/${studentId}${query}`, 'GET');
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  LEGACY STUDENT — /api/student/*
   // ═══════════════════════════════════════════════════════════════════════════
@@ -656,6 +661,7 @@ export const adminApi = {
   getStudentsForScoring: unifiedApiClient.getStudentsForScoring.bind(unifiedApiClient),
   submitStudentScore: unifiedApiClient.submitStudentScore.bind(unifiedApiClient),
   downloadStudentAnswers: unifiedApiClient.downloadStudentAnswers.bind(unifiedApiClient),
+  getStudentAnswers: unifiedApiClient.getStudentAnswers.bind(unifiedApiClient),
   getAllResults: unifiedApiClient.getAllResults.bind(unifiedApiClient),
   // v1 endpoints
   v1CreateAdmin: unifiedApiClient.v1CreateAdmin.bind(unifiedApiClient),

@@ -24,8 +24,8 @@ export class SpeechService {
   private async transcribeWithWhisper(audioBuffer: Buffer): Promise<SttResult> {
     this.ensureFfmpegOnPath();
 
-    const whisperBin = process.env.WHISPER_BIN ?? "whisper";
-    const whisperModel = process.env.WHISPER_MODEL_PATH ?? "base";
+    const whisperBin = process.env.WHISPER_BIN ?? "C:\\Users\\prane\\AppData\\Roaming\\Python\\Python313\\Scripts\\whisper.exe";
+    const whisperModel = process.env.WHISPER_MODEL_PATH ?? "small";
 
     console.log(`[STT] Using whisper binary: ${whisperBin}`);
     console.log(`[STT] Using model: ${whisperModel}`);
@@ -96,11 +96,15 @@ export class SpeechService {
       "json",
       "--output_dir",
       tempDir,
+      "--no_speech_threshold",
+      "0.5",               // suppress segments where Whisper is ≥50% sure there's no speech
+      "--condition_on_previous_text",
+      "False",              // prevents hallucination carry-over between segments
     ];
 
     console.log(`[STT] Spawning whisper with args:`, args);
 
-    const text = await new Promise<string>((resolve) => {
+    const result = await new Promise<SttResult>((resolve) => {
       const proc = spawn(whisperBin, args);
       let stderr = "";
       let stdout = "";
@@ -115,7 +119,7 @@ export class SpeechService {
 
       proc.on("error", (err) => {
         console.error(`[STT] Failed to spawn Whisper process:`, err.message);
-        resolve("");
+        resolve({ text: "", confidence: 0 });
       });
 
       proc.on("close", async (code) => {
@@ -125,29 +129,62 @@ export class SpeechService {
 
         if (code !== 0) {
           console.error(`[STT] Whisper exited with code ${code}${stderr.trim() ? `: ${stderr.trim()}` : ""}`);
-          resolve("");
+          resolve({ text: "", confidence: 0 });
           return;
         }
 
         try {
           const raw = await fs.readFile(outputJson, "utf-8");
-          const parsed = JSON.parse(raw) as { text?: string };
-          console.log(`[STT] Transcribed text: ${(parsed.text ?? "").trim()}`);
-          resolve((parsed.text ?? "").trim());
+          const parsed = JSON.parse(raw) as {
+            text?: string;
+            segments?: Array<{
+              text: string;
+              no_speech_prob: number;
+              avg_logprob: number;
+              compression_ratio: number;
+            }>;
+          };
+
+          const fullText = (parsed.text ?? "").trim();
+
+          // ── Filter out hallucinated / no-speech segments ────────────────
+          const segments = parsed.segments ?? [];
+          const validSegments = segments.filter(seg => {
+            // Skip segments where Whisper thinks there's no speech
+            if (seg.no_speech_prob > 0.5) {
+              console.log(`[STT] Dropping segment (no_speech_prob=${seg.no_speech_prob.toFixed(2)}): "${seg.text.trim()}"`);
+              return false;
+            }
+            // Skip segments with very poor confidence (log-prob)
+            if (seg.avg_logprob < -1.0) {
+              console.log(`[STT] Dropping segment (avg_logprob=${seg.avg_logprob.toFixed(2)}): "${seg.text.trim()}"`);
+              return false;
+            }
+            // Skip segments with extreme compression ratio (repetitive hallucination)
+            if (seg.compression_ratio > 2.4) {
+              console.log(`[STT] Dropping segment (compression_ratio=${seg.compression_ratio.toFixed(2)}): "${seg.text.trim()}"`);
+              return false;
+            }
+            return true;
+          });
+
+          const filteredText = validSegments.map(s => s.text.trim()).join(" ").trim();
+          const avgNoSpeech = segments.length
+            ? segments.reduce((sum, s) => sum + s.no_speech_prob, 0) / segments.length
+            : 1;
+          const confidence = Math.max(0, Math.min(1, 1 - avgNoSpeech));
+
+          console.log(`[STT] Raw: "${fullText}" | Filtered: "${filteredText}" | confidence: ${confidence.toFixed(2)}`);
+          resolve({ text: filteredText, confidence });
         } catch (readErr) {
           console.error(`[STT] Failed to read/parse output JSON:`, readErr);
-          resolve("");
+          resolve({ text: "", confidence: 0 });
         }
       });
     });
 
     await fs.rm(tempDir, { recursive: true, force: true });
-
-    if (!text) {
-      return { text: "", confidence: 0 };
-    }
-
-    return { text, confidence: 1 };
+    return result;
   }
 
   async recognizeCommand(audioBuffer: Buffer): Promise<SttResult> {
@@ -164,7 +201,7 @@ export class SpeechService {
    * startup so users see clear instructions instead of mysterious 500s.  
    */
   async checkBins(): Promise<void> {
-    const whisperBin = process.env.WHISPER_BIN ?? "whisper";
+    const whisperBin = process.env.WHISPER_BIN ?? "C:\\Users\\prane\\AppData\\Roaming\\Python\\Python313\\Scripts\\whisper.exe";
     try {
       await fs.access(whisperBin);
       console.log(`[STT] whisper binary found at: ${whisperBin}`);

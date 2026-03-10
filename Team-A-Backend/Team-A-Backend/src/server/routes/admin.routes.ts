@@ -292,4 +292,17 @@ router.get("/answers/:studentId/download", async (req: Request, res: Response) =
   }
 });
 
+// GET /api/admin/answers/:studentId — return answers as JSON for inline viewing
+// Optional query param: ?examCode=MATHS to filter by specific exam
+router.get("/answers/:studentId", async (req: Request, res: Response) => {
+  try {
+    const { studentId } = req.params;
+    const examCode = req.query.examCode ? String(req.query.examCode) : undefined;
+    const answers = await dataProvider.getStudentAnswers(String(studentId), examCode);
+    sendSuccess(res, answers);
+  } catch (error) {
+    sendError(res, String(error));
+  }
+});
+
 export default router;

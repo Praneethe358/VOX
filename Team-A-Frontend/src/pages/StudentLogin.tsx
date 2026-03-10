@@ -123,7 +123,7 @@ export default function StudentLogin() {
         sessionStorage.setItem('studentName', result.data.student?.name || 'Student');
         
         // Navigate to student dashboard
-        setTimeout(() => navigate('/student/dashboard'), 1000);
+        setTimeout(() => navigate('/student/exams'), 1000);
       } else {
         setError(result.error || 'Face verification failed. Please try again.');
         setDetecting(false);

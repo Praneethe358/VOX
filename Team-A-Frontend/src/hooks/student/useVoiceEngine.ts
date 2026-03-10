@@ -103,7 +103,7 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'confirm_answer',
-    phrases: ['confirm answer', 'save answer', 'accept answer', 'finalize answer', 'confirm'],
+    phrases: ['confirm answer', 'save answer', 'accept answer', 'finalize answer', 'confirm my answer'],
   },
   {
     action: 'edit_answer',
@@ -115,11 +115,21 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'submit_exam',
-    phrases: ['submit exam', 'finish exam', 'end exam', 'submit my exam', 'i want to submit'],
+    phrases: ['submit exam', 'finish exam', 'end exam', 'submit my exam', 'i want to submit',
+      'summary exam', 'some exam', 'submit the exam', 'done with exam', 'finish the exam',
+      'end the exam', 'im done with exam', 'complete exam', 'submit exams'],
   },
   {
     action: 'confirm_submission',
-    phrases: ['confirm submission', 'yes submit', 'finalize exam', 'confirm submit'],
+    phrases: ['confirm submission', 'yes submit', 'finalize exam', 'confirm submit',
+      'confirmed submission', 'confirm the submission', 'confirm my submission',
+      'yes confirm', 'yes finalize', 'submit now', 'yes i confirm', 'do submit',
+      'i confirm', 'please submit', 'go ahead submit', 'submit it',
+      'yes please submit', 'confirm exam submission', 'final submit',
+      'confirm some mission', 'confirmed', 'confirm it', 'yes do it',
+      'confirm exam', 'yes end exam', 'yes finish',
+      'yes', 'submit', 'yes please', 'do it', 'go ahead', 'sure',
+      'confirm yes', 'yes yes', 'ok submit', 'okay submit'],
   },
   {
     action: 'im_ready',
@@ -172,7 +182,7 @@ function fuzzyRatio(a: string, b: string): number {
   return 1 - dist / Math.max(a.length, b.length, 1);
 }
 
-const FUZZY_THRESHOLD = 0.72;
+const FUZZY_THRESHOLD = 0.65;
 
 // Known Whisper hallucinations — phantom text generated from silence/ambient noise
 const WHISPER_HALLUCINATIONS = new Set([
@@ -325,10 +335,10 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
         return;
       }
 
-      // Post-TTS cooldown — wait 1.2 s after TTS finishes so reverb/echo dies
+      // Post-TTS cooldown — wait 600ms after TTS finishes so reverb/echo dies
       const msSinceTts = Date.now() - ttsStoppedAtRef.current;
-      if (ttsStoppedAtRef.current > 0 && msSinceTts < 1200) {
-        backendLoopTimerRef.current = setTimeout(runOneChunk, 1200 - msSinceTts);
+      if (ttsStoppedAtRef.current > 0 && msSinceTts < 600) {
+        backendLoopTimerRef.current = setTimeout(runOneChunk, 600 - msSinceTts);
         return;
       }
 

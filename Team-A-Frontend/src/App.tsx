@@ -15,7 +15,6 @@ import AdminPortal from "./pages/AdminPortal";
 
 // Student Portal Pages
 import FaceRecognitionLogin from "./pages/student/FaceRecognitionLogin";
-import StudentDashboard from "./pages/student/StudentDashboard";
 import ExamSelector from "./pages/student/ExamSelector";
 import PreExamChecklist from "./pages/student/PreExamChecklist";
 import StudentExamInterface from "./pages/student/ExamInterface";
@@ -47,8 +46,8 @@ export default function App() {
 
                 {/* Legacy Redirects */}
                 <Route path="/student-login" element={<Navigate to="/student/login" replace />} />
-                <Route path="/student-portal" element={<Navigate to="/student/dashboard" replace />} />
-                <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
+                <Route path="/student-portal" element={<Navigate to="/student/exams" replace />} />
+                <Route path="/dashboard" element={<Navigate to="/student/exams" replace />} />
                 <Route path="/exam" element={<Navigate to="/student/exams" replace />} />
 
                 {/* Admin Routes — Protected */}
@@ -64,9 +63,7 @@ export default function App() {
                 <Route path="/student/login-fallback" element={<PasswordFallbackLogin />} />
 
                 {/* Student Routes — Protected */}
-                <Route path="/student/dashboard" element={
-                  <StudentProtectedRoute><StudentDashboard /></StudentProtectedRoute>
-                } />
+                <Route path="/student/dashboard" element={<Navigate to="/student/exams" replace />} />
                 <Route path="/student/exams" element={
                   <StudentProtectedRoute><ExamSelector /></StudentProtectedRoute>
                 } />

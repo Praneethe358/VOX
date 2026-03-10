@@ -24,6 +24,7 @@ export function SubmissionConfirmation() {
   const [submissionData, setSubmissionData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(true);
   const { speak } = useVoiceContext();
+  const [countdown, setCountdown] = useState(30);
 
   // ── Voice: auto-speak submission result ────────────────────────────────
   useAutoSpeak(
@@ -32,8 +33,7 @@ export function SubmissionConfirmation() {
       return (
         `Exam submitted successfully. ${submissionData.examTitle}. ` +
         `You answered ${submissionData.answeredQuestions} out of ${submissionData.totalQuestions} questions. ` +
-        `Estimated score: ${submissionData.estimatedScore} out of ${submissionData.totalMarks}. ` +
-        `Say "dashboard" to go back, or "take exam" for another exam.`
+        `You will be redirected to the landing page in 30 seconds.`
       );
     },
     [isSubmitting, submissionData],
@@ -45,6 +45,22 @@ export function SubmissionConfirmation() {
     enabled: !isSubmitting,
     pageName: 'the submission confirmation page',
   });
+
+  // ── Auto-redirect countdown ────────────────────────────────────────────
+  useEffect(() => {
+    if (isSubmitting) return;
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          navigate('/');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isSubmitting, navigate]);
 
   useEffect(() => {
     // If navigation state was passed from ExamInterface, use it directly
@@ -157,8 +173,6 @@ export function SubmissionConfirmation() {
         lastCommand={lastCommand}
         position="bottom-right"
         hints={[
-          { command: '"Dashboard"',  icon: '🏠', description: 'Go to dashboard' },
-          { command: '"Take exam"',  icon: '📝', description: 'Browse more exams' },
           { command: '"Results"',    icon: '📊', description: 'View all results' },
         ]}
       />
@@ -204,12 +218,6 @@ export function SubmissionConfirmation() {
               <p className="text-[11px] text-slate-500 mb-1">Answered</p>
               <p className="text-sm font-semibold text-indigo-300">
                 {submissionData?.answeredQuestions} / {submissionData?.totalQuestions}
-              </p>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-              <p className="text-[11px] text-slate-500 mb-1">Estimated Score</p>
-              <p className="text-sm font-semibold text-emerald-300">
-                {submissionData?.estimatedScore} / {submissionData?.totalMarks}
               </p>
             </div>
             <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
@@ -286,25 +294,26 @@ export function SubmissionConfirmation() {
           </div>
         </motion.div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3">
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/student/dashboard')}
-            className="flex-1 px-5 py-3 glass-card rounded-xl text-sm text-slate-300 hover:text-white font-medium transition-colors"
-          >
-            Dashboard
-          </motion.button>
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/student/exams')}
-            className="flex-1 px-5 py-3 rounded-xl bg-indigo-500/[0.12] hover:bg-indigo-500/[0.2] border border-indigo-500/[0.15] text-indigo-300 hover:text-indigo-200 text-sm font-semibold transition-all"
-          >
-            More Exams
-          </motion.button>
-        </div>
+        {/* Auto-redirect countdown */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.4 }}
+          className="text-center mb-4"
+        >
+          <p className="text-sm text-slate-400">
+            Redirecting to landing page in{' '}
+            <span className="text-indigo-300 font-semibold">{countdown}s</span>
+          </p>
+          <div className="mt-2 h-1 rounded-full bg-white/[0.04] overflow-hidden max-w-xs mx-auto">
+            <motion.div
+              initial={{ width: '100%' }}
+              animate={{ width: '0%' }}
+              transition={{ duration: 30, ease: 'linear' }}
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400"
+            />
+          </div>
+        </motion.div>
 
         {/* Footer */}
         <motion.div

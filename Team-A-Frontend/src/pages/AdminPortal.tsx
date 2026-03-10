@@ -881,7 +881,175 @@ const StudentManagementSection: React.FC = () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SUBMISSIONS SECTION
 // ═══════════════════════════════════════════════════════════════════════════════
-const SubmissionsSection: React.FC = () => {  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);  const [loading, setLoading] = useState(true);  useEffect(() => {    const load = async () => {      try {        const response = await adminApi.getSubmissions();        if (response.success && Array.isArray(response.data)) {          setSubmissions(response.data);        }      } catch { /* ignore */ }      setLoading(false);    };    load();  }, []);  const statusStyles: Record<string, string> = {    graded: 'text-green-400 bg-green-400/10',    pending: 'text-yellow-400 bg-yellow-400/10',    submitted: 'text-blue-400 bg-blue-400/10',  };  const statusLabels: Record<string, string> = {    graded: '✓ Graded',    pending: '⏳ Pending',    submitted: '📋 Submitted',  };  if (loading) return <LoadingOverlay />;  return (    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}      className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"    >      <h3 className="text-lg font-semibold text-white mb-6">Student Submissions</h3>      {submissions.length === 0 ? (        <p className="text-slate-400 text-sm text-center py-8">No submissions yet</p>      ) : (        <div className="overflow-x-auto">          <table className="w-full">            <thead>              <tr className="border-b border-slate-700/50">                {['Student', 'Exam', 'Score', 'Status', 'Submitted', 'Answers'].map((h) => (                  <th key={h} className="text-left px-4 py-3 text-sm font-semibold text-slate-400">{h}</th>                ))}              </tr>            </thead>            <tbody>              {submissions.map((sub, idx) => (                <motion.tr key={sub.id ?? idx}                  initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}                  transition={{ delay: idx * 0.03 }}                  className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"                >                  <td className="px-4 py-3 text-sm text-white font-medium">{sub.name}</td>                  <td className="px-4 py-3 text-sm text-slate-300 font-mono">{sub.exam}</td>                  <td className="px-4 py-3 text-sm text-slate-300">{sub.score !== null ? `${sub.score}%` : '—'}</td>                  <td className="px-4 py-3 text-sm">                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusStyles[sub.status] ?? 'text-slate-400 bg-slate-400/10'}`}>                      {statusLabels[sub.status] ?? sub.status}                    </span>                  </td>                  <td className="px-4 py-3 text-sm text-slate-400">{sub.submittedAt}</td>                  <td className="px-4 py-3 text-sm text-slate-400">{sub.answerCount ?? '-'}</td>                </motion.tr>              ))}            </tbody>          </table>        </div>      )}    </motion.div>  );};
+const SubmissionsSection: React.FC = () => {
+  const [submissions, setSubmissions] = useState<StudentSubmission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewingAnswers, setViewingAnswers] = useState<{ studentName: string; answers: any[] } | null>(null);
+  const [answersLoading, setAnswersLoading] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const response = await adminApi.getSubmissions();
+        if (response.success && Array.isArray(response.data)) {
+          setSubmissions(response.data);
+        }
+      } catch { /* ignore */ }
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  const handleViewAnswers = async (sub: StudentSubmission) => {
+    setAnswersLoading(true);
+    try {
+      const studentId = (sub as any).rollNumber || sub.name || sub.id;
+      const examCode = (sub as any).exam || (sub as any).examCode;
+      const res = await adminApi.getStudentAnswers(studentId, examCode);
+      if (res.success && Array.isArray(res.data)) {
+        setViewingAnswers({ studentName: sub.name, answers: res.data });
+      } else {
+        setViewingAnswers({ studentName: sub.name, answers: [] });
+      }
+    } catch {
+      setViewingAnswers({ studentName: sub.name, answers: [] });
+    }
+    setAnswersLoading(false);
+  };
+
+  const statusStyles: Record<string, string> = {
+    graded: 'text-green-400 bg-green-400/10',
+    pending: 'text-yellow-400 bg-yellow-400/10',
+    submitted: 'text-blue-400 bg-blue-400/10',
+  };
+  const statusLabels: Record<string, string> = {
+    graded: '✓ Graded',
+    pending: '⏳ Pending',
+    submitted: '📋 Submitted',
+  };
+
+  if (loading) return <LoadingOverlay />;
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
+      >
+        <h3 className="text-lg font-semibold text-white mb-6">Student Submissions</h3>
+        {submissions.length === 0 ? (
+          <p className="text-slate-400 text-sm text-center py-8">No submissions yet</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-700/50">
+                  {['Student', 'Exam', 'Score', 'Status', 'Submitted', 'Answers', 'Actions'].map((h) => (
+                    <th key={h} className="text-left px-4 py-3 text-sm font-semibold text-slate-400">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {submissions.map((sub, idx) => (
+                  <motion.tr key={sub.id ?? idx}
+                    initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.03 }}
+                    className="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-sm text-white font-medium">{sub.name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-300 font-mono">{sub.exam}</td>
+                    <td className="px-4 py-3 text-sm text-slate-300">{sub.score !== null ? `${sub.score}%` : '—'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusStyles[sub.status] ?? 'text-slate-400 bg-slate-400/10'}`}>
+                        {statusLabels[sub.status] ?? sub.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-400">{sub.submittedAt}</td>
+                    <td className="px-4 py-3 text-sm text-slate-400">{sub.answerCount ?? '-'}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => handleViewAnswers(sub)}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 transition-colors font-medium text-xs"
+                      >
+                        📄 View Answers
+                      </motion.button>
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Answers Modal */}
+      {viewingAnswers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setViewingAnswers(null)}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-slate-800 border border-slate-700/50 rounded-2xl p-6 max-w-3xl w-full mx-4 max-h-[80vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-white">Student Answers</h3>
+                <p className="text-sm text-slate-400 mt-1">{viewingAnswers.studentName}</p>
+              </div>
+              <button
+                onClick={() => setViewingAnswers(null)}
+                className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-600/50 flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {answersLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="w-8 h-8 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin" />
+              </div>
+            ) : viewingAnswers.answers.length === 0 ? (
+              <p className="text-slate-400 text-sm text-center py-12">No answers found for this student</p>
+            ) : (
+              <div className="space-y-4">
+                {viewingAnswers.answers.map((answer: any, idx: number) => (
+                  <div key={idx} className="bg-slate-700/30 border border-slate-600/30 rounded-xl p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+                        Question {answer.questionId ?? (answer.questionIndex != null ? answer.questionIndex + 1 : idx + 1)}
+                      </span>
+                      {answer.confidence !== undefined && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">
+                          Confidence: {Math.round(answer.confidence * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    {answer.question && (
+                      <p className="text-sm text-slate-300 mb-2 italic">{answer.question}</p>
+                    )}
+                    <div className="bg-slate-800/50 rounded-lg p-3 mt-2">
+                      <p className="text-xs text-slate-500 mb-1">Answer:</p>
+                      <p className="text-sm text-white whitespace-pre-wrap">
+                        {answer.formattedAnswer || answer.answer || answer.rawAnswer || answer.formattedText || answer.rawText || 'No answer text'}
+                      </p>
+                    </div>
+                    {answer.rawAnswer && answer.formattedAnswer && answer.rawAnswer !== answer.formattedAnswer && (
+                      <div className="bg-slate-800/30 rounded-lg p-3 mt-2">
+                        <p className="text-xs text-slate-500 mb-1">Raw Speech:</p>
+                        <p className="text-xs text-slate-400 italic whitespace-pre-wrap">{answer.rawAnswer}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+    </>
+  );
+};
 // ═══════════════════════════════════════════════════════════════════════════════
 //  SCORE MANAGEMENT SECTION
 // ═══════════════════════════════════════════════════════════════════════════════

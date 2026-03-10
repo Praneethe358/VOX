@@ -57,6 +57,10 @@ export function ExamInterface() {
   const [heardText, setHeardText] = useState('');          // always show what mic heard
   const [heardMatched, setHeardMatched] = useState(false);  // did it match a command?
 
+  // Resolve studentId from all possible fields
+  const resolvedStudentId = (student as any)?.studentId || (student as any)?.rollNumber || (student as any)?.registerNumber || sessionStorage.getItem('studentId') || 'UNKNOWN';
+  const resolvedStudentName = (student as any)?.name || (student as any)?.fullName || sessionStorage.getItem('studentName') || 'Student';
+
   const questionReadRef = useRef<number | string | null>(null);
   const silenceWarnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -170,8 +174,13 @@ export function ExamInterface() {
       setConfirmClearPending(false);
     }
 
-    // In SUBMISSION_GATE, only confirm_submission proceeds — anything else cancels
-    if (voiceState === 'SUBMISSION_GATE' && action !== 'confirm_submission') {
+    // In SUBMISSION_GATE, accept confirmation-like commands
+    if (voiceState === 'SUBMISSION_GATE') {
+      if (action === 'confirm_submission' || action === 'submit_exam' || action === 'im_ready' || action === 'confirm_answer') {
+        finalizeSubmission();
+        return;
+      }
+      // Any other recognized command cancels
       transition('COMMAND_MODE');
       speak('Submission cancelled. Returning to exam.');
       return;
@@ -233,7 +242,7 @@ export function ExamInterface() {
           selectedOption: optNum,
         }));
         playBeep('success');
-        try { await studentApi.saveResponse({ studentId: (student as any)?.studentId ?? 'UNKNOWN', examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: `Option ${optNum + 1}`, formattedAnswer: optText, confidence: 1 }); } catch {}
+        try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: `Option ${optNum + 1}`, formattedAnswer: optText, confidence: 1 }); } catch {}
         speak(`Option ${optNum + 1} selected: ${optText}.`);
         // Auto-advance to next question after a short delay
         if (currentIndex < questions.length - 1) {
@@ -303,13 +312,12 @@ export function ExamInterface() {
           const summaryMsg = unanswered > 0
             ? `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. `
             : 'All questions answered. ';
-          await speak(`${summaryMsg}Say confirm submission to finalize, or anything else to cancel.`);
+          transition('SUBMISSION_GATE');
+          await speak(`${summaryMsg}Say confirm submission, submit, or yes to finalize. Anything else will cancel.`);
         }
-        transition('SUBMISSION_GATE');
         break;
       case 'confirm_submission':
-        if (voiceState !== 'SUBMISSION_GATE') return;
-        finalizeSubmission();
+        // Handled by SUBMISSION_GATE guard above
         break;
       case 'im_ready':
         if (voiceState === 'PAUSE_MODE') { timerResume(); transition('COMMAND_MODE'); speak('Exam resumed.'); startEngine(); }
@@ -382,9 +390,9 @@ export function ExamInterface() {
     // Save to V1 autosave (MongoDB Atlas)
     try { await studentApi.v1AutosaveAnswer({ examSessionId: sessionId, questionNumber: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawSpeechText: rawTranscript, formattedAnswer: text }); } catch {}
     // Save to legacy response store
-    try { await studentApi.saveResponse({ studentId: (student as any)?.studentId ?? 'UNKNOWN', examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: rawTranscript, formattedAnswer: text, confidence: 1 }); } catch {}
+    try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: rawTranscript, formattedAnswer: text, confidence: 1 }); } catch {}
     // Log voice activity
-    try { await studentApi.logAudit({ studentId: (student as any)?.studentId ?? 'UNKNOWN', examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId: currentQuestion.id, wordCount: text.split(/\s+/).length } }); } catch {}
+    try { await studentApi.logAudit({ studentId: resolvedStudentId, examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId: currentQuestion.id, wordCount: text.split(/\s+/).length } }); } catch {}
     await speak('Answer saved.' + (currentIndex < questions.length - 1 ? ' Moving to next question.' : ' All questions answered.'));
     transition('COMMAND_MODE');
     if (currentIndex < questions.length - 1) { questionReadRef.current = null; setCurrentIndex(i => i + 1); }
@@ -394,13 +402,14 @@ export function ExamInterface() {
     transition('FINALIZE');
     stopEngine(); stopSpeaking();
     await speak('Submitting your exam. Please wait.');
-    const studentId = (student as any)?.studentId ?? 'UNKNOWN';
+    const studentId = resolvedStudentId;
+    const studentName = resolvedStudentName;
     // Submit to legacy endpoint
-    try { await studentApi.submitExamSession({ sessionId, examCode, studentId, answers: Array.from(answers.values()) } as any); } catch {}
+    try { await studentApi.submitExamSession({ sessionId, examCode, studentId, studentName, answers: Array.from(answers.values()) } as any); } catch {}
     // Submit to V1 endpoint
     try { await studentApi.v1SubmitSession(sessionId); } catch {}
     // Submit to legacy DB
-    try { await studentApi.logAudit({ studentId, examCode, action: 'EXAM_SUBMITTED', metadata: { answeredCount: answers.size, totalQuestions: questions.length } }); } catch {}
+    try { await studentApi.logAudit({ studentId, examCode, action: 'EXAM_SUBMITTED', metadata: { answeredCount: answers.size, totalQuestions: questions.length, studentName } }); } catch {}
     // End exam via legacy student API
     try { await studentApi.endExam(studentId, examCode); } catch {}
     setIsSubmitted(true);
@@ -611,7 +620,7 @@ export function ExamInterface() {
         <AnimatePresence>
           {voiceState === 'SUBMISSION_GATE' && (
             <SubmissionGate
-              windowSeconds={20}
+              windowSeconds={30}
               onTimeout={() => { transition('COMMAND_MODE'); speak('Submission cancelled. Returning to exam.'); }}
             />
           )}

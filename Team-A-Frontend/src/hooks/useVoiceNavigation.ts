@@ -159,8 +159,8 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
     playBeepRef.current('command');
     switch (cmd.action) {
       case 'go_dashboard':
-        void speakRef.current('Going to dashboard.');
-        navigateRef.current('/student/dashboard');
+        void speakRef.current('Going to exam list.');
+        navigateRef.current('/student/exams');
         break;
       case 'go_exams':
         void speakRef.current('Opening exam list.');

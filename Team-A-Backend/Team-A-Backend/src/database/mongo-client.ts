@@ -140,7 +140,79 @@ export class MongoService {
   }
 
   async getSubmissions(): Promise<any[]> {
-    return await this.col("responses").find({}).toArray();
+    const submissions = await this.col("submissions").find({}).sort({ submittedAt: -1 }).toArray();
+    const responses = await this.col("responses").find({}).toArray();
+    const students = await this.col("students").find({}).toArray();
+
+    const studentNameById = new Map<string, string>();
+    students.forEach((s: any) => {
+      const key = String(s.studentId || s.rollNumber || s.registerNumber || "").trim();
+      if (!key) return;
+      studentNameById.set(key, String(s.name || s.fullName || key));
+    });
+    // Also look up names from face_embeddings collection
+    try {
+      const faceEmbeddings = await this.col("face_embeddings").find({}).toArray();
+      faceEmbeddings.forEach((fe: any) => {
+        const key = String(fe.studentId || "").trim();
+        if (!key || studentNameById.has(key)) return;
+        studentNameById.set(key, String(fe.studentName || fe.name || key));
+      });
+    } catch {}
+
+    const normalizedFromSubmissions = submissions.map((s: any, idx: number) => {
+      const studentId = String(s.studentId || s.rollNumber || "").trim();
+      const totalQuestions = Number(s.totalQuestions || 0);
+      const answerCount = Number(s.answeredCount || (Array.isArray(s.answers) ? s.answers.length : 0));
+      const score = totalQuestions > 0 ? Math.round((answerCount / totalQuestions) * 100) : null;
+
+      return {
+        id: String(s._id || s.sessionId || `${studentId}-${s.examCode}-${idx}`),
+        name: studentNameById.get(studentId) || s.studentName || studentId || "Unknown Student",
+        exam: String(s.examCode || s.exam || "Unknown Exam"),
+        score,
+        status: s.status === "graded" ? "graded" : "submitted",
+        submittedAt: s.submittedAt ? new Date(s.submittedAt).toLocaleString() : "—",
+        rollNumber: studentId || undefined,
+        sessionId: String(s.sessionId || ""),
+        answerCount,
+      };
+    });
+
+    if (normalizedFromSubmissions.length > 0) {
+      return normalizedFromSubmissions;
+    }
+
+    // Fallback for older data: aggregate raw response rows by student+exam
+    const grouped = new Map<string, { studentId: string; examCode: string; answerCount: number; submittedAt: string }>();
+    responses.forEach((r: any) => {
+      const studentId = String(r.rollNumber || r.studentId || "").trim();
+      const examCode = String(r.examCode || "Unknown Exam").trim();
+      const key = `${studentId}::${examCode}`;
+      const ts = String(r.timestamp || r.submittedAt || new Date().toISOString());
+
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.answerCount += 1;
+        if (new Date(ts).getTime() > new Date(existing.submittedAt).getTime()) {
+          existing.submittedAt = ts;
+        }
+      } else {
+        grouped.set(key, { studentId, examCode, answerCount: 1, submittedAt: ts });
+      }
+    });
+
+    return Array.from(grouped.values()).map((g, idx) => ({
+      id: `${g.studentId}-${g.examCode}-${idx}`,
+      name: studentNameById.get(g.studentId) || g.studentId || "Unknown Student",
+      exam: g.examCode,
+      score: null,
+      status: "pending",
+      submittedAt: g.submittedAt ? new Date(g.submittedAt).toLocaleString() : "—",
+      rollNumber: g.studentId || undefined,
+      sessionId: undefined,
+      answerCount: g.answerCount,
+    }));
   }
 
   async getStudentsForScoring(): Promise<any[]> {
@@ -154,13 +226,70 @@ export class MongoService {
     );
   }
 
-  async getStudentAnswers(idOrRoll: string): Promise<any[]> {
-    return await this.col("responses").find({ rollNumber: idOrRoll }).toArray();
+  async getStudentAnswers(idOrRoll: string, examCode?: string): Promise<any[]> {
+    // Build query: search by studentId/rollNumber, optionally filter by exam
+    const studentFilter = { $or: [{ studentId: idOrRoll }, { rollNumber: idOrRoll }] } as any;
+    const query = examCode ? { ...studentFilter, examCode } : studentFilter;
+
+    const fromResponses = await this.col("responses").find(query).sort({ _id: -1 }).toArray();
+    let answers = fromResponses;
+
+    if (answers.length === 0) {
+      // Fallback: check submissions collection for embedded answers
+      const submission = await this.col("submissions").findOne(studentFilter);
+      if (submission?.answers && Array.isArray(submission.answers)) {
+        answers = submission.answers;
+      }
+    }
+
+    // Deduplicate: keep only the latest answer per questionId (last write wins)
+    const seen = new Map<string | number, any>();
+    for (const ans of answers) {
+      const key = ans.questionId ?? ans.questionIndex ?? ans._id;
+      seen.set(key, ans); // later entries (sorted _id desc → reversed) overwrite earlier ones
+    }
+    // Reverse so latest answer per question is kept, then return in question order
+    const deduped = Array.from(seen.values());
+    deduped.sort((a: any, b: any) => {
+      const aQ = a.questionId ?? a.questionIndex ?? 0;
+      const bQ = b.questionId ?? b.questionIndex ?? 0;
+      return Number(aQ) - Number(bQ);
+    });
+    return deduped;
   }
 
   async getStudentDashboardStats(idOrRoll: string): Promise<{ completedExams: number; upcomingExams: number; averageScore: number; totalTimeSpent: number }> {
-    const completedExams = await this.col("responses").countDocuments({ rollNumber: idOrRoll });
-    return { completedExams, upcomingExams: 0, averageScore: 0, totalTimeSpent: 0 };
+    // Count completed exams from submissions collection
+    const submissions = await this.col("submissions").find({ studentId: idOrRoll, status: 'submitted' }).toArray();
+    const completedExams = submissions.length;
+
+    // If no submissions, fall back to counting responses
+    const fallbackCount = completedExams || await this.col("responses").countDocuments({ rollNumber: idOrRoll });
+
+    // Count upcoming exams (published exams not yet submitted by this student)
+    let upcomingExams = 0;
+    try {
+      const allExams = await this.col("exams").countDocuments({ published: true });
+      upcomingExams = Math.max(0, allExams - completedExams);
+    } catch {}
+
+    // Calculate average score from submissions
+    let averageScore = 0;
+    if (submissions.length > 0) {
+      const totalScore = submissions.reduce((sum: number, s: any) => {
+        const answered = s.answeredCount || 0;
+        const total = s.totalQuestions || 1;
+        return sum + Math.round((answered / total) * 100);
+      }, 0);
+      averageScore = Math.round(totalScore / submissions.length);
+    }
+
+    return {
+      completedExams: completedExams || fallbackCount,
+      upcomingExams,
+      averageScore,
+      totalTimeSpent: completedExams, // approximate hours
+    };
   }
 
   // ── Results ──────────────────────────────────────────

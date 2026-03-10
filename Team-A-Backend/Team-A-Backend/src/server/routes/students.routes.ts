@@ -4,11 +4,14 @@ import { sendError, sendSuccess } from "../http-response";
 
 const router = Router();
 
-// GET /api/students/dashboard  (student dashboard stats)
-// Accepts optional ?studentId= query param or falls back to a demo student
+// GET /api/students/dashboard
 router.get("/dashboard", async (req: Request, res: Response) => {
   try {
-    const studentId = (req.query.studentId as string) || (req.headers['x-student-id'] as string) || 'DEMO_STUDENT_001';
+    const studentId = (req.query.studentId as string) || (req.headers['x-student-id'] as string);
+    if (!studentId) {
+      sendError(res, "studentId required", 400);
+      return;
+    }
     const stats = await dataProvider.getStudentDashboardStats(studentId);
     sendSuccess(res, stats);
   } catch (error) {
@@ -19,18 +22,14 @@ router.get("/dashboard", async (req: Request, res: Response) => {
 // GET /api/students/profile
 router.get("/profile", async (req: Request, res: Response) => {
   try {
-    const studentId = (req.query.studentId as string) || (req.headers['x-student-id'] as string) || 'DEMO_STUDENT_001';
+    const studentId = (req.query.studentId as string) || (req.headers['x-student-id'] as string);
+    if (!studentId) {
+      sendError(res, "studentId required", 400);
+      return;
+    }
     const student = await dataProvider.findStudentById(studentId);
     if (!student) {
-      // Return a generic profile rather than 404 so demo mode works
-      sendSuccess(res, {
-        student: {
-          studentId: 'DEMO_STUDENT_001',
-          name: 'Demo Student',
-          email: 'demo@student.local',
-          rollNumber: 'DEMO001',
-        },
-      });
+      sendError(res, "Student not found", 404);
       return;
     }
     sendSuccess(res, {

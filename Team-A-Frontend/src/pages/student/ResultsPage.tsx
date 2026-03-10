@@ -112,7 +112,7 @@ export default function ResultsPage() {
             <p className="text-slate-500 text-sm mt-1">Your exam performance history</p>
           </div>
           <button
-            onClick={() => navigate('/student/dashboard')}
+            onClick={() => navigate('/student/exams')}
             className="glass-card px-4 py-2.5 rounded-xl text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
           >
             <span className="text-lg">‹</span> Back
