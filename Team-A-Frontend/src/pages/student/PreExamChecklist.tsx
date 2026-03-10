@@ -5,12 +5,14 @@
  * speaks errors aloud.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ExamData } from '../../types/student/exam.types';
 import { useExamContext } from '../../context/ExamContext';
 import { useVoiceContext } from '../../context/VoiceContext';
+import { useVoiceEngine } from '../../hooks/student/useVoiceEngine';
+import type { CommandAction } from '../../hooks/student/useVoiceEngine';
 import { VoiceListener } from '../../components/student/VoiceListener';
 import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
 
@@ -31,7 +33,7 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   const location = useLocation();
   const { examId } = useParams();
   const { setExam, setSession, student } = useExamContext();
-  const { speak, playBeep } = useVoiceContext();
+  const { speak, playBeep, isSpeaking } = useVoiceContext();
   
   // Try to get exam from props, then location state, then context
   const exam = propExam || (location.state as any)?.exam;
@@ -46,7 +48,45 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   ]);
 
   const [allPassed, setAllPassed] = useState(false);
-  const hasSpokenPassedRef = React.useRef(false);
+  const [waitingForVoice, setWaitingForVoice] = useState(false);
+  const [voiceAction, setVoiceAction] = useState<'none' | 'start' | 'back'>('none');
+  const hasSpokenPassedRef = useRef(false);
+  const hasStartedEngineRef = useRef(false);
+
+  // ── Voice engine for hands-free "begin exam" / "go back" ──────────────
+  const handleVoiceCommand = useCallback(
+    (action: CommandAction, _confidence: number, _raw: string) => {
+      if (action === 'start_exam') {
+        playBeep('success');
+        setVoiceAction('start');
+      } else if (action === 'previous_question') {
+        // "go back" / "back" / "previous" maps to previous_question in engine
+        playBeep('command');
+        setVoiceAction('back');
+      }
+    },
+    [playBeep],
+  );
+
+  const {
+    start: startEngine,
+    stop: stopEngine,
+    isListening: engineListening,
+    lastHeardText,
+    wasMatched,
+  } = useVoiceEngine(handleVoiceCommand);
+
+  // ── React to voice action ─────────────────────────────────────────────
+  useEffect(() => {
+    if (voiceAction === 'start' && allPassed) {
+      stopEngine();
+      handleStart();
+    } else if (voiceAction === 'back') {
+      stopEngine();
+      speak('Going back.');
+      navigate(-1);
+    }
+  }, [voiceAction]);
 
   // Run all system checks
   useEffect(() => {
@@ -187,21 +227,43 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
     if (passed && checklist.length > 0 && !hasSpokenPassedRef.current) {
       hasSpokenPassedRef.current = true;
       playBeep('success');
+      setWaitingForVoice(true);
       speak(
         'All system checks passed successfully. ' +
         (exam ? `Ready to start ${exam.title}. ` : '') +
-        'The exam will begin automatically, or press the start button.',
+        'Say "begin exam" to start, or say "go back" to return.',
         { rate: 0.95 },
       );
-      // Auto-start after 3 seconds if all passed
-      const t = setTimeout(() => handleStart(), 3000);
-      return () => clearTimeout(t);
+      // Start voice engine to listen for "begin exam" command
+      // Engine will be started when TTS finishes speaking (see isSpeaking effect below)
+      if (!hasStartedEngineRef.current) {
+        hasStartedEngineRef.current = true;
+      }
     } else if (failed.length > 0 && checklist.every(item => item.status !== 'pending' && item.status !== 'checking')) {
       playBeep('error');
       const failedNames = failed.map(f => f.label).join(', ');
       speak(`System check failed for: ${failedNames}. Please fix these issues before starting the exam.`);
     }
   }, [checklist]);
+
+  // ── Start voice engine after TTS finishes the "say begin exam" announcement ──
+  const engineStartedRef = useRef(false);
+  const wasSpeakingRef = useRef(false);
+  useEffect(() => {
+    // Track TTS state transitions: must have been speaking at least once before starting
+    if (isSpeaking) {
+      wasSpeakingRef.current = true;
+    }
+    if (waitingForVoice && !isSpeaking && wasSpeakingRef.current && hasStartedEngineRef.current && !engineStartedRef.current) {
+      engineStartedRef.current = true;
+      // Small delay after TTS ends to avoid mic picking up speaker echo
+      const t = setTimeout(() => {
+        console.log('[PreExamChecklist] TTS finished, starting voice engine for "begin exam" command');
+        startEngine();
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  }, [waitingForVoice, isSpeaking, startEngine]);
 
   const passedCount = checklist.filter(i => i.status === 'success').length;
   const progress = (passedCount / checklist.length) * 100;
@@ -215,7 +277,12 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
       </div>
 
       {/* Voice UI */}
-      <VoiceListener isListening={true} mode="Navigation" position="top-right" compact />
+      <VoiceListener
+        isListening={engineListening}
+        mode={waitingForVoice ? 'Command' : 'Navigation'}
+        interimText={lastHeardText}
+        position="top-right"
+      />
       <VoiceSpeaker position="bottom-center" />
 
       <motion.div
@@ -340,10 +407,63 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
           ))}
         </div>
 
+        {/* Voice Command Hint */}
+        <AnimatePresence>
+          {waitingForVoice && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-4 space-y-3"
+            >
+              <div className="flex items-center justify-between glass-card rounded-xl px-5 py-4 border-indigo-500/[0.1]">
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    className="w-2.5 h-2.5 rounded-full bg-indigo-400"
+                    animate={{ scale: [1, 1.3, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                  />
+                  <p className="text-sm text-slate-300">
+                    Say{' '}
+                    <span className="font-mono font-semibold text-indigo-300 bg-indigo-500/[0.1] px-2 py-0.5 rounded-md">
+                      "Begin Exam"
+                    </span>
+                  </p>
+                </div>
+                <span className={`text-xs ${engineListening ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  🎙️ {engineListening ? 'Listening...' : isSpeaking ? 'Speaking...' : 'Starting mic...'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 px-4">
+                <span className="text-[11px] text-slate-600">or say</span>
+                <span className="font-mono text-[11px] text-slate-500 bg-white/[0.03] px-2 py-0.5 rounded">
+                  "Go Back"
+                </span>
+              </div>
+
+              {/* Last heard feedback */}
+              {lastHeardText && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="px-4"
+                >
+                  <p className={`text-[11px] italic ${
+                    wasMatched ? 'text-emerald-400' : 'text-slate-500'
+                  }`}>
+                    Heard: "{lastHeardText}"
+                  </p>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Action Buttons */}
         <div className="flex gap-3">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => { stopEngine(); navigate(-1); }}
             className="flex-1 px-4 py-3 rounded-xl glass-card text-slate-400 hover:text-slate-200 text-sm font-medium transition-colors"
           >
             ‹ Back
@@ -352,7 +472,7 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
           <motion.button
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.98 }}
-            onClick={handleStart}
+            onClick={() => { stopEngine(); handleStart(); }}
             disabled={!allPassed}
             className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
               allPassed
@@ -379,6 +499,7 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
               <p className="text-xs font-medium text-slate-300 mb-0.5">Kiosk Mode</p>
               <p className="text-[11px] text-slate-500 leading-relaxed">
                 The exam runs in fullscreen kiosk mode. You won't be able to switch tabs or exit until submission.
+                This portal is completely hands-free — use voice commands throughout.
               </p>
             </div>
           </div>
