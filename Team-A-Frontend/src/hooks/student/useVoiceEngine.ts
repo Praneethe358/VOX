@@ -56,8 +56,8 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'stop_dictating',
-    phrases: ['stop dictating', 'done', 'finished speaking', 'stop', 'i am done', 'end dictation',
-      'stop speaking', 'finish speaking', 'i have finished', 'done speaking'],
+    phrases: ['stop dictating', 'done dictating', 'finished speaking', 'i am done', 'end dictation',
+      'stop speaking', 'finish speaking', 'i have finished', 'done speaking', 'stop recording'],
   },
   {
     action: 'repeat_question',
@@ -87,7 +87,7 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'clear_answer',
-    phrases: ['clear answer', 'delete answer', 'erase answer', 'remove answer', 'clear'],
+    phrases: ['clear answer', 'delete answer', 'erase answer', 'remove answer', 'clear my answer'],
   },
   {
     action: 'confirm_clear',
@@ -99,7 +99,7 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'resume_exam',
-    phrases: ['resume exam', 'continue exam', "i'm back", 'i am back', 'resume', 'continue'],
+    phrases: ['resume exam', 'continue exam', "i'm back", 'i am back', 'resume exam now'],
   },
   {
     action: 'confirm_answer',
@@ -115,7 +115,7 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'submit_exam',
-    phrases: ['submit exam', 'finish exam', 'end exam', 'submit', 'finish'],
+    phrases: ['submit exam', 'finish exam', 'end exam', 'submit my exam', 'i want to submit'],
   },
   {
     action: 'confirm_submission',
@@ -129,22 +129,22 @@ const COMMAND_TABLE: CommandEntry[] = [
   {
     action: 'option_1',
     phrases: ['option 1', 'option one', 'first option', 'answer 1', 'answer one',
-      'choice 1', 'choice one', 'option a', 'answer a', 'select 1', 'select one', 'select a', '1', 'one', 'a'],
+      'choice 1', 'choice one', 'option a', 'answer a', 'select 1', 'select one', 'select a'],
   },
   {
     action: 'option_2',
     phrases: ['option 2', 'option two', 'second option', 'answer 2', 'answer two',
-      'choice 2', 'choice two', 'option b', 'answer b', 'select 2', 'select two', 'select b', '2', 'two', 'b'],
+      'choice 2', 'choice two', 'option b', 'answer b', 'select 2', 'select two', 'select b'],
   },
   {
     action: 'option_3',
     phrases: ['option 3', 'option three', 'third option', 'answer 3', 'answer three',
-      'choice 3', 'choice three', 'option c', 'answer c', 'select 3', 'select three', 'select c', '3', 'three', 'c'],
+      'choice 3', 'choice three', 'option c', 'answer c', 'select 3', 'select three', 'select c'],
   },
   {
     action: 'option_4',
     phrases: ['option 4', 'option four', 'fourth option', 'answer 4', 'answer four',
-      'choice 4', 'choice four', 'option d', 'answer d', 'select 4', 'select four', 'select d', '4', 'four', 'd'],
+      'choice 4', 'choice four', 'option d', 'answer d', 'select 4', 'select four', 'select d'],
   },
 ];
 
@@ -226,6 +226,8 @@ export function matchCommand(raw: string): { action: CommandAction; confidence: 
 export interface UseVoiceEngineReturn {
   isListening: boolean;
   lastRawText: string;
+  lastHeardText: string;    // always set — even for unmatched text
+  wasMatched: boolean;      // whether lastHeardText matched a command
   interimRawText: string;
   failCount: number;
   lastError: string | null;
@@ -240,6 +242,8 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
   const { voiceState, playBeep, isSpeaking } = useVoiceContext();
   const [isListening, setIsListening] = useState(false);
   const [lastRawText, setLastRawText] = useState('');
+  const [lastHeardText, setLastHeardText] = useState('');
+  const [wasMatched, setWasMatched] = useState(false);
   const [interimRawText, setInterimRawText] = useState('');
   const [failCount, setFailCount] = useState(0);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -253,6 +257,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
   const onCommandRef = useRef(onCommand);
   onCommandRef.current = onCommand;
   const isSpeakingRef = useRef(false);
+  const ttsStoppedAtRef = useRef(0);       // timestamp when TTS last stopped
   const isSupported = Boolean(
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition,
   );
@@ -314,9 +319,16 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     const runOneChunk = async () => {
       if (!isActiveRef.current || !usingBackendSttRef.current || !mediaStreamRef.current) return;
 
-      // Pause while TTS is speaking to avoid echo
+      // Pause while TTS is speaking to avoid Whisper hearing TTS audio
       if (isSpeakingRef.current) {
-        backendLoopTimerRef.current = setTimeout(runOneChunk, 400);
+        backendLoopTimerRef.current = setTimeout(runOneChunk, 500);
+        return;
+      }
+
+      // Post-TTS cooldown — wait 1.2 s after TTS finishes so reverb/echo dies
+      const msSinceTts = Date.now() - ttsStoppedAtRef.current;
+      if (ttsStoppedAtRef.current > 0 && msSinceTts < 1200) {
+        backendLoopTimerRef.current = setTimeout(runOneChunk, 1200 - msSinceTts);
         return;
       }
 
@@ -341,21 +353,25 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
           console.log('[VoiceEngine] Backend STT: sending', audioBlob.size, 'bytes to /api/ai/stt-command');
           const result = await apiService.convertCommandToText(audioBlob);
           const raw = (result?.text ?? '').trim();
-          console.log('[VoiceEngine] Backend STT result:', raw || '(empty)');
+          const confidence = result?.confidence ?? 0;
+          console.log('[VoiceEngine] Backend STT result:', raw || '(empty)', '| confidence:', confidence.toFixed(2));
 
-          // Filter out Whisper hallucinations (phantom text from silence/noise)
+          // Filter out low-confidence results and Whisper hallucinations
           const normalized = raw.toLowerCase().replace(/[^\w\s]/g, '').trim();
-          if (raw && normalized.length >= 3 && !WHISPER_HALLUCINATIONS.has(normalized)) {
+          if (raw && confidence >= 0.3 && normalized.length >= 3 && !WHISPER_HALLUCINATIONS.has(normalized)) {
             setLastRawText(raw);
+            setLastHeardText(raw);
             const matched = matchCommand(raw);
             if (matched) {
               console.log('[VoiceEngine] Backend STT matched command:', matched.action);
+              setWasMatched(true);
               setFailCount(0);
               setLastError(null);
               playBeep('command');
               onCommandRef.current(matched.action, matched.confidence, raw);
             } else {
               console.log('[VoiceEngine] Backend STT no command match for:', raw);
+              setWasMatched(false);
               setFailCount(c => c + 1);
             }
           } else if (raw) {
@@ -373,9 +389,10 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
 
       try {
         recorder.start();
+        // 5 s chunks give Whisper enough context on CPU
         setTimeout(() => {
           if (recorder.state !== 'inactive') recorder.stop();
-        }, 3500);
+        }, 5000);
       } catch {
         setLastError('Unable to start backend speech capture.');
         setIsListening(false);
@@ -400,12 +417,19 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
   }, [playBeep, startBackendSttLoop]);
 
   // Keep isSpeakingRef in sync with TTS state so recognition pauses during speech
-  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  useEffect(() => {
+    const wasSpeaking = isSpeakingRef.current;
+    isSpeakingRef.current = isSpeaking;
+    // Record timestamp when TTS transitions from speaking → silent
+    if (wasSpeaking && !isSpeaking) {
+      ttsStoppedAtRef.current = Date.now();
+    }
+  }, [isSpeaking]);
 
   // Stop when component using this hook unmounts
   useEffect(() => {
     return () => stop();
   }, [stop]);
 
-  return { isListening, lastRawText, interimRawText, failCount, lastError, isSupported, start, stop };
+  return { isListening, lastRawText, lastHeardText, wasMatched, interimRawText, failCount, lastError, isSupported, start, stop };
 }

@@ -31,6 +31,7 @@ export function StudentDashboard() {
     averageScore: 0,
     totalTimeSpent: 0,
   });
+  const [recentActivity, setRecentActivity] = useState<{ exam: string; status: string; score: string; date: string; statusColor: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ── Voice: auto-speak welcome ──────────────────────────────────────────
@@ -96,7 +97,8 @@ export function StudentDashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getDashboardStudentStats();
+      const studentRoll = (student as any)?.rollNumber || (student as any)?.studentId || '';
+      const response = await apiService.getDashboardStudentStats(studentRoll || undefined);
       const data = response.data as Partial<DashboardStats> | undefined;
 
       setStats({
@@ -105,6 +107,29 @@ export function StudentDashboard() {
         averageScore: data?.averageScore ?? 0,
         totalTimeSpent: data?.totalTimeSpent ?? 0,
       });
+
+      // Fetch real submissions for recent activity
+      try {
+        const subsRes = await apiService.getSubmissions();
+        const submissions = Array.isArray(subsRes.data) ? subsRes.data : [];
+        const mySubmissions = submissions
+          .filter((s: any) => s.rollNumber === studentRoll || !studentRoll)
+          .slice(0, 5);
+
+        if (mySubmissions.length > 0) {
+          setRecentActivity(mySubmissions.map((s: any) => {
+            const answeredPct = typeof s.score === 'number' ? s.score : 0;
+            const dateStr = s.submittedAt ? new Date(s.submittedAt).toLocaleDateString() : 'Unknown';
+            return {
+              exam: s.exam || 'Exam',
+              status: s.status === 'graded' ? 'Graded' : 'Submitted',
+              score: `${answeredPct}%`,
+              date: dateStr,
+              statusColor: 'text-emerald-400',
+            };
+          }));
+        }
+      } catch {}
     } catch (err) {
       console.error('Failed to load dashboard:', err);
     } finally {
@@ -297,12 +322,7 @@ export function StudentDashboard() {
         >
           <h2 className="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-4">Recent Activity</h2>
           <div className="space-y-2">
-            {[
-              { exam: 'Mathematics Unit 1', status: 'Completed', score: '92%', date: 'Today', statusColor: 'text-emerald-400' },
-              { exam: 'Physics Unit 2', status: 'In Progress', score: '—', date: 'Today', statusColor: 'text-blue-400' },
-              { exam: 'Chemistry Basic', status: 'Completed', score: '78%', date: 'Yesterday', statusColor: 'text-emerald-400' },
-              { exam: 'Biology Advanced', status: 'Completed', score: '85%', date: '2 days ago', statusColor: 'text-emerald-400' },
-            ].map((activity, idx) => (
+            {recentActivity.length > 0 ? recentActivity.map((activity, idx) => (
               <motion.div key={idx} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55 + idx * 0.05 }}
                 className="flex items-center justify-between p-3 rounded-xl hover:bg-white/[0.02] transition-colors group">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -319,7 +339,11 @@ export function StudentDashboard() {
                   )}
                 </div>
               </motion.div>
-            ))}
+            )) : (
+              <div className="text-center py-6">
+                <p className="text-slate-500 text-sm">No recent exams. Take an exam to see your activity here.</p>
+              </div>
+            )}
           </div>
         </motion.div>
 

@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useExamContext } from '../../context/ExamContext';
 import apiService from '../../services/student/api.service';
@@ -18,6 +18,8 @@ import { VoiceCommandEngine } from '../../components/student/VoiceCommandEngine'
 
 export function SubmissionConfirmation() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const navState = (location.state || {}) as any;
   const { exam, session } = useExamContext();
   const [submissionData, setSubmissionData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(true);
@@ -45,39 +47,64 @@ export function SubmissionConfirmation() {
   });
 
   useEffect(() => {
-    if (!session || !exam) {
+    // If navigation state was passed from ExamInterface, use it directly
+    if (navState.answeredQuestions !== undefined) {
+      setSubmissionData({
+        examCode: navState.examCode || exam?.examCode || '',
+        examTitle: navState.examTitle || exam?.title || 'Exam',
+        submittedAt: new Date().toLocaleString(),
+        totalQuestions: navState.totalQuestions || 0,
+        answeredQuestions: navState.answeredQuestions || 0,
+        markedForReview: 0,
+        timeSpent: navState.timeSpent || 0,
+        estimatedScore: navState.estimatedScore || 0,
+        totalMarks: navState.totalMarks || navState.totalQuestions || 0,
+        durationMinutes: navState.durationMinutes || exam?.durationMinutes || 60,
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Fallback: try session/exam from context
+    if (!session && !exam) {
       navigate('/student/exams');
       return;
     }
 
     submitSession();
-  }, [session, exam, navigate]);
+  }, [session, exam, navigate, navState]);
 
   const submitSession = async () => {
     try {
-      if (!session || !exam) {
+      if (!session && !exam) {
         throw new Error('Missing session or exam data');
       }
 
-      const response = await apiService.submitExam(session);
+      let response: any = { data: {} };
+      if (session) {
+        try { response = await apiService.submitExam(session); } catch {}
+      }
 
-      const totalQuestions = exam.sections.reduce((sum: number, s: any) => sum + s.questions.length, 0);
-      const answeredQuestions = Array.isArray(session.answers) ? session.answers.length : 0;
+      const totalQuestions = exam?.sections
+        ? exam.sections.reduce((sum: number, s: any) => sum + (s.questions?.length || 0), 0)
+        : 0;
+      const answeredQuestions = Array.isArray(session?.answers) ? session!.answers.length : 0;
 
-      const timeSpent = session.endTime
+      const timeSpent = session?.endTime
         ? Math.floor((new Date(session.endTime).getTime() - new Date(session.startTime).getTime()) / 1000 / 60)
-        : exam.durationMinutes;
+        : (exam?.durationMinutes || 60);
 
       setSubmissionData({
-        examCode: exam.examCode,
-        examTitle: exam.title,
+        examCode: exam?.examCode || '',
+        examTitle: exam?.title || 'Exam',
         submittedAt: new Date().toLocaleString(),
         totalQuestions,
         answeredQuestions,
         markedForReview: 0,
         timeSpent: timeSpent,
-        estimatedScore: response.data?.results?.estimatedScore ?? answeredQuestions * (exam.totalMarks / Math.max(totalQuestions, 1)),
-        totalMarks: exam.totalMarks,
+        estimatedScore: response.data?.results?.estimatedScore ?? answeredQuestions,
+        totalMarks: exam?.totalMarks || totalQuestions,
+        durationMinutes: exam?.durationMinutes || 60,
       });
 
       setIsSubmitting(false);
@@ -87,7 +114,7 @@ export function SubmissionConfirmation() {
     }
   };
 
-  if (!exam) {
+  if (!exam && !submissionData) {
     return (
       <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center">
         <p className="text-slate-500 text-sm">Loading...</p>
@@ -110,8 +137,9 @@ export function SubmissionConfirmation() {
     );
   }
 
-  const completionPct = submissionData ? Math.round((submissionData.answeredQuestions / submissionData.totalQuestions) * 100) : 0;
-  const timePct = submissionData ? Math.round((submissionData.timeSpent / exam.durationMinutes) * 100) : 0;
+  const completionPct = submissionData ? Math.round((submissionData.answeredQuestions / Math.max(submissionData.totalQuestions, 1)) * 100) : 0;
+  const durMin = submissionData?.durationMinutes || exam?.durationMinutes || 60;
+  const timePct = submissionData ? Math.round((submissionData.timeSpent / durMin) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-[#0a0e1a] p-4 relative overflow-hidden">
@@ -187,7 +215,7 @@ export function SubmissionConfirmation() {
             <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
               <p className="text-[11px] text-slate-500 mb-1">Time Used</p>
               <p className="text-sm text-white font-medium">
-                {submissionData?.timeSpent} / {exam.durationMinutes} min
+                {submissionData?.timeSpent} / {durMin} min
               </p>
             </div>
             <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">

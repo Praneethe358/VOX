@@ -54,6 +54,8 @@ export function ExamInterface() {
   const [formatError, setFormatError] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [confirmClearPending, setConfirmClearPending] = useState(false);
+  const [heardText, setHeardText] = useState('');          // always show what mic heard
+  const [heardMatched, setHeardMatched] = useState(false);  // did it match a command?
 
   const questionReadRef = useRef<number | string | null>(null);
   const silenceWarnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,7 +82,7 @@ export function ExamInterface() {
             options: Array.isArray(q.options) ? q.options : undefined,
             correctAnswer: q.correctAnswer,
           }));
-          setQuestions(qs.length ? qs : [{ id: 1, text: 'Sample question.', marks: 1 }]);
+          setQuestions(qs);
         }
       } catch { /* continue */ }
     };
@@ -158,9 +160,27 @@ export function ExamInterface() {
     useDictation({ onDictationEnd: handleDictationEnd, silenceTimeout: 3500 });
 
   // ── Command handler ─────────────────────────────────────────────────────────
-  async function handleCommand(action: string, _confidence: number) {
+  async function handleCommand(action: string, _confidence: number, rawText?: string) {
+    // Always update the heard-text display
+    if (rawText) { setHeardText(rawText); setHeardMatched(true); }
     if (silenceWarnTimerRef.current) { clearTimeout(silenceWarnTimerRef.current); silenceWarnTimerRef.current = null; }
+
+    // Cancel pending clear if any command other than confirm_clear arrives
+    if (confirmClearPending && action !== 'confirm_clear') {
+      setConfirmClearPending(false);
+    }
+
+    // In SUBMISSION_GATE, only confirm_submission proceeds — anything else cancels
+    if (voiceState === 'SUBMISSION_GATE' && action !== 'confirm_submission') {
+      transition('COMMAND_MODE');
+      speak('Submission cancelled. Returning to exam.');
+      return;
+    }
+
     switch (action) {
+      case 'start_exam':
+        speak('Exam is in progress. Say a command like next question, option 1, or start answering.');
+        break;
       case 'next_question':
         if (voiceState !== 'COMMAND_MODE') return;
         navigateQ(1);
@@ -181,6 +201,14 @@ export function ExamInterface() {
         }
         break;
       case 'start_answering':
+        if (voiceState === 'ANSWER_REVIEW') {
+          // Allow re-starting dictation from answer review
+          stopEngine(); setRawTranscript(''); setFormattedAnswer(''); resetDictation();
+          transition('DICTATION_MODE');
+          await speak('Re-dictating. Speak your new answer.');
+          startDictation();
+          return;
+        }
         if (voiceState !== 'COMMAND_MODE') return;
         if (currentQuestion?.type === 'mcq') { speak('This is a multiple choice question. Say option 1, 2, 3, or 4.'); return; }
         stopEngine();
@@ -206,8 +234,13 @@ export function ExamInterface() {
         }));
         playBeep('success');
         try { await studentApi.saveResponse({ studentId: (student as any)?.studentId ?? 'UNKNOWN', examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: `Option ${optNum + 1}`, formattedAnswer: optText, confidence: 1 }); } catch {}
-        await speak(`Option ${optNum + 1} selected: ${optText}. Answer saved.` + (currentIndex < questions.length - 1 ? ' Moving to next question.' : ''));
-        if (currentIndex < questions.length - 1) { questionReadRef.current = null; setCurrentIndex(i => i + 1); }
+        speak(`Option ${optNum + 1} selected: ${optText}.`);
+        // Auto-advance to next question after a short delay
+        if (currentIndex < questions.length - 1) {
+          setTimeout(() => { questionReadRef.current = null; setCurrentIndex(i => i + 1); }, 1800);
+        } else {
+          setTimeout(() => speak('All questions answered. Say submit exam when ready.'), 2000);
+        }
         break;
       }
       case 'stop_dictating':
@@ -228,20 +261,27 @@ export function ExamInterface() {
       case 'continue_dictation':
         if (voiceState !== 'ANSWER_REVIEW') return;
         stopEngine(); transition('DICTATION_MODE');
-        await speak('Continuing. Speak to add more.');
+        await speak('Continuing. Speak to add more to your answer.');
+        // Don't reset — dictation will append to existing accumulated text
         startDictation();
         break;
       case 'read_my_answer':
-        if (voiceState !== 'COMMAND_MODE') return;
-        savedAnswer ? speak(`Your saved answer is: ${savedAnswer.formattedText}`) : speak('No answer saved for this question.');
+        if (voiceState !== 'COMMAND_MODE' && voiceState !== 'ANSWER_REVIEW') return;
+        if (voiceState === 'ANSWER_REVIEW') {
+          const reviewText = formattedAnswer || rawTranscript;
+          reviewText ? speak(`Your current answer is: ${reviewText}`) : speak('No answer recorded yet.');
+        } else {
+          savedAnswer ? speak(`Your saved answer is: ${savedAnswer.formattedText}`) : speak('No answer saved for this question.');
+        }
         break;
       case 'clear_answer':
         if (voiceState !== 'COMMAND_MODE') return;
+        if (!savedAnswer) { speak('No answer to clear for this question.'); return; }
         setConfirmClearPending(true);
-        speak('Say confirm clear to delete this answer, or any command to cancel.');
+        speak('Say confirm clear to delete this answer, or any other command to cancel.');
         break;
       case 'confirm_clear':
-        if (!confirmClearPending) return;
+        if (!confirmClearPending) { speak('Nothing to confirm. Say clear answer first.'); return; }
         setConfirmClearPending(false);
         if (currentQuestion) { setAnswers(p => { const n = new Map(p); n.delete(currentQuestion.id); return n; }); playBeep('success'); speak('Answer cleared.'); }
         break;
@@ -258,7 +298,14 @@ export function ExamInterface() {
         break;
       case 'submit_exam':
         if (voiceState !== 'COMMAND_MODE') return;
-        stopEngine(); transition('SUBMISSION_GATE');
+        {
+          const unanswered = questions.length - answers.size;
+          const summaryMsg = unanswered > 0
+            ? `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. `
+            : 'All questions answered. ';
+          await speak(`${summaryMsg}Say confirm submission to finalize, or anything else to cancel.`);
+        }
+        transition('SUBMISSION_GATE');
         break;
       case 'confirm_submission':
         if (voiceState !== 'SUBMISSION_GATE') return;
@@ -266,6 +313,7 @@ export function ExamInterface() {
         break;
       case 'im_ready':
         if (voiceState === 'PAUSE_MODE') { timerResume(); transition('COMMAND_MODE'); speak('Exam resumed.'); startEngine(); }
+        else if (voiceState === 'COMMAND_MODE') speak('Listening for commands. Say help for available commands.');
         else speak('Listening for commands.');
         break;
       default: break;
@@ -278,6 +326,8 @@ export function ExamInterface() {
     failCount,
     isListening,
     lastRawText,
+    lastHeardText,
+    wasMatched,
     interimRawText,
     lastError: voiceEngineError,
     isSupported: isVoiceSupported,
@@ -294,8 +344,19 @@ export function ExamInterface() {
 
   // Read hint when repeated failures (only once at threshold, not every increment)
   useEffect(() => {
-    if (failCount === 3 && voiceState === 'COMMAND_MODE') {
-      speak('Available commands: Start answering, Next question, Previous question, Repeat question, Read my answer, Pause exam, Submit exam.');
+    if (failCount === 3) {
+      if (voiceState === 'COMMAND_MODE') {
+        const isMcq = currentQuestion?.type === 'mcq';
+        speak(isMcq
+          ? 'Available commands: Option 1, 2, 3, or 4. Next question. Previous question. Repeat question. Pause exam. Submit exam.'
+          : 'Available commands: Start answering. Next question. Previous question. Repeat question. Read my answer. Clear answer. Pause exam. Submit exam.');
+      } else if (voiceState === 'ANSWER_REVIEW') {
+        speak('Available commands: Confirm answer. Edit answer. Continue dictation. Repeat question.');
+      } else if (voiceState === 'PAUSE_MODE') {
+        speak('Say resume exam or I am back to continue.');
+      } else if (voiceState === 'SUBMISSION_GATE') {
+        speak('Say confirm submission to submit, or any other command to cancel.');
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [failCount]);
@@ -345,7 +406,30 @@ export function ExamInterface() {
     setIsSubmitted(true);
     playBeep('success');
     await speak('Exam submitted successfully. Thank you.');
-    setTimeout(() => navigate('/student/submission-confirmation'), 2500);
+    // Pass real answer data via navigation state
+    const answeredCount = answers.size;
+    const totalQ = questions.length;
+    const elapsedMin = Math.max(1, Math.round((durationMinutes * 60 - remaining) / 60));
+    // For MCQ: count correct answers for estimated score
+    let correctCount = 0;
+    answers.forEach((ans) => {
+      const q = questions.find(qq => String(qq.id) === String(ans.questionId));
+      if (q?.type === 'mcq' && q.correctAnswer !== undefined && ans.selectedOption === q.correctAnswer) {
+        correctCount++;
+      }
+    });
+    setTimeout(() => navigate('/student/submission-confirmation', {
+      state: {
+        examTitle: examTitle,
+        examCode,
+        answeredQuestions: answeredCount,
+        totalQuestions: totalQ,
+        timeSpent: elapsedMin,
+        durationMinutes,
+        estimatedScore: correctCount,
+        totalMarks: totalQ,
+      },
+    }), 2500);
   }
 
   // ── Submitted screen ────────────────────────────────────────────────────────
@@ -533,33 +617,40 @@ export function ExamInterface() {
           )}
         </AnimatePresence>
 
-        {/* Last heard text feedback */}
-        {voiceState === 'COMMAND_MODE' && (interimRawText || lastRawText) && (
+        {/* Last heard text — always visible when listening */}
+        {(lastHeardText || heardText) && (
           <motion.div
-            key={interimRawText || lastRawText}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="glass-card rounded-xl px-4 py-2.5 flex items-center gap-3"
+            key={lastHeardText || heardText}
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className={`rounded-xl px-5 py-3 flex items-center gap-3 border ${
+              wasMatched || heardMatched
+                ? 'bg-emerald-500/[0.06] border-emerald-500/[0.15]'
+                : 'bg-white/[0.03] border-white/[0.06]'
+            }`}
           >
-            <span className="text-[10px] text-slate-600 uppercase tracking-widest shrink-0 font-semibold">
-              {interimRawText ? 'Hearing' : 'Heard'}
+            <span className="text-[10px] uppercase tracking-widest shrink-0 font-bold" style={{ color: wasMatched || heardMatched ? '#6ee7b7' : '#94a3b8' }}>
+              {wasMatched || heardMatched ? '✓ Heard' : '🎤 Heard'}
             </span>
-            <span className={`text-sm italic truncate ${
-              interimRawText ? 'text-indigo-300/70' : 'text-slate-400'
+            <span className={`text-base font-semibold truncate ${
+              wasMatched || heardMatched ? 'text-emerald-300' : 'text-slate-300'
             }`}>
-              {interimRawText || lastRawText}
+              "{lastHeardText || heardText}"
             </span>
-            {!interimRawText && failCount > 0 && (
-              <span className="ml-auto text-amber-400/50 text-[10px] shrink-0 font-medium">no match</span>
+            {!(wasMatched || heardMatched) && (
+              <span className="ml-auto text-amber-400/60 text-[10px] shrink-0 font-medium">no match</span>
             )}
           </motion.div>
         )}
 
         {/* Command hints */}
-        {voiceState === 'COMMAND_MODE' && (
+        {(voiceState === 'COMMAND_MODE' || voiceState === 'ANSWER_REVIEW') && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            {(currentQuestion?.type === 'mcq' ? [
+            {(voiceState === 'ANSWER_REVIEW' ? [
+              { cmd: '"Confirm answer"', icon: '✓' }, { cmd: '"Edit answer"', icon: '✎' },
+              { cmd: '"Continue dictation"', icon: '+' }, { cmd: '"Repeat question"', icon: '↻' },
+              { cmd: '"Read my answer"', icon: '◈' }, { cmd: '"Start answering"', icon: '◉' },
+            ] : currentQuestion?.type === 'mcq' ? [
               { cmd: '"Option 1"', icon: '①' }, { cmd: '"Option 2"', icon: '②' },
               { cmd: '"Option 3"', icon: '③' }, { cmd: '"Option 4"', icon: '④' },
               { cmd: '"Next question"', icon: '→' }, { cmd: '"Previous"', icon: '←' },

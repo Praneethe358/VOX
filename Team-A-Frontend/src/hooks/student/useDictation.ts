@@ -175,11 +175,12 @@ export function useDictation({
 
             const result = await apiService.convertSpeechToText(audioBlob, lang);
             const text = (result?.text ?? '').trim();
-            console.log('[Dictation] Whisper result:', text || '(empty)');
+            const confidence = result?.confidence ?? 0;
+            console.log('[Dictation] Whisper result:', text || '(empty)', '| confidence:', confidence.toFixed(2));
 
             setInterimText('');
 
-            if (text && text.length >= 2) {
+            if (text && text.length >= 2 && confidence >= 0.3) {
               // Append transcribed text
               accumulatedRef.current += (accumulatedRef.current ? ' ' : '') + text;
               setFinalText(accumulatedRef.current);
@@ -204,10 +205,10 @@ export function useDictation({
 
         try {
           recorder.start();
-          // Stop recording after ~4 seconds to send chunk
+          // 5 s chunks give Whisper enough context on CPU
           setTimeout(() => {
             if (recorder.state !== 'inactive') recorder.stop();
-          }, 4000);
+          }, 5000);
         } catch (err) {
           console.error('[Dictation] Error starting MediaRecorder:', err);
           setLastError('Unable to start audio capture.');

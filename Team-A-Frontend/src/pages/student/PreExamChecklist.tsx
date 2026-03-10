@@ -46,6 +46,7 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   ]);
 
   const [allPassed, setAllPassed] = useState(false);
+  const hasSpokenPassedRef = React.useRef(false);
 
   // Run all system checks
   useEffect(() => {
@@ -183,7 +184,8 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
     setAllPassed(passed);
 
     // Voice announcements
-    if (passed && checklist.length > 0) {
+    if (passed && checklist.length > 0 && !hasSpokenPassedRef.current) {
+      hasSpokenPassedRef.current = true;
       playBeep('success');
       speak(
         'All system checks passed successfully. ' +

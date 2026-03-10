@@ -11,12 +11,14 @@ import apiService from '../../services/student/api.service';
 import { useVoiceNavigation, NavCommand } from '../../hooks/useVoiceNavigation';
 import { useAutoSpeak } from '../../hooks/useAutoSpeak';
 import { useVoiceContext } from '../../context/VoiceContext';
+import { useExamContext } from '../../context/ExamContext';
 import { VoiceCommandEngine } from '../../components/student/VoiceCommandEngine';
 import { VoiceListener } from '../../components/student/VoiceListener';
 import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const { student } = useExamContext();
   const [language, setLanguage] = useState('en');
   const [speechRate, setSpeechRate] = useState(1);
   const { speak } = useVoiceContext();
@@ -46,16 +48,22 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const loadProfile = async () => {
-      const response = await apiService.getStudentProfile();
-      const profile = response.data?.student;
-      if (profile?.accessibilityProfile) {
-        setLanguage(profile.accessibilityProfile.preferredLanguage || 'en');
-        setSpeechRate(profile.accessibilityProfile.speechRate || 1);
+      const studentId = (student as any)?.rollNumber || (student as any)?.studentId;
+      if (!studentId) return;
+      try {
+        const response = await apiService.getStudentProfile(studentId);
+        const profile = response.data?.student;
+        if (profile?.accessibilityProfile) {
+          setLanguage(profile.accessibilityProfile.preferredLanguage || 'en');
+          setSpeechRate(profile.accessibilityProfile.speechRate || 1);
+        }
+      } catch {
+        // no mock fallback
       }
     };
 
     loadProfile();
-  }, []);
+  }, [student]);
 
   return (
     <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden">

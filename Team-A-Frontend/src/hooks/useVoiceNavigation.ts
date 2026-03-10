@@ -37,11 +37,10 @@ export interface NavCommand {
 // ─── Pattern table (order matters — more specific first) ─────────────────────
 
 const NAV_PATTERNS: { pattern: RegExp; action: NavAction }[] = [
-  // Select exam (most specific — must come before generic "exam")
-  { pattern: /\b(?:select|choose|pick|open|start)\s*(?:exam\s*(?:number\s*)?)?(\d+)\b/i, action: 'select_exam' },
-  { pattern: /\bexam\s*(?:number\s*)?(\d+)\b/i,                                          action: 'select_exam' },
-  { pattern: /\bnumber\s*(\d+)\b/i,                                                      action: 'select_exam' },
-  { pattern: /\b(?:exam\s*)?(\d+)\b/i,                                                   action: 'select_exam' },
+  // Select exam (must come before generic "exam")
+  { pattern: /\b(?:select|choose|pick|open|start)\s+exam\s*(?:number\s*)?(\d+)\b/i, action: 'select_exam' },
+  { pattern: /\bexam\s+(?:number\s*)?(\d+)\b/i,                                     action: 'select_exam' },
+  { pattern: /\bselect\s+(?:number\s*)?(\d+)\b/i,                                   action: 'select_exam' },
 
   // Dashboard
   { pattern: /\bdashboard\b/i,      action: 'go_dashboard' },
@@ -65,14 +64,14 @@ const NAV_PATTERNS: { pattern: RegExp; action: NavAction }[] = [
 
   // Back
   { pattern: /\bgo\s*back\b/i,      action: 'go_back' },
-  { pattern: /\bback\b/i,           action: 'go_back' },
-  { pattern: /\breturn\b/i,         action: 'go_back' },
+  { pattern: /\bgo\s+to\s+back\b/i, action: 'go_back' },
+  { pattern: /\breturn\s*(?:home|back)?\b/i, action: 'go_back' },
   { pattern: /\bprevious\s*page\b/i, action: 'go_back' },
 
   // Logout
   { pattern: /\blog\s*out\b/i,      action: 'logout' },
   { pattern: /\bsign\s*out\b/i,     action: 'logout' },
-  { pattern: /\bexit\b/i,           action: 'logout' },
+  { pattern: /\bexit\s*(?:app|portal|system)?\b/i, action: 'logout' },
   { pattern: /\bbye\b/i,            action: 'logout' },
 
   // Help

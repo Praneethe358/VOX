@@ -229,7 +229,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           };
 
           utterance.onerror = (event) => {
-            if (event.error !== 'canceled') console.error('[TTS] Error:', event.error);
+            if (event.error !== 'canceled' && event.error !== 'interrupted') {
+              console.error('[TTS] Error:', event.error);
+            }
             if (speakGenRef.current === gen) setIsSpeaking(false);
             resolve();
           };
@@ -269,7 +271,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const transition = useCallback((to: VoiceSystemState) => {
     setVoiceState(prev => {
-      setPrevState(prev);
+      // Schedule prevState update outside this updater to avoid
+      // "Cannot update a component while rendering another" warning
+      queueMicrotask(() => setPrevState(prev));
       return to;
     });
   }, []);

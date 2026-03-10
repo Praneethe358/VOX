@@ -22,12 +22,18 @@ export default function SubmissionGate({
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
 
+  // Fire onTimeout as a proper side-effect, not inside a setState updater
+  useEffect(() => {
+    if (remaining === 0) {
+      onTimeoutRef.current();
+    }
+  }, [remaining]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       setRemaining(prev => {
         if (prev <= 1) {
           clearInterval(interval);
-          onTimeoutRef.current();
           return 0;
         }
         return prev - 1;
