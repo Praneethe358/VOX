@@ -176,3 +176,4 @@ Admin (mock seed):
 
 - Mock DB mode is ideal for development; in-memory data resets when backend restarts.
 - For full route mapping and integration details, see `INTEGRATION_GUIDE.md`.
+Updated project documentation.
