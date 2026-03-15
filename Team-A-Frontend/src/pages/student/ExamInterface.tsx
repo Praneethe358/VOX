@@ -620,7 +620,7 @@ export function ExamInterface() {
         <AnimatePresence>
           {voiceState === 'SUBMISSION_GATE' && (
             <SubmissionGate
-              windowSeconds={30}
+              windowSeconds={60}
               onTimeout={() => { transition('COMMAND_MODE'); speak('Submission cancelled. Returning to exam.'); }}
             />
           )}

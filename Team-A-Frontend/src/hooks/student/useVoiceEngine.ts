@@ -199,6 +199,8 @@ export function matchCommand(raw: string): { action: CommandAction; confidence: 
     .replace(/[^\w\s]/g, '')
     .trim();
 
+  if (!normalized) return null;
+
   // 1. Exact match
   for (const entry of COMMAND_TABLE) {
     for (const phrase of entry.phrases) {
@@ -217,13 +219,34 @@ export function matchCommand(raw: string): { action: CommandAction; confidence: 
     }
   }
 
-  // 3. Fuzzy match
+  // 3. Fuzzy match on full text
   let best: { action: CommandAction; confidence: number } | null = null;
   for (const entry of COMMAND_TABLE) {
     for (const phrase of entry.phrases) {
       const ratio = fuzzyRatio(normalized, phrase);
       if (ratio >= FUZZY_THRESHOLD && (!best || ratio > best.confidence)) {
         best = { action: entry.action, confidence: ratio };
+      }
+    }
+  }
+  if (best) return best;
+
+  // 4. Sliding window — try matching consecutive word subsequences
+  //    Catches cases like "uh next question please" → "next question"
+  const words = normalized.split(/\s+/);
+  if (words.length > 2) {
+    for (let windowSize = Math.min(words.length, 4); windowSize >= 2; windowSize--) {
+      for (let start = 0; start <= words.length - windowSize; start++) {
+        const sub = words.slice(start, start + windowSize).join(' ');
+        for (const entry of COMMAND_TABLE) {
+          for (const phrase of entry.phrases) {
+            if (sub === phrase) return { action: entry.action, confidence: 0.9 };
+            const ratio = fuzzyRatio(sub, phrase);
+            if (ratio >= 0.75 && (!best || ratio > best.confidence)) {
+              best = { action: entry.action, confidence: ratio * 0.9 };
+            }
+          }
+        }
       }
     }
   }
@@ -268,6 +291,9 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
   onCommandRef.current = onCommand;
   const isSpeakingRef = useRef(false);
   const ttsStoppedAtRef = useRef(0);       // timestamp when TTS last stopped
+  const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastEventTimeRef = useRef(0);      // timestamp of last recognition event
+  const restartCountRef = useRef(0);       // count rapid restarts to avoid tight loop
   const isSupported = Boolean(
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition,
   );
@@ -291,6 +317,10 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     if (backendLoopTimerRef.current) {
       clearTimeout(backendLoopTimerRef.current);
       backendLoopTimerRef.current = null;
+    }
+    if (watchdogRef.current) {
+      clearInterval(watchdogRef.current);
+      watchdogRef.current = null;
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
@@ -412,19 +442,206 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     await runOneChunk();
   }, [playBeep]);
 
+  const startBrowserRecognition = useCallback(() => {
+    const SR = getSR();
+    if (!SR) return;
+
+    // Clean up any existing instance before creating a new one
+    if (recognitionRef.current) {
+      try { recognitionRef.current.abort(); } catch {}
+      recognitionRef.current = null;
+    }
+
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.maxAlternatives = 3;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => {
+      console.log('[VoiceEngine] Browser SpeechRecognition started');
+      setIsListening(true);
+      lastEventTimeRef.current = Date.now();
+      restartCountRef.current = 0;
+    };
+
+    recognition.onaudiostart = () => {
+      lastEventTimeRef.current = Date.now();
+    };
+
+    recognition.onsoundstart = () => {
+      lastEventTimeRef.current = Date.now();
+    };
+
+    recognition.onresult = (event: any) => {
+      lastEventTimeRef.current = Date.now();
+
+      // Skip processing results that arrived while TTS was speaking
+      // (the mic may have picked up TTS audio)
+      if (isSpeakingRef.current) return;
+      const msSinceTts = Date.now() - ttsStoppedAtRef.current;
+      if (ttsStoppedAtRef.current > 0 && msSinceTts < 800) return;
+
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript;
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      if (interimTranscript) {
+        setInterimRawText(interimTranscript);
+      }
+
+      if (finalTranscript) {
+        const raw = finalTranscript.trim();
+        console.log('[VoiceEngine] Browser STT result:', raw);
+        setLastRawText(raw);
+        setLastHeardText(raw);
+        setInterimRawText('');
+
+        // Try all alternatives for better matching
+        let matched = matchCommand(raw);
+        if (!matched) {
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (!event.results[i].isFinal) continue;
+            for (let a = 1; a < event.results[i].length; a++) {
+              const alt = event.results[i][a].transcript.trim();
+              if (alt) {
+                matched = matchCommand(alt);
+                if (matched) {
+                  console.log('[VoiceEngine] Matched on alternative:', alt);
+                  break;
+                }
+              }
+            }
+            if (matched) break;
+          }
+        }
+
+        if (matched) {
+          console.log('[VoiceEngine] Browser STT matched command:', matched.action, 'confidence:', matched.confidence);
+          setWasMatched(true);
+          setFailCount(0);
+          setLastError(null);
+          playBeep('command');
+          onCommandRef.current(matched.action, matched.confidence, raw);
+        } else {
+          console.log('[VoiceEngine] Browser STT no command match for:', raw);
+          setWasMatched(false);
+          setFailCount(c => c + 1);
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn('[VoiceEngine] Browser SpeechRecognition error:', event.error);
+      lastEventTimeRef.current = Date.now();
+
+      if (event.error === 'not-allowed') {
+        setLastError('Microphone permission denied. Allow mic access in browser settings.');
+        setIsListening(false);
+        isActiveRef.current = false;
+        return;
+      }
+
+      if (event.error === 'network') {
+        console.warn('[VoiceEngine] Network error — will retry on onend');
+        setLastError('Voice recognition network issue — reconnecting…');
+      }
+
+      // 'no-speech', 'aborted', 'audio-capture', 'network' — all recovered via onend restart
+    };
+
+    recognition.onend = () => {
+      lastEventTimeRef.current = Date.now();
+
+      if (!isActiveRef.current || recognitionRef.current !== recognition) {
+        setIsListening(false);
+        return;
+      }
+
+      // If TTS is currently speaking, wait until it's done before restarting
+      if (isSpeakingRef.current) {
+        console.log('[VoiceEngine] TTS speaking — deferring restart');
+        setIsListening(false);
+        return; // The TTS-finished effect will restart recognition
+      }
+
+      // Back off on rapid restarts to avoid a tight loop
+      restartCountRef.current += 1;
+      const delay = restartCountRef.current > 5 ? 1000 : restartCountRef.current > 2 ? 300 : 50;
+      console.log(`[VoiceEngine] onend — restarting in ${delay}ms (restart #${restartCountRef.current})`);
+
+      setTimeout(() => {
+        if (!isActiveRef.current) return;
+        try {
+          recognition.start();
+        } catch (err) {
+          console.warn('[VoiceEngine] Restart failed, creating fresh instance');
+          recognitionRef.current = null;
+          // Create a completely fresh recognition instance
+          setTimeout(() => {
+            if (isActiveRef.current && !isSpeakingRef.current) {
+              startBrowserRecognition();
+            }
+          }, 500);
+        }
+      }, delay);
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      setLastError('Failed to start browser speech recognition.');
+    }
+  }, [getSR, playBeep]);
+
   const start = useCallback(() => {
-    const bootstrap = async () => {
-    console.log('[VoiceEngine] Bootstrapping — using backend Whisper STT directly');
     if (isActiveRef.current) {
       console.log('[VoiceEngine] Already active, skipping bootstrap');
       return;
     }
     isActiveRef.current = true;
+    lastEventTimeRef.current = Date.now();
+    restartCountRef.current = 0;
     setLastError(null);
-    void startBackendSttLoop();
-    };
-    void bootstrap();
-  }, [playBeep, startBackendSttLoop]);
+
+    // Prefer browser Web Speech API (instant recognition) over backend Whisper
+    const SR = getSR();
+    if (SR) {
+      console.log('[VoiceEngine] Bootstrapping — using browser Web Speech API');
+      startBrowserRecognition();
+
+      // Watchdog: if no recognition events for 15s and not TTS-speaking, force restart
+      if (watchdogRef.current) clearInterval(watchdogRef.current);
+      watchdogRef.current = setInterval(() => {
+        if (!isActiveRef.current) {
+          if (watchdogRef.current) clearInterval(watchdogRef.current);
+          return;
+        }
+        if (isSpeakingRef.current) return; // Don't watchdog during TTS
+        const silenceMs = Date.now() - lastEventTimeRef.current;
+        if (silenceMs > 15000) {
+          console.warn('[VoiceEngine] Watchdog: no events for 15s — restarting recognition');
+          if (recognitionRef.current) {
+            try { recognitionRef.current.abort(); } catch {}
+            recognitionRef.current = null;
+          }
+          startBrowserRecognition();
+        }
+      }, 5000);
+    } else {
+      console.log('[VoiceEngine] Browser Speech API unavailable — falling back to backend Whisper STT');
+      void startBackendSttLoop();
+    }
+  }, [getSR, playBeep, startBrowserRecognition, startBackendSttLoop]);
 
   // Keep isSpeakingRef in sync with TTS state so recognition pauses during speech
   useEffect(() => {
@@ -433,12 +650,46 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     // Record timestamp when TTS transitions from speaking → silent
     if (wasSpeaking && !isSpeaking) {
       ttsStoppedAtRef.current = Date.now();
+
+      // TTS just finished — restart browser recognition if it was paused/stopped
+      if (isActiveRef.current && !usingBackendSttRef.current) {
+        setTimeout(() => {
+          if (!isActiveRef.current || isSpeakingRef.current) return;
+          // If recognition is dead (no instance or not listening), restart it
+          if (!recognitionRef.current) {
+            console.log('[VoiceEngine] TTS finished — restarting recognition');
+            startBrowserRecognition();
+          } else {
+            // Try to restart the existing instance
+            try {
+              recognitionRef.current.start();
+              console.log('[VoiceEngine] TTS finished — resumed recognition');
+            } catch {
+              // Already running — that's fine
+            }
+          }
+        }, 400); // Small delay for echo to die down
+      }
     }
-  }, [isSpeaking]);
+
+    // TTS just started — abort recognition to prevent it picking up TTS audio
+    if (!wasSpeaking && isSpeaking && isActiveRef.current && !usingBackendSttRef.current) {
+      if (recognitionRef.current) {
+        console.log('[VoiceEngine] TTS started — pausing recognition');
+        try { recognitionRef.current.abort(); } catch {}
+      }
+    }
+  }, [isSpeaking, startBrowserRecognition]);
 
   // Stop when component using this hook unmounts
   useEffect(() => {
-    return () => stop();
+    return () => {
+      stop();
+      if (watchdogRef.current) {
+        clearInterval(watchdogRef.current);
+        watchdogRef.current = null;
+      }
+    };
   }, [stop]);
 
   return { isListening, lastRawText, lastHeardText, wasMatched, interimRawText, failCount, lastError, isSupported, start, stop };

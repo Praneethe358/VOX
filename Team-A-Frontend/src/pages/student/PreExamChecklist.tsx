@@ -229,15 +229,13 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
       playBeep('success');
       setWaitingForVoice(true);
       speak(
-        'All system checks passed successfully. ' +
-        (exam ? `Ready to start ${exam.title}. ` : '') +
-        'Say "begin exam" to start, or say "go back" to return.',
-        { rate: 0.95 },
+        'All checks passed. Say "begin exam" to start.',
+        { rate: 1.0 },
       );
-      // Start voice engine to listen for "begin exam" command
-      // Engine will be started when TTS finishes speaking (see isSpeaking effect below)
+      // Start voice engine immediately — don't wait for TTS to finish
       if (!hasStartedEngineRef.current) {
         hasStartedEngineRef.current = true;
+        startEngine();
       }
     } else if (failed.length > 0 && checklist.every(item => item.status !== 'pending' && item.status !== 'checking')) {
       playBeep('error');
@@ -245,25 +243,6 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
       speak(`System check failed for: ${failedNames}. Please fix these issues before starting the exam.`);
     }
   }, [checklist]);
-
-  // ── Start voice engine after TTS finishes the "say begin exam" announcement ──
-  const engineStartedRef = useRef(false);
-  const wasSpeakingRef = useRef(false);
-  useEffect(() => {
-    // Track TTS state transitions: must have been speaking at least once before starting
-    if (isSpeaking) {
-      wasSpeakingRef.current = true;
-    }
-    if (waitingForVoice && !isSpeaking && wasSpeakingRef.current && hasStartedEngineRef.current && !engineStartedRef.current) {
-      engineStartedRef.current = true;
-      // Small delay after TTS ends to avoid mic picking up speaker echo
-      const t = setTimeout(() => {
-        console.log('[PreExamChecklist] TTS finished, starting voice engine for "begin exam" command');
-        startEngine();
-      }, 800);
-      return () => clearTimeout(t);
-    }
-  }, [waitingForVoice, isSpeaking, startEngine]);
 
   const passedCount = checklist.filter(i => i.status === 'success').length;
   const progress = (passedCount / checklist.length) * 100;
@@ -430,8 +409,19 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
                     </span>
                   </p>
                 </div>
-                <span className={`text-xs ${engineListening ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  🎙️ {engineListening ? 'Listening...' : isSpeaking ? 'Speaking...' : 'Starting mic...'}
+                <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full ${
+                  engineListening
+                    ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-400/30'
+                    : 'text-slate-500 bg-slate-500/10 border border-slate-500/20'
+                }`}>
+                  {engineListening && (
+                    <motion.span
+                      className="inline-block w-2 h-2 rounded-full bg-emerald-400"
+                      animate={{ opacity: [1, 0.3, 1], scale: [1, 0.85, 1] }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                  )}
+                  🎙️ {engineListening ? 'Listening…' : isSpeaking ? 'Speaking...' : 'Starting mic...'}
                 </span>
               </div>
 

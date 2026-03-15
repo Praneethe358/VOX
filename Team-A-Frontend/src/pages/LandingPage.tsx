@@ -15,7 +15,7 @@ export default function LandingPage() {
           className="text-center mb-12"
         >
           <h1 className="text-5xl font-bold bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent mb-4">
-            MindKraft
+            VOX
           </h1>
           <p className="text-slate-400 text-lg">
             Voice-Based Exam Interface

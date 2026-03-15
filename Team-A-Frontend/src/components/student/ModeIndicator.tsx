@@ -1,10 +1,10 @@
 /**
  * ModeIndicator — Shows current voice mode (COMMAND vs DICTATING vs PAUSED …)
- * and live microphone waveform animation.
+ * and live microphone waveform animation with a prominent listening badge.
  * Fully display-only.  No interactive elements.
  */
 
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { VoiceSystemState } from '../../context/VoiceContext';
 
 interface ModeIndicatorProps {
@@ -54,13 +54,50 @@ export default function ModeIndicator({
       aria-live="polite"
       aria-atomic="true"
     >
-      {/* Mode label + bars */}
+      {/* Mode label + listening badge + bars */}
       <div className="flex items-center gap-3">
         <span className="text-white font-bold text-lg tracking-wide select-none">{label}</span>
 
+        {/* Pulsing listening badge */}
+        <AnimatePresence>
+          {isListening && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="flex items-center gap-1.5 bg-green-500/20 border border-green-400/40 rounded-full px-3 py-1"
+            >
+              {/* Pulsing dot */}
+              <motion.span
+                className="inline-block w-2.5 h-2.5 rounded-full bg-green-400"
+                animate={{ opacity: [1, 0.3, 1], scale: [1, 0.85, 1] }}
+                transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              <span className="text-green-300 text-xs font-semibold tracking-wide">
+                Listening…
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Not listening badge */}
+        <AnimatePresence>
+          {!isListening && voiceState !== 'PAUSE_MODE' && voiceState !== 'LOCKED' && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex items-center gap-1.5 bg-slate-500/10 border border-slate-500/20 rounded-full px-3 py-1"
+            >
+              <span className="inline-block w-2 h-2 rounded-full bg-slate-500" />
+              <span className="text-slate-400 text-xs font-medium">Mic off</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Animated waveform bars */}
         {isListening && (
-          <div className="flex items-end gap-[3px] h-5 ml-2" aria-hidden="true">
+          <div className="flex items-end gap-[3px] h-5 ml-auto" aria-hidden="true">
             {Array.from({ length: BAR_COUNT }).map((_, i) => (
               <motion.div
                 key={i}
@@ -87,7 +124,7 @@ export default function ModeIndicator({
 
         {/* Static dots when not listening */}
         {!isListening && voiceState !== 'PAUSE_MODE' && voiceState !== 'LOCKED' && (
-          <div className="flex items-end gap-[3px] h-5 opacity-30" aria-hidden="true">
+          <div className="flex items-end gap-[3px] h-5 ml-auto opacity-30" aria-hidden="true">
             {Array.from({ length: BAR_COUNT }).map((_, i) => (
               <div key={i} className="w-[3px] h-[6px] rounded-full bg-slate-400" />
             ))}
@@ -95,7 +132,22 @@ export default function ModeIndicator({
         )}
       </div>
 
-      {/* Live transcript is rendered separately by LiveTranscript component */}
+      {/* Real-time interim transcript — shows what mic is hearing right now */}
+      <AnimatePresence>
+        {isListening && interimText && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <p className="text-slate-400 text-sm italic truncate">
+              <span className="text-slate-500 text-xs mr-1.5 not-italic">hearing:</span>
+              "{interimText}"
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
