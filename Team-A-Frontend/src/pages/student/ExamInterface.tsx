@@ -1,5 +1,5 @@
 ﻿/**
- * ExamInterface.tsx — VoiceSecure hands-free exam page.
+ * ExamInterface.tsx — Vox hands-free exam page.
  *
  * No buttons. No mouse. No keyboard.
  * 13 voice commands, AI answer formatting, kiosk lock, auto-save every 15 s.

@@ -1,5 +1,5 @@
 /**
- * VoiceContext — Global voice state machine for VoiceSecure hands-free portal.
+ * VoiceContext — Global voice state machine for Vox hands-free portal.
  *
  * States:
  *  IDLE → FACE_AUTH → EXAM_BRIEFING → COMMAND_MODE ⟷ DICTATION_MODE

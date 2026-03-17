@@ -105,7 +105,7 @@ export default function PasswordFallbackLogin() {
         {/* Branding */}
         <div className="text-center">
           <h1 className="text-4xl font-black bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">
-            VoiceSecure
+            Vox
           </h1>
           <p className="text-slate-400 text-sm mt-1 tracking-wide">
             Password Login

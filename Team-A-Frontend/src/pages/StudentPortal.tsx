@@ -60,7 +60,7 @@ export default function StudentPortal() {
         className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-700/50 bg-slate-900/80 px-6 backdrop-blur-md"
       >
         <h1 className="bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-xl font-bold text-transparent">
-          MindKraft Student
+          Vox Student
         </h1>
         <div className="flex items-center gap-4">
           <span className="text-sm text-slate-300">Welcome, {studentName}!</span>

@@ -1,12 +1,12 @@
-# MindKraft — Integration Guide
+# Vox — Integration Guide
 
 ## Overview
 
-Complete API reference and frontend↔backend integration details for the MindKraft VoiceSecure exam platform.
+Complete API reference and frontend↔backend integration details for the Vox exam platform.
 
 - **Frontend:** React 18 + TypeScript + Vite (`http://localhost:5173`)
-- **Backend:** Node.js + Express 5 + TypeScript (`http://localhost:3000`)
-- **Database:** MongoDB 7.x (database: `mindkraft`, dual driver: native + Mongoose)
+- **Backend:** Python + FastAPI (`http://localhost:3000`)
+- **Database:** MongoDB 7.x (database: `vox`, dual driver: native + Mongoose)
 - **Face Recognition:** face-api.js client-side embeddings + backend cosine similarity
 - **Voice Stack:** Whisper STT + espeak-ng TTS + Web Speech API + Ollama Llama 3
 
@@ -17,7 +17,7 @@ Complete API reference and frontend↔backend integration details for the MindKr
 - [Run Locally](#run-locally)
 - [Environment Configuration](#environment-configuration)
 - [API Surface — Legacy Routes](#api-surface--legacy-routes)
-- [API Surface — VoiceSecure V1 Routes](#api-surface--voicesecure-v1-routes)
+- [API Surface — Vox V1 Routes](#api-surface--vox-v1-routes)
 - [Frontend Route Map](#frontend-route-map)
 - [Face Recognition Integration](#face-recognition-integration)
 - [Voice Integration](#voice-integration)
@@ -36,8 +36,9 @@ Complete API reference and frontend↔backend integration details for the MindKr
 ### 1) Backend (Port 3000)
 ```bash
 cd Team-A-Backend/Team-A-Backend
-npm install
-npm run server    # standalone Express (no Electron)
+python -m venv ../../.venv
+../../.venv/Scripts/pip install -r requirements.txt
+../../.venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload
 ```
 
 ### 2) Frontend (Port 5173)
@@ -47,11 +48,8 @@ npm install
 npm run dev
 ```
 
-### 3) (Optional) Electron Desktop
-```bash
-cd Team-A-Backend/Team-A-Backend
-npm run dev       # builds + launches Electron kiosk window
-```
+### 3) Legacy Electron Desktop
+The Electron desktop shell remains in the repo as legacy code. The active API backend exposed to the frontend is now the Python FastAPI service.
 
 ### 4) URLs
 | Service | URL |
@@ -59,7 +57,7 @@ npm run dev       # builds + launches Electron kiosk window
 | Frontend | `http://localhost:5173` |
 | Backend health | `GET http://localhost:3000/health` |
 | Backend API | `http://localhost:3000/api/*` |
-| VoiceSecure V1 API | `http://localhost:3000/api/v1/*` |
+| Vox V1 API | `http://localhost:3000/api/v1/*` |
 
 ---
 
@@ -69,7 +67,7 @@ npm run dev       # builds + launches Electron kiosk window
 ```env
 # Database
 MONGODB_URI=mongodb://127.0.0.1:27017
-MONGODB_DB_NAME=mindkraft
+MONGODB_DB_NAME=vox
 PORT=3000
 NODE_ENV=production
 
@@ -77,7 +75,7 @@ NODE_ENV=production
 FRONTEND_URL=http://localhost:5173
 
 # JWT
-JWT_SECRET=voicesecure-local-dev-secret-change-this
+JWT_SECRET=vox-local-dev-secret-change-this
 
 # Speech-to-Text
 WHISPER_BIN=whisper                    # or full path to whisper.exe
@@ -92,9 +90,9 @@ ESPEAK_NG_BIN=espeak-ng
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=llama3:latest
 
-# VoiceSecure super-admin (auto-created on first run)
-VOICESECURE_SUPERADMIN_EMAIL=admin@voicesecure.edu
-VOICESECURE_SUPERADMIN_PASSWORD=ChangeMe@123
+# Vox super-admin (auto-created on first run)
+VOX_SUPERADMIN_EMAIL=admin@vox.edu
+VOX_SUPERADMIN_PASSWORD=ChangeMe@123
 ```
 
 ### Frontend (`Team-A-Frontend/.env`)
@@ -110,7 +108,7 @@ VITE_API_BASE_URL=http://localhost:3000
 | OpenAI Whisper | `pip install -U openai-whisper` | Speech-to-text transcription |
 | Ollama | `https://ollama.ai` | Local LLM server (Llama 3) |
 
-The backend logs binary availability on startup. Without them, `/api/ai/*` endpoints return errors but everything else works.
+The Python backend keeps the same `/health`, `/api/*`, and `/api/v1/*` contract the frontend already uses. Without Whisper, ffmpeg, espeak-ng, or Ollama installed, `/api/ai/*` endpoints can fail while the rest of the app still works.
 
 ---
 
@@ -119,7 +117,7 @@ The backend logs binary availability on startup. Without them, `/api/ai/*` endpo
 ### Health
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/health` | — | `{ status: "ok", service: "mindkraft-backend", timestamp }` |
+| GET | `/health` | — | `{ status: "ok", service: "vox-backend", timestamp }` |
 
 ---
 
@@ -212,7 +210,7 @@ The backend logs binary availability on startup. Without them, `/api/ai/*` endpo
 
 ---
 
-## API Surface — VoiceSecure V1 Routes
+## API Surface — Vox V1 Routes
 
 All V1 routes require JWT authentication via `Authorization: Bearer <token>` header (except admin login).
 
@@ -593,7 +591,7 @@ Central API client class providing all backend calls. Falls back through multipl
 - `synthesizeSpeech(text, lang, rate)` — espeak-ng TTS
 - `formatAnswer(rawText, questionContext)` — Llama formatting
 
-**VoiceSecure V1 (JWT-protected):**
+**Vox V1 (JWT-protected):**
 - `v1AdminLogin(email, password)` — JWT login
 - `v1CreateStudent(student)`, `v1UpdateFaceEmbedding(id, embedding)`
 - `v1CreateExam(exam)`, `v1GetExam(id)`
@@ -828,9 +826,9 @@ On first startup (via `database/seed.ts`):
 - Username: `admin`
 - Password: `admin123` (bcrypt hashed, cost 10)
 
-### VoiceSecure Super-Admin (via `voicesecure/init.ts`)
-- Email: `admin@voicesecure.edu` (or `VOICESECURE_SUPERADMIN_EMAIL`)
-- Password: `ChangeMe@123` (or `VOICESECURE_SUPERADMIN_PASSWORD`)
+### Vox Super-Admin
+- Email: `admin@vox.edu` (or `VOX_SUPERADMIN_EMAIL`)
+- Password: `ChangeMe@123` (or `VOX_SUPERADMIN_PASSWORD`)
 - Role: `super-admin`
 
 ### Sample Exam (TECH101)
@@ -860,9 +858,9 @@ On first startup (via `database/seed.ts`):
 - Body size limit is 50MB to accommodate audio file uploads
 - The server binds to `0.0.0.0` for network accessibility
 - Whisper, ffmpeg, and espeak-ng binary paths are auto-detected from PATH; override via env vars if needed
-- Face service internally uses both MongoDB native driver (for `face_embeddings` collection) and mongoose (for VoiceSecure Student model)
+- Face service internally uses both MongoDB native driver (for `face_embeddings` collection) and mongoose (for Vox Student model)
 - The frontend `UnifiedApiClient` automatically appends `/api` to the base URL, so V1 calls go to `/api/v1/*`
 
 ---
 
-*Built by Team A — MindKraft VoiceSecure Exam Platform*
+*Built by Team A — Vox Exam Platform*

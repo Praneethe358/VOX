@@ -1,5 +1,5 @@
 /**
- * FaceRecognitionLogin.tsx — 100% hands-free face-auth page for VoiceSecure.
+ * FaceRecognitionLogin.tsx — 100% hands-free face-auth page for Vox.
  *
  * Upgraded flow with embedding-based verification:
  *   1. Page mounts → TTS "Please look at the camera."
@@ -85,7 +85,7 @@ export function FaceRecognitionLogin() {
     const t = setTimeout(async () => {
       if (hasSpokenWelcome.current) return;
       hasSpokenWelcome.current = true;
-      await speak('Welcome to VoiceSecure. Please look directly at the camera.');
+      await speak('Welcome to Vox. Please look directly at the camera.');
       setAuthStatus('SCANNING');
     }, 800);
 
@@ -248,7 +248,7 @@ export function FaceRecognitionLogin() {
       >
         {/* Branding */}
         <motion.div className="text-center space-y-2" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 }}>
-          <h1 className="text-5xl font-black text-gradient tracking-tight">VoiceSecure</h1>
+          <h1 className="text-5xl font-black text-gradient tracking-tight">Vox</h1>
           <p className="text-slate-500 text-xs tracking-[0.2em] uppercase font-medium">AI-Powered Accessible Examination</p>
         </motion.div>
 

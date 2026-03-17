@@ -322,7 +322,7 @@ export function SubmissionConfirmation() {
           transition={{ delay: 0.5 }}
           className="mt-8 text-center text-slate-600 text-[11px] pb-6"
         >
-          <p>VoiceSecure Exam Platform</p>
+          <p>Vox Exam Platform</p>
         </motion.div>
       </div>
     </div>

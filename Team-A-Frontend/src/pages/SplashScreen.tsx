@@ -44,7 +44,7 @@ export default function SplashScreen() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="bg-gradient-to-r from-indigo-300 via-white to-pink-300 bg-clip-text text-4xl font-bold tracking-tight text-transparent"
         >
-          MindKraft
+          Vox
         </motion.h1>
 
         <motion.p

@@ -1,5 +1,5 @@
 /* ─────────────────────────────────────────────────────────────────────────────
- * Unified API Client — covers Legacy + VoiceSecure v1 endpoints
+ * Unified API Client — covers Legacy + Vox v1 endpoints
  * ───────────────────────────────────────────────────────────────────────────── */
 
 const RAW_API_BASE_URL =
@@ -496,7 +496,7 @@ class UnifiedApiClient {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  VOICESECURE V1 — /api/v1/*  (JWT-protected)
+  //  VOX V1 — /api/v1/*  (JWT-protected)
   // ═══════════════════════════════════════════════════════════════════════════
 
   // --- Auth ---
@@ -516,7 +516,7 @@ class UnifiedApiClient {
     return this.request('/v1/auth/admins', 'POST', data);
   }
 
-  // --- VoiceSecure Students ---
+  // --- Vox Students ---
   async v1CreateStudent(student: Partial<VoiceSecureStudent>): Promise<ApiResponse<VoiceSecureStudent>> {
     return this.request('/v1/students', 'POST', student);
   }
@@ -525,7 +525,7 @@ class UnifiedApiClient {
     return this.request(`/v1/students/${studentId}/face-embedding`, 'PATCH', { faceEmbedding });
   }
 
-  // --- VoiceSecure Exams ---
+  // --- Vox Exams ---
   async v1CreateExam(exam: Partial<VoiceSecureExam>): Promise<ApiResponse<VoiceSecureExam>> {
     return this.request('/v1/exams', 'POST', exam);
   }
@@ -534,7 +534,7 @@ class UnifiedApiClient {
     return this.request(`/v1/exams/${examId}`, 'GET');
   }
 
-  // --- VoiceSecure Exam Sessions ---
+  // --- Vox Exam Sessions ---
   async v1StartExamSession(data: {
     studentId: string;
     examId: string;
@@ -552,7 +552,7 @@ class UnifiedApiClient {
     return this.request(`/v1/exam-sessions/${sessionId}`, 'GET');
   }
 
-  // --- VoiceSecure Answers ---
+  // --- Vox Answers ---
   async v1AutosaveAnswer(data: {
     examSessionId: string;
     questionNumber: number;
@@ -562,7 +562,7 @@ class UnifiedApiClient {
     return this.request('/v1/answers/autosave', 'PUT', data);
   }
 
-  // --- VoiceSecure Activity Logs ---
+  // --- Vox Activity Logs ---
   async v1CreateActivityLog(data: {
     examSessionId: string;
     eventType: string;
@@ -571,7 +571,7 @@ class UnifiedApiClient {
     return this.request('/v1/activity-logs', 'POST', data);
   }
 
-  // --- VoiceSecure Config ---
+  // --- Vox Config ---
   async v1GetAIConfig(): Promise<ApiResponse<AIConfiguration>> {
     return this.request('/v1/config/ai', 'GET');
   }

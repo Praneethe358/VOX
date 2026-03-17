@@ -114,6 +114,12 @@ export default function StudentLogin() {
   // Verify face with backend
   const verifyWithBackend = async (descriptor: number[]) => {
     try {
+      if (!descriptor || descriptor.length === 0) {
+        setError('Invalid face descriptor. Please try again.');
+        setDetecting(false);
+        return;
+      }
+
       const result = await studentApi.verifyFace(examCode || 'TECH101', descriptor);
 
       if (result.success && result.data?.matched) {
@@ -124,13 +130,23 @@ export default function StudentLogin() {
         
         // Navigate to student dashboard
         setTimeout(() => navigate('/student/exams'), 1000);
+      } else if (!result.success) {
+        // API returned an error
+        const errorMsg = result.error || 'Face verification failed. ';
+        const detailedMsg = result.data?.confidence !== undefined 
+          ? `${errorMsg}(Confidence: ${(result.data.confidence * 100).toFixed(1)}%)`
+          : errorMsg;
+        setError(detailedMsg);
+        setDetecting(false);
       } else {
-        setError(result.error || 'Face verification failed. Please try again.');
+        // Face not matched
+        setError('Face not recognized. Please ensure good lighting and look directly at the camera. Try again.');
         setDetecting(false);
       }
     } catch (err) {
       console.error('Verification error:', err);
-      setError('Connection error. Please check if the backend is running.');
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Backend error: ${errorMsg}. Check console for details.`);
       setDetecting(false);
     }
   };

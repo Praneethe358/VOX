@@ -28,3 +28,9 @@ bin/
 data/
 coverage/
 tmp-uploads/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+

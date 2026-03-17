@@ -1,5 +1,5 @@
 /**
- * useVoiceEngine — Core voice command engine for VoiceSecure.
+ * useVoiceEngine — Core voice command engine for Vox.
  *
  * Uses the Web Speech API SpeechRecognition in COMMAND_MODE.
  * Applies exact and fuzzy (Levenshtein ratio ≥ 0.78) matching against the

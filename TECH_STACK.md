@@ -1,6 +1,6 @@
-# MindKraft — Tech Stack & Components
+# Vox — Tech Stack & Components
 
-> **MindKraft** is a voice-first, AI-powered exam platform that enables completely hands-free examination for students — from face-recognition login to voice-dictated answers and spoken submission confirmation.
+> **Vox** is a voice-first, AI-powered exam platform that enables completely hands-free examination for students — from face-recognition login to voice-dictated answers and spoken submission confirmation.
 
 ---
 
@@ -37,7 +37,7 @@
 │                               │                                         │
 │  ┌────────────────────────────▼────────────────────────────────────────┐ │
 │  │  UnifiedApiClient — REST (fetch) + IPC bridge (Electron)           │ │
-│  │  Endpoints: /api/* (legacy) + /api/v1/* (VoiceSecure JWT)          │ │
+│  │  Endpoints: /api/* (legacy) + /api/v1/* (Vox V1 JWT)          │ │
 │  └────────────────────────────┬────────────────────────────────────────┘ │
 │                               │   Tailwind CSS 3.4 · Framer Motion 12  │
 └───────────────────────────────┼─────────────────────────────────────────┘
@@ -50,7 +50,7 @@
 │  │  auth · face · ai · admin · student · students ·                │   │
 │  │  results · exam-sessions · db                                   │   │
 │  ├──────────────────────────────────────────────────────────────────┤   │
-│  │  7 VoiceSecure V1 Route Modules (/api/v1/*)                    │   │
+│  │  7 Vox V1 Route Modules (/api/v1/*)                    │   │
 │  │  auth · students · exams · exam-sessions · answers ·            │   │
 │  │  activity-logs · config                                         │   │
 │  └──────────────────────────────────────────────────────────────────┘   │
@@ -71,7 +71,7 @@
                                 │
                      ┌──────────▼──────────┐
                      │   MongoDB 7.x       │
-                     │   DB: mindkraft      │
+                     │   DB: vox      │
                      │   Port: 27017        │
                      │                      │
                      │  Legacy collections  │
@@ -181,7 +181,7 @@
 |------|---------|
 | **Runtime** | Node.js with TypeScript 5.7 |
 | **Framework** | Express v5.2.1 (latest major release) |
-| **API Pattern** | RESTful with 16 route modules (9 legacy + 7 VoiceSecure V1) |
+| **API Pattern** | RESTful with 16 route modules (9 legacy + 7 Vox V1) |
 | **File Uploads** | Multer v2 for audio/image multipart handling |
 | **CORS** | All origins in dev (configurable via `FRONTEND_URL`) |
 | **Body Limit** | 50MB (for audio/file uploads) |
@@ -200,7 +200,7 @@
 | `/api/exam-sessions/*` | Session start, autosave, submit (3 endpoints) |
 | `/api/db/*` | Direct DB ops — save response, log audit, submit (3 endpoints) |
 
-**VoiceSecure V1 Route Modules (7, JWT-protected):**
+**Vox V1 Route Modules (7, JWT-protected):**
 | Route | Purpose |
 |-------|---------|
 | `/api/v1/auth/*` | Admin JWT login + admin creation (2 endpoints) |
@@ -422,10 +422,10 @@
 | Item | Details |
 |------|---------|
 | **Primary Driver** | MongoDB Native Driver v7.1 (`mongodb` package) — used by legacy routes |
-| **Secondary ORM** | Mongoose v9.2.3 — 8 schemas for VoiceSecure subsystem |
+| **Secondary ORM** | Mongoose v9.2.3 — 8 schemas for Vox V1 subsystem |
 | **Connection (Native)** | `mongodb://127.0.0.1:27017` via `MONGODB_URI` |
 | **Connection (Mongoose)** | Atlas-compatible, pool: min 5, max 20, selection timeout 10s, socket timeout 45s |
-| **Database** | `mindkraft` |
+| **Database** | `vox` |
 
 ### Legacy Collections (Native Driver)
 
@@ -438,7 +438,7 @@
 | **responses** | `studentId`, `examCode`, `questionId`, `rawAnswer`, `formattedAnswer`, `confidence`, `timestamp` | Student answers |
 | **audit_logs** | `studentId`, `examCode`, `action`, `metadata`, `timestamp` | Security audit trail |
 
-### VoiceSecure Mongoose Models (8 Schemas)
+### Vox Mongoose Models (8 Schemas)
 
 | Model | Key Fields | Indexes |
 |-------|-----------|---------|
@@ -456,7 +456,7 @@
 - **128D face embedding arrays** are natively stored as BSON arrays — no serialization needed
 - **Document model** maps naturally to our API responses (no ORM translation layer)
 - Horizontal scaling supports growing student populations
-- Dual driver approach: Native driver for maximum performance on legacy routes, Mongoose for schema validation on VoiceSecure models
+- Dual driver approach: Native driver for maximum performance on legacy routes, Mongoose for schema validation on Vox models
 
 ---
 
@@ -479,7 +479,7 @@
 **`npm run server` (Standalone Express — no Electron):**
 1. Connect MongoDB native driver
 2. Connect Mongoose (Atlas/local)
-3. Initialize VoiceSecure defaults (super-admin + AI config)
+3. Initialize Vox defaults (super-admin + AI config)
 4. Seed database (default admin + sample exam TECH101)
 5. Check STT/TTS binaries (Whisper, ffmpeg, espeak-ng) — log warnings if missing
 6. Start Express on port 3000, bind 0.0.0.0
@@ -732,4 +732,4 @@ The entire student journey is **hands-free**:
 
 ---
 
-*Built by Team A — MindKraft VoiceSecure Exam Platform*
+*Built by Team A — Vox Exam Platform*

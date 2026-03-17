@@ -1,4 +1,4 @@
-# MindKraft (VoiceSecure)
+# Vox
 
 > A **voice-first, AI-powered, fully hands-free** examination platform with biometric face authentication, voice-dictated answers, real-time AI answer formatting, and kiosk-mode security lockdown.
 
@@ -6,10 +6,10 @@
 
 ## Key Highlights
 
-- **100 % hands-free student journey** — face login → voice navigation → voice dictation → voice submission
+- **100% hands-free student journey** — face login → voice navigation → voice dictation → voice submission
 - **13 in-exam voice commands** with fuzzy matching (Levenshtein ≥ 0.78)
 - **Offline AI stack** — Whisper STT, Ollama/Llama 3 LLM, espeak-ng TTS, face-api.js — zero cloud dependency
-- **Dual deployment** — runs as a desktop Electron kiosk app *or* as a standalone Express server for multi-machine labs
+- **Python FastAPI backend** — modern async framework with automatic API documentation
 - **Real-time auto-save** every 15 seconds with revision history
 
 ---
@@ -95,19 +95,16 @@
 ### Backend (`Team-A-Backend/Team-A-Backend`)
 | Technology | Version | Purpose |
 |-----------|---------|---------|
-| Node.js | Latest | Runtime |
-| Express | 5.2.1 | REST API server |
-| TypeScript | 5.7 | Type safety |
-| Electron | 40.6 | Desktop kiosk mode |
-| MongoDB Native Driver | 7.1 | Primary data access (legacy routes) |
-| Mongoose | 9.2.3 | Schema-validated ODM (VoiceSecure models) |
-| bcrypt | 6.0 | Password hashing |
-| jsonwebtoken | 9.0.3 | JWT authentication |
-| Multer | 2.0 | Audio/file upload handling |
-| pdf-parse | 2.4.5 | PDF question extraction |
-| PDFKit | 0.17 | PDF report generation |
-| Axios | 1.13.5 | HTTP client (Ollama calls) |
-| Socket.IO | 4.8.3 | WebSocket support |
+| Python | 3.11 | Runtime |
+| FastAPI | 0.116 | REST API server |
+| Uvicorn | 0.35 | ASGI server |
+| PyMongo | 4.12 | MongoDB data access |
+| bcrypt | 4.3 | Password hashing |
+| PyJWT | 2.10 | JWT authentication |
+| python-multipart | 0.0.20 | Audio/file upload handling |
+| pypdf | 5.9 | PDF question extraction |
+| httpx | 0.28 | Ollama HTTP client |
+| Electron | 40.6 | Legacy kiosk shell only |
 
 ### External AI Binaries (local, offline)
 | Binary | Purpose |
@@ -122,7 +119,7 @@
 ## Project Structure
 
 ```
-FINAL-MINDKRAFT/
+FINAL-VOX/
 ├── README.md                          ← This file
 ├── TECH_STACK.md                      ← Detailed tech stack & architecture
 ├── INTEGRATION_GUIDE.md               ← API reference & integration details
@@ -150,7 +147,7 @@ FINAL-MINDKRAFT/
 │   │   ├── server/                    ← Express app, routes (9 route modules)
 │   │   ├── services/                  ← AI, face, speech, TTS, LLM, PDF services
 │   │   ├── utils/                     ← Encryptor, packager (stubs)
-│   │   └── voicesecure/               ← V1 API subsystem
+│   │   └── voicesecure/               ← V1 API subsystem [Legacy folder name]
 │   │       ├── core/                  ← Middleware (auth, error handler), DB connector, types
 │   │       ├── models/                ← 8 Mongoose schemas (Admin, Student, Exam, etc.)
 │   │       └── routes/                ← 7 V1 route modules (auth, students, exams, etc.)
@@ -169,12 +166,13 @@ FINAL-MINDKRAFT/
 ### 1) Start Backend
 ```bash
 cd Team-A-Backend/Team-A-Backend
-npm install
-npm run server
+python -m venv ../../.venv
+../../.venv/Scripts/pip install -r requirements.txt
+../../.venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload
 ```
 - URL: `http://localhost:3000`
 - Health check: `GET http://localhost:3000/health`
-- Seeds default admin + sample exam on first run
+- Seeds the default super-admin on first run
 
 ### 2) Start Frontend
 ```bash
@@ -184,11 +182,8 @@ npm run dev
 ```
 - URL: `http://localhost:5173`
 
-### 3) (Optional) Electron Desktop Mode
-```bash
-cd Team-A-Backend/Team-A-Backend
-npm run dev    # builds + launches Electron kiosk window
-```
+### 3) Legacy Electron Desktop Mode
+The Electron kiosk shell is still present in the repository, but the new HTTP backend is Python-based. If you still need kiosk mode, keep the existing Node/Electron shell as a separate legacy process until it is replaced explicitly.
 
 ---
 
@@ -198,11 +193,11 @@ npm run dev    # builds + launches Electron kiosk window
 ```env
 # Database
 MONGODB_URI=mongodb://127.0.0.1:27017
-MONGODB_DB_NAME=mindkraft
+MONGODB_DB_NAME=vox
 PORT=3000
 
 # JWT
-JWT_SECRET=voicesecure-local-dev-secret-change-this
+JWT_SECRET=vox-local-dev-secret-change-this
 
 # AI / Speech binaries
 WHISPER_BIN=whisper                                  # or full path
@@ -214,9 +209,9 @@ ESPEAK_BIN="C:\Program Files\eSpeak NG\espeak-ng.exe"
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=llama3:latest
 
-# VoiceSecure super-admin (auto-created on first run)
-VOICESECURE_SUPERADMIN_EMAIL=admin@voicesecure.edu
-VOICESECURE_SUPERADMIN_PASSWORD=ChangeMe@123
+# Vox super-admin (auto-created on first run)
+VOX_SUPERADMIN_EMAIL=admin@vox.edu
+VOX_SUPERADMIN_PASSWORD=ChangeMe@123
 
 # Frontend URL (for CORS)
 FRONTEND_URL=http://localhost:5173
@@ -237,7 +232,7 @@ choco install espeak-ng ffmpeg
 pip install -U openai-whisper
 ```
 
-The backend logs the presence/absence of each binary on startup. Without them, `/api/ai/*` endpoints return errors but the rest of the app works normally.
+The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` HTTP surface used by the frontend. AI endpoints still depend on external binaries such as Whisper, ffmpeg, espeak-ng, and Ollama.
 
 ---
 
@@ -257,7 +252,7 @@ The backend logs the presence/absence of each binary on startup. Without them, `
 | Exam Sessions | `/api/exam-sessions` | `POST /start`, `POST /autosave`, `POST /submit` |
 | DB | `/api/db` | `POST /save-response`, `POST /log-audit`, `POST /submit-exam` |
 
-### VoiceSecure V1 Routes (JWT-protected)
+### Vox V1 Routes (JWT-protected)
 | Group | Prefix | Key Endpoints |
 |-------|--------|---------------|
 | V1 Auth | `/api/v1/auth` | `POST /admin-login`, `POST /admins` |
@@ -301,8 +296,8 @@ The backend logs the presence/absence of each binary on startup. Without them, `
 
 ## Database
 
-**Engine:** MongoDB 7.x (database: `mindkraft`)
-**Dual driver:** MongoDB Native Driver (legacy routes) + Mongoose 9.2 (VoiceSecure models)
+**Engine:** MongoDB 7.x (database: `vox`)
+**Dual driver:** MongoDB Native Driver (legacy routes) + Mongoose 9.2 (Vox models)
 
 ### Legacy Collections (Native Driver)
 | Collection | Key Fields |
@@ -314,7 +309,7 @@ The backend logs the presence/absence of each binary on startup. Without them, `
 | responses | `studentId`, `examCode`, `rawAnswer`, `formattedAnswer`, `confidence` |
 | audit_logs | `studentId`, `action`, `metadata`, `timestamp` |
 
-### VoiceSecure Mongoose Schemas
+### Vox Mongoose Schemas
 | Model | Key Fields |
 |-------|-----------|
 | Admin | `name`, `email`, `passwordHash`, `role` (super-admin/exam-admin), `mfaEnabled` |
@@ -333,8 +328,8 @@ The backend logs the presence/absence of each binary on startup. Without them, `
 **Admin (seeded on first run):**
 - Username: `admin` / Password: `admin123`
 
-**VoiceSecure Super-Admin (auto-created):**
-- Email: `admin@voicesecure.edu` / Password: `ChangeMe@123`
+**Vox Super-Admin (auto-created):**
+- Email: `admin@vox.edu` / Password: `ChangeMe@123`
 
 ---
 
@@ -348,4 +343,21 @@ The backend logs the presence/absence of each binary on startup. Without them, `
 
 ---
 
-*Built by Team A — MindKraft VoiceSecure Exam Platform*
+*Built by Team A — Vox Exam Platform*""  
+"## Documentation"  
+""  
+"| Document | Purpose |"  
+"|----------|---------|"  
+"| **[QUICKSTART.md](QUICKSTART.md)** | 5-minute setup guide — fastest way to get running |"  
+"| **[SETUP.md](SETUP.md)** | Complete development environment setup with IDE configuration |"  
+"| **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** | Detailed file organization and directory layout |"  
+"| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture, data flows, component interactions, and design patterns |"  
+"| **[TECH_STACK.md](TECH_STACK.md)** | Technology stack components and detailed architecture |"  
+"| **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** | Complete API reference and backend integration details |" 
+""  
+"**Getting Started:**"  
+"1. Start with [QUICKSTART.md](QUICKSTART.md) to get running in 5 minutes"  
+"2. Read [SETUP.md](SETUP.md) for detailed environment setup"  
+"3. Check [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) to understand the codebase organization"  
+"4. Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design and data flows"  
+"5. See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for API documentation" 

@@ -1,4 +1,4 @@
-# MindKraft — Project Presentation Guide
+# Vox — Project Presentation Guide
 
 > **Voice-First, AI-Powered, Fully Hands-Free Examination Platform**
 > Built by Team A
@@ -6,7 +6,7 @@
 ---
 
 ## Slide 1: Title & Tagline
-**MindKraft (VoiceSecure)**
+**Vox**
 *"100% Hands-Free Examination — From Face Login to Voice Submission"*
 - AI-powered exam platform for students with motor disabilities
 - Zero cloud dependency — runs entirely offline
@@ -63,7 +63,7 @@
 │                   BACKEND (Express 5 + Node.js + Electron 40)       │
 │                                                                     │
 │   9 Legacy Route Modules (/api/*)                                   │
-│   7 VoiceSecure V1 Route Modules (/api/v1/*)                       │
+│   7 Vox V1 Route Modules (/api/v1/*)                       │
 │                                                                     │
 │   Whisper STT · espeak-ng TTS · Ollama Llama 3 · MongoDB           │
 │   JWT Auth · bcrypt · PDFKit · Multer · ffmpeg                      │
@@ -72,7 +72,7 @@
                             │
                  ┌──────────▼────────── ┐
                  │    MongoDB 7.x       │
-                 │    DB: mindkraft     │
+                 │    DB: vox     │
                  │    6 Legacy + 8      │
                  │    Mongoose Schemas  │
                  └──────────────────────┘
@@ -98,7 +98,7 @@
 | Express | 5.2.1 | Native async error handling for AI pipelines |
 | Electron | 40.6 | Hardware-level kiosk lockdown |
 | MongoDB Native | 7.1 | Document storage with 40+ query methods |
-| Mongoose | 9.2.3 | Schema validation for 8 VoiceSecure models |
+| Mongoose | 9.2.3 | Schema validation for 8 Vox models |
 | bcrypt | 6.0 | Password hashing (cost factor 10-12) |
 | JWT | 9.0.3 | Stateless auth, 8-hour expiry |
 | Multer | 2.0 | Audio/file multipart uploads |
@@ -294,7 +294,7 @@ Server-Side (Fallback):
 
 ### Dual-Driver Architecture
 - **MongoDB Native Driver 7.1** — 40+ methods for legacy routes (high performance)
-- **Mongoose 9.2.3** — 8 schemas for VoiceSecure V1 (schema validation)
+- **Mongoose 9.2.3** — 8 schemas for Vox V1 (schema validation)
 
 ### Legacy Collections (Native Driver)
 | Collection | Key Fields | Purpose |
@@ -306,7 +306,7 @@ Server-Side (Fallback):
 | responses | studentId, examCode, rawAnswer, formattedAnswer, confidence | Student answers |
 | audit_logs | studentId, action, metadata, timestamp | Security trail |
 
-### Mongoose Schemas (VoiceSecure V1)
+### Mongoose Schemas (Vox V1)
 | Model | Key Fields | Notable |
 |-------|-----------|---------|
 | Admin | email, passwordHash, role (super-admin/exam-admin), mfaEnabled | Role-based access |
@@ -337,7 +337,7 @@ Server-Side (Fallback):
 | exam-sessions | 3 | Start, autosave, submit |
 | db | 3 | Save response, log audit, submit exam |
 
-**VoiceSecure V1 Routes (7 modules, /api/v1/\*, JWT-protected):**
+**Vox V1 Routes (7 modules, /api/v1/*, JWT-protected):**
 | Module | Endpoints | Key Operations |
 |--------|-----------|----------------|
 | auth | 2 | Admin JWT login, create admin |
@@ -598,7 +598,7 @@ Beeps: command (880Hz), dictation (660Hz), error (330Hz),
 ## Slide 21: Project File Structure
 
 ```
-FINAL-MINDKRAFT/
+FINAL-VOX/
 ├── README.md                    ← Project overview
 ├── TECH_STACK.md                ← Detailed tech rationale
 ├── INTEGRATION_GUIDE.md         ← Full API reference
@@ -623,7 +623,7 @@ FINAL-MINDKRAFT/
 │       ├── server/              4 files + 9 route modules
 │       ├── services/            6 services (AI, Face, Speech, TTS, LLM, PDF)
 │       ├── utils/               2 placeholder utilities
-│       └── voicesecure/         V1 subsystem
+│       └── voicesecure/         V1 subsystem (routes, models, services) [Legacy folder name]
 │           ├── core/            5 files (middleware, DB, types, errors)
 │           ├── models/          8 Mongoose schemas
 │           └── routes/          8 route modules (index + 7 domain)
@@ -638,8 +638,8 @@ FINAL-MINDKRAFT/
 1. Load environment variables (.env)
 2. Connect MongoDB Native Driver (mongodb://127.0.0.1:27017)
 3. Connect Mongoose (same URI, pool: 5–20 connections)
-4. Initialize VoiceSecure defaults:
-   → Create super-admin (admin@voicesecure.edu) if not exists
+4. Initialize Vox defaults:
+   → Create super-admin (admin@vox.edu) if not exists
    → Create AI config singleton (whisper, llama3.2, 15s autosave)
 5. Seed database:
    → Create admin (admin/admin123) if empty
@@ -674,7 +674,7 @@ FINAL-MINDKRAFT/
 | Face | AWS Rekognition ($1/1K images) | face-api.js in browser | $0/exam |
 
 ### Cost Comparison (100 students, 30-min exam)
-| Item | Cloud Platform | MindKraft |
+| Item | Cloud Platform | Vox |
 |------|---------------|-----------|
 | STT (30 min × 100) | $180 | $0 |
 | LLM (5 answers × 100) | $15 | $0 |
@@ -726,7 +726,7 @@ npm install && npm run dev
 | Role | Credentials |
 |------|------------|
 | Admin (Legacy) | Username: `admin`, Password: `admin123` |
-| Admin (V1 JWT) | Email: `admin@voicesecure.edu`, Password: `ChangeMe@123` |
+| Admin (V1 JWT) | Email: `admin@vox.edu`, Password: `ChangeMe@123` |
 
 ### Demo Walkthrough
 1. Open `http://localhost:5173` → Landing Page
@@ -742,7 +742,7 @@ npm install && npm run dev
 | Frontend | http://localhost:5173 |
 | Backend Health | http://localhost:3000/health |
 | API Base | http://localhost:3000/api |
-| VoiceSecure V1 | http://localhost:3000/api/v1 |
+| Vox V1 | http://localhost:3000/api/v1 |
 
 ---
 
@@ -800,7 +800,7 @@ npm install && npm run dev
 | Cloud API Cost | $0 |
 ---
 ## Slide 29: Thank You
-**MindKraft — Making Exams Accessible for Everyone**
+**Vox — Making Exams Accessible for Everyone**
 - GitHub Repository: *[your-repo-url]*
 - Built with: React 18 · Express 5 · MongoDB · Whisper · Llama 3 · face-api.js · Electron
 - Team A
