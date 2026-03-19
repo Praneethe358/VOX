@@ -248,12 +248,7 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   const progress = (passedCount / checklist.length) * 100;
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Ambient glow */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/3 w-[500px] h-[500px] bg-indigo-600/[0.06] rounded-full blur-[120px]" />
-        <div className="absolute bottom-1/4 right-1/3 w-[400px] h-[400px] bg-emerald-600/[0.04] rounded-full blur-[100px]" />
-      </div>
+    <section className="screen flex-center" style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
 
       {/* Voice UI */}
       <VoiceListener
@@ -271,22 +266,23 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
       >
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-500/[0.08] border border-indigo-500/[0.1] flex items-center justify-center mx-auto mb-4">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(45, 78, 232, 0.12)', border: '1px solid rgba(45, 78, 232, 0.2)' }}>
             <span className="text-2xl">⚙</span>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight mb-1">System Verification</h1>
-          <p className="text-sm text-slate-500">Checking requirements before exam start</p>
+          <h1 className="text-2xl font-bold tracking-tight mb-1" style={{ color: 'var(--text)' }}>System Verification</h1>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Checking requirements before exam start</p>
         </div>
 
         {/* Progress Bar */}
         <div className="mb-6">
-          <div className="flex justify-between text-xs text-slate-500 mb-2">
+          <div className="flex justify-between text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
             <span>{passedCount} of {checklist.length} checks</span>
             <span>{Math.round(progress)}%</span>
           </div>
-          <div className="h-1 rounded-full bg-white/[0.04] overflow-hidden">
+          <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255, 255, 255, 0.04)' }}>
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500"
+              className="h-full rounded-full"
+              style={{ background: 'linear-gradient(to right, var(--accent), var(--green-lt))' }}
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.5 }}
@@ -300,26 +296,31 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="glass-card rounded-2xl p-5 mb-6"
+            className="rounded-2xl p-5 mb-6"
+            style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border2)',
+              backdropFilter: 'blur(12px)',
+            }}
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">{exam.subject}</p>
-                <h2 className="text-lg font-semibold text-white">{exam.title}</h2>
+                <p className="text-xs uppercase tracking-widest font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>{exam.subject}</p>
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>{exam.title}</h2>
               </div>
             </div>
             <div className="flex gap-6 mt-4">
               <div className="text-center">
-                <p className="text-lg font-bold text-indigo-300">{exam.durationMinutes}</p>
-                <p className="text-[11px] text-slate-500">minutes</p>
+                <p className="text-lg font-bold" style={{ color: 'var(--accent-lt)' }}>{exam.durationMinutes}</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>minutes</p>
               </div>
               <div className="text-center">
-                <p className="text-lg font-bold text-indigo-300">{exam.totalMarks}</p>
-                <p className="text-[11px] text-slate-500">marks</p>
+                <p className="text-lg font-bold" style={{ color: 'var(--accent-lt)' }}>{exam.totalMarks}</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>marks</p>
               </div>
               <div className="text-center">
-                <p className="text-lg font-bold text-indigo-300">{exam.sections.length}</p>
-                <p className="text-[11px] text-slate-500">sections</p>
+                <p className="text-lg font-bold" style={{ color: 'var(--accent-lt)' }}>{exam.sections.length}</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>sections</p>
               </div>
             </div>
           </motion.div>
@@ -333,53 +334,49 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
               initial={{ opacity: 0, x: -12 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: idx * 0.08 }}
-              className={`flex items-center p-4 rounded-xl border transition-all duration-300 ${
-                item.status === 'success'
-                  ? 'bg-emerald-500/[0.04] border-emerald-500/[0.1]'
-                  : item.status === 'failed'
-                  ? 'bg-red-500/[0.04] border-red-500/[0.1]'
-                  : 'bg-white/[0.02] border-white/[0.04]'
-              }`}
+              className="flex items-center p-4 rounded-xl border transition-all duration-300"
+              style={{
+                borderColor: item.status === 'success' ? 'rgba(34, 197, 94, 0.2)' : item.status === 'failed' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                background: item.status === 'success' ? 'rgba(34, 197, 94, 0.05)' : item.status === 'failed' ? 'rgba(239, 68, 68, 0.05)' : 'rgba(255, 255, 255, 0.02)',
+              }}
             >
               {/* Status Icon */}
               <div className="mr-4 flex-shrink-0">
                 {item.status === 'success' && (
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/[0.15] border border-emerald-500/[0.2] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)' }}>
                     <span className="text-emerald-400 text-xs font-bold">✓</span>
                   </div>
                 )}
                 {item.status === 'failed' && (
-                  <div className="w-7 h-7 rounded-lg bg-red-500/[0.15] border border-red-500/[0.2] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                     <span className="text-red-400 text-xs font-bold">✕</span>
                   </div>
                 )}
                 {item.status === 'checking' && (
-                  <div className="w-7 h-7 rounded-lg bg-indigo-500/[0.1] border border-indigo-500/[0.15] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(45, 78, 232, 0.15)', border: '1px solid rgba(45, 78, 232, 0.25)' }}>
                     <motion.div
                       animate={{ rotate: 360 }}
                       transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                      className="w-3.5 h-3.5 rounded-full border-[1.5px] border-indigo-400/50 border-t-indigo-400"
+                      className="w-3.5 h-3.5 rounded-full border-[1.5px]"
+                      style={{ borderColor: 'rgba(74, 107, 255, 0.5)', borderTopColor: 'rgba(74, 107, 255, 1)' }}
                     />
                   </div>
                 )}
                 {item.status === 'pending' && (
-                  <div className="w-7 h-7 rounded-lg bg-white/[0.02] border border-white/[0.06] flex items-center justify-center">
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-muted)' }} />
                   </div>
                 )}
               </div>
 
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-medium ${
-                  item.status === 'success' ? 'text-emerald-300' :
-                  item.status === 'failed' ? 'text-red-300' :
-                  item.status === 'checking' ? 'text-indigo-300' :
-                  'text-slate-400'
-                }`}>
+                <p className="text-sm font-medium" style={{
+                  color: item.status === 'success' ? 'var(--green-lt)' : item.status === 'failed' ? '#ef4444' : item.status === 'checking' ? 'var(--accent-lt)' : 'var(--text-sec)'
+                }}>
                   {item.label}
                 </p>
                 {item.details && (
-                  <p className="text-[11px] text-slate-500 mt-0.5 truncate">{item.details}</p>
+                  <p className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-muted)' }}>{item.details}</p>
                 )}
               </div>
             </motion.div>
@@ -395,28 +392,37 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
               exit={{ opacity: 0, y: -8 }}
               className="mb-4 space-y-3"
             >
-              <div className="flex items-center justify-between glass-card rounded-xl px-5 py-4 border-indigo-500/[0.1]">
+              <div className="flex items-center justify-between rounded-xl px-5 py-4" style={{
+                background: 'var(--surface2)',
+                border: '1px solid rgba(45, 78, 232, 0.15)',
+                backdropFilter: 'blur(12px)',
+              }}>
                 <div className="flex items-center gap-3">
                   <motion.div
-                    className="w-2.5 h-2.5 rounded-full bg-indigo-400"
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ background: 'var(--accent-lt)' }}
                     animate={{ scale: [1, 1.3, 1] }}
                     transition={{ duration: 1, repeat: Infinity }}
                   />
-                  <p className="text-sm text-slate-300">
+                  <p className="text-sm" style={{ color: 'var(--text-sec)' }}>
                     Say{' '}
-                    <span className="font-mono font-semibold text-indigo-300 bg-indigo-500/[0.1] px-2 py-0.5 rounded-md">
+                    <span className="font-mono font-semibold rounded-md px-2 py-0.5" style={{
+                      color: 'var(--accent-lt)',
+                      background: 'rgba(45, 78, 232, 0.15)'
+                    }}>
                       "Begin Exam"
                     </span>
                   </p>
                 </div>
-                <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full ${
-                  engineListening
-                    ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-400/30'
-                    : 'text-slate-500 bg-slate-500/10 border border-slate-500/20'
-                }`}>
+                <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full" style={{
+                  color: engineListening ? 'var(--green-lt)' : 'var(--text-muted)',
+                  background: engineListening ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                  border: engineListening ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(255, 255, 255, 0.12)',
+                }}>
                   {engineListening && (
                     <motion.span
-                      className="inline-block w-2 h-2 rounded-full bg-emerald-400"
+                      className="inline-block w-2 h-2 rounded-full"
+                      style={{ background: 'var(--green-lt)' }}
                       animate={{ opacity: [1, 0.3, 1], scale: [1, 0.85, 1] }}
                       transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
                     />
@@ -426,8 +432,11 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
               </div>
 
               <div className="flex items-center gap-2 px-4">
-                <span className="text-[11px] text-slate-600">or say</span>
-                <span className="font-mono text-[11px] text-slate-500 bg-white/[0.03] px-2 py-0.5 rounded">
+                <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>or say</span>
+                <span className="font-mono text-[11px] px-2 py-0.5 rounded" style={{
+                  color: 'var(--text-muted)',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                }}>
                   "Go Back"
                 </span>
               </div>
@@ -439,9 +448,9 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
                   animate={{ opacity: 1 }}
                   className="px-4"
                 >
-                  <p className={`text-[11px] italic ${
-                    wasMatched ? 'text-emerald-400' : 'text-slate-500'
-                  }`}>
+                  <p className="text-[11px] italic" style={{
+                    color: wasMatched ? 'var(--green-lt)' : 'var(--text-muted)'
+                  }}>
                     Heard: "{lastHeardText}"
                   </p>
                 </motion.div>
@@ -454,7 +463,20 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
         <div className="flex gap-3">
           <button
             onClick={() => { stopEngine(); navigate(-1); }}
-            className="flex-1 px-4 py-3 rounded-xl glass-card text-slate-400 hover:text-slate-200 text-sm font-medium transition-colors"
+            className="flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-colors"
+            style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-sec)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = 'var(--text)';
+              e.currentTarget.style.background = 'var(--surface3)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = 'var(--text-sec)';
+              e.currentTarget.style.background = 'var(--surface2)';
+            }}
           >
             ‹ Back
           </button>
@@ -464,38 +486,20 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
             whileTap={{ scale: 0.98 }}
             onClick={() => { stopEngine(); handleStart(); }}
             disabled={!allPassed}
-            className={`flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
-              allPassed
-                ? 'bg-indigo-500/[0.15] hover:bg-indigo-500/[0.25] border border-indigo-500/[0.2] text-indigo-300 hover:text-indigo-200 shadow-lg shadow-indigo-500/[0.08]'
-                : 'bg-white/[0.02] border border-white/[0.04] text-slate-600 cursor-not-allowed'
-            }`}
+            className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300"
+            style={{
+              background: allPassed ? 'rgba(45, 78, 232, 0.18)' : 'rgba(255, 255, 255, 0.04)',
+              border: allPassed ? '1px solid rgba(45, 78, 232, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+              color: allPassed ? 'var(--accent-lt)' : 'var(--text-muted)',
+              cursor: allPassed ? 'pointer' : 'not-allowed',
+              boxShadow: allPassed ? '0 8px 20px rgba(45, 78, 232, 0.15)' : 'none',
+            }}
           >
             {allPassed ? 'Begin Exam →' : 'Verifying...'}
           </motion.button>
         </div>
-
-        {/* Info Notice */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.6 }}
-          className="mt-6 glass-card rounded-xl p-4 border-indigo-500/[0.08]"
-        >
-          <div className="flex gap-3">
-            <div className="w-5 h-5 rounded-md bg-indigo-500/[0.1] flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-indigo-400 text-[10px]">!</span>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-slate-300 mb-0.5">Kiosk Mode</p>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                The exam runs in fullscreen kiosk mode. You won't be able to switch tabs or exit until submission.
-                This portal is completely hands-free — use voice commands throughout.
-              </p>
-            </div>
-          </div>
-        </motion.div>
       </motion.div>
-    </div>
+    </section>
   );
 }
 

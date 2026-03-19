@@ -1,8 +1,8 @@
-﻿/**
+/**
  * ExamInterface.tsx — Vox hands-free exam page.
  *
  * No buttons. No mouse. No keyboard.
- * 13 voice commands, AI answer formatting, kiosk lock, auto-save every 15 s.
+ * 13 voice commands, AI answer formatting, auto-save every 15 s.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -14,7 +14,6 @@ import { useVoiceEngine } from '../../hooks/student/useVoiceEngine';
 import { useDictation } from '../../hooks/student/useDictation';
 import { useExamTimer } from '../../hooks/student/useExamTimer';
 import { useAutoSave } from '../../hooks/student/useAutoSave';
-import { useKioskMode } from '../../hooks/student/useKioskMode';
 import ModeIndicator from '../../components/student/ModeIndicator';
 import StatusBar from '../../components/student/StatusBar';
 import TimerDisplay from '../../components/student/TimerDisplay';
@@ -22,6 +21,7 @@ import SubmissionGate from '../../components/student/SubmissionGate';
 import FormattedAnswerReview from '../../components/student/FormattedAnswerReview';
 import LiveTranscript from '../../components/student/LiveTranscript';
 import { AnswerInputBox } from '../../components/student/AnswerInputBox';
+import { useToast } from '../../components/Toast';
 
 import { studentApi, unifiedApiClient } from '../../api/client';
 
@@ -42,7 +42,7 @@ export function ExamInterface() {
     formattedAnswer, setFormattedAnswer,
     setCurrentQuestionText, playBeep,
   } = useVoiceContext();
-  const { enableKiosk } = useKioskMode();
+  const toast = useToast();
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [examTitle, setExamTitle] = useState('');
@@ -97,14 +97,13 @@ export function ExamInterface() {
       } catch { /* continue */ }
     };
     load();
-    enableKiosk();
     transition('COMMAND_MODE');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Auto-read question when index changes ───────────────────────────────────
   useEffect(() => {
-    if (!currentQuestion || voiceState === 'DICTATION_MODE') return;
+    if (!currentQuestion || voiceState !== 'COMMAND_MODE') return;
     if (questionReadRef.current === currentQuestion.id) return;
     questionReadRef.current = currentQuestion.id;
     setCurrentQuestionText(currentQuestion.text);
@@ -199,6 +198,7 @@ export function ExamInterface() {
   async function handleCommand(action: string, _confidence: number, rawText?: string) {
     // Always update the heard-text display
     if (rawText) { setHeardText(rawText); setHeardMatched(true); }
+
     if (silenceWarnTimerRef.current) { clearTimeout(silenceWarnTimerRef.current); silenceWarnTimerRef.current = null; }
 
     // Cancel pending clear if any command other than confirm_clear arrives
@@ -579,270 +579,248 @@ export function ExamInterface() {
     );
   }
 
-  // ── Main UI ─────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#0a0e1a] flex flex-col select-none relative overflow-hidden">
-      {/* Subtle ambient */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-600/[0.04] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-violet-600/[0.03] rounded-full blur-[100px]" />
-      </div>
+    <section className="screen" id="s-examinterface">
+      {/* ── Pause Overlay ── */}
+      <AnimatePresence>
+        {voiceState === 'PAUSE_MODE' && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-bg2/90 backdrop-blur-md flex items-center justify-center">
+            <div className="text-center space-y-5">
+              <div className="w-20 h-20 rounded-3xl bg-amber-500/[0.08] border border-amber-500/[0.12] flex items-center justify-center mx-auto">
+                <span className="text-amber-400 text-3xl">⏸</span>
+              </div>
+              <h2 className="text-white text-2xl font-bold tracking-tight">Exam Paused</h2>
+              <p className="text-amber-300/80 text-sm font-mono">Say "Resume exam" to continue</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <StatusBar
-        currentQ={currentIndex + 1}
-        totalQ={questions.length}
-        remainingSeconds={remaining}
-        isSaving={isSaving}
-        lastSaved={lastSaved}
-        voiceState={voiceState}
-        examTitle={examTitle}
-      />
+      {/* ── Submission Gate ── */}
+      <AnimatePresence>
+        {voiceState === 'SUBMISSION_GATE' && (
+          <SubmissionGate
+            windowSeconds={60}
+            onTimeout={() => { transition('COMMAND_MODE'); speak('Submission cancelled. Returning to exam.'); }}
+          />
+        )}
+      </AnimatePresence>
 
-      <div className="flex-1 flex flex-col gap-4 p-6 max-w-3xl mx-auto w-full relative z-10">
+      <div id="s-examinterface" className="screen">
+        {/* SIDEBAR */}
+        <div className="ei-sidebar">
+          <div className="landing-brand" style={{ margin: '0 0 24px 0', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <svg width="34" height="26" viewBox="0 0 48 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M 0 24 L 6 24 C 9 24, 9 10, 12 10 C 15 10, 15 24, 18 24 C 21 24, 21 4, 24 4 C 27 4, 27 32, 30 32 C 33 32, 33 16, 36 16 C 39 16, 39 24, 42 24 L 48 24" 
+                stroke="var(--wave)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+            <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: '18px', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>VOX</span>
+          </div>
 
-        <ModeIndicator voiceState={voiceState} isListening={isListening || isRecording} interimText={interimText} />
+          <div className="qs-label">
+            Questions <span className="dot">•</span> <span className="stat-em">{answers.size}/{questions.length}</span>
+          </div>
+          
+          <div className="q-grid">
+            {questions.map((q, i) => {
+              const isAnswered = answers.has(q.id);
+              const isCurrent = i === currentIndex;
+              let stateClass = 'none';
+              if (isCurrent) stateClass = 'current';
+              else if (isAnswered) stateClass = 'done';
+              
+              return (
+                <div 
+                  key={q.id} 
+                  className={`qn ${stateClass === 'done' ? 'ans' : stateClass === 'flagged' ? 'flag' : stateClass === 'current' ? 'cur' : ''}`} 
+                  onClick={() => { questionReadRef.current = null; setCurrentIndex(i); }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {i + 1}
+                </div>
+              );
+            })}
+          </div>
 
-        {/* Live transcript during dictation */}
-        <AnimatePresence>
-          {voiceState === 'DICTATION_MODE' && !isWrittenDictation && (
-            <LiveTranscript
-              finalText={dictationFinalText}
-              interimText={interimText}
-              isRecording={isRecording}
-            />
-          )}
-        </AnimatePresence>
-
-        <div className="flex justify-center">
-          <TimerDisplay remainingSeconds={remaining} isPaused={isPaused} />
+          {/* Voice Engine Native Integrations */}
+          <div className="voice-widget" style={{ marginTop: 'auto' }}>
+            <div className="vw-header">
+              <div className="vw-status" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div className={`live-dot ${isListening || isRecording ? 'pulse' : ''}`} style={{ backgroundColor: isListening || isRecording ? 'var(--green-lt)' : 'var(--text-muted)' }}></div>
+                {isRecording ? 'Dictating' : isListening ? 'Listening' : 'Ready'}
+              </div>
+            </div>
+            
+            {(lastHeardText || heardText) ? (
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border)', marginTop: '12px', fontSize: '12px', color: 'var(--text-sec)' }}>
+                <span style={{ color: (wasMatched || heardMatched) ? 'var(--green-lt)' : 'var(--text)', fontWeight: 600 }}>
+                  "{lastHeardText || heardText}"
+                </span>
+              </div>
+            ) : (
+              <div className="vw-viz">
+                <div className="bar" style={{ height: (isListening || isRecording) ? '60%' : '10%' }}></div>
+                <div className="bar" style={{ height: (isListening || isRecording) ? '100%' : '15%' }}></div>
+                <div className="bar" style={{ height: (isListening || isRecording) ? '40%' : '10%' }}></div>
+                <div className="bar" style={{ height: (isListening || isRecording) ? '80%' : '20%' }}></div>
+                <div className="bar" style={{ height: (isListening || isRecording) ? '30%' : '10%' }}></div>
+              </div>
+            )}
+            
+            <div style={{ marginTop: '12px', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+               <span>{voiceState.replace('_', ' ')}</span>
+               <span>{isSaving ? 'Saving...' : lastSaved ? `Saved ${lastSaved.toLocaleTimeString()}` : 'Not saved'}</span>
+            </div>
+          </div>
         </div>
 
-        {/* Voice status / error banner */}
-        {(!isVoiceSupported || voiceEngineError || dictationError) && (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`glass-card rounded-xl px-4 py-3 ${voiceEngineError ? 'border-red-500/[0.1]' : 'border-amber-500/[0.1]'}`}
-            role="alert"
-          >
-            <p className={`${voiceEngineError ? 'text-red-300' : 'text-amber-300'} text-xs font-semibold mb-0.5`}>
-              {voiceEngineError ? 'Voice input issue' : 'Voice info'}
-            </p>
-            <p className={`${voiceEngineError ? 'text-red-400/70' : 'text-amber-400/70'} text-[11px] leading-relaxed`}>
-              {voiceEngineError || dictationError || 'Speech recognition is not supported in this browser.'}
-            </p>
-          </motion.div>
-        )}
-
-        {/* Question card */}
-        {currentQuestion && (
-          <motion.div key={currentQuestion.id} initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }}
-            className="glass-card rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-xs font-mono text-slate-500 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.04]">
-                Q{currentIndex + 1}/{questions.length}
-              </span>
-              {currentQuestion.type === 'mcq' && (
-                <span className="text-[11px] text-indigo-400 bg-indigo-500/[0.08] px-2 py-0.5 rounded-lg border border-indigo-500/[0.1] font-semibold">MCQ</span>
-              )}
-              {currentQuestion.marks && (
-                <span className="text-[11px] text-slate-500">{currentQuestion.marks} mark{currentQuestion.marks > 1 ? 's' : ''}</span>
-              )}
-              {savedAnswer && (
-                <span className="ml-auto bg-emerald-500/[0.08] text-emerald-400 text-[11px] px-2.5 py-1 rounded-lg border border-emerald-500/[0.1] font-medium">
-                  ✓ {savedAnswer.selectedOption !== undefined ? `Option ${savedAnswer.selectedOption + 1}` : 'Answered'}
-                </span>
-              )}
+        {/* MAIN AREA */}
+        <div className="ei-main">
+          {/* Header */}
+          <div className="ei-header">
+            <div className="ei-exam-lbl">{examTitle}</div>
+            <div className="ei-timer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.6 }}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              {Math.floor(remaining / 60).toString().padStart(2, '0')}:{(remaining % 60).toString().padStart(2, '0')}
             </div>
-            <p className="text-white text-lg leading-relaxed font-medium">{currentQuestion.text}</p>
-
-            {/* MCQ Option Cards */}
-            {currentQuestion.type === 'mcq' && currentQuestion.options && currentQuestion.options.length > 0 && (
-              <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {currentQuestion.options.map((opt, oi) => {
-                  const isSelected = savedAnswer?.selectedOption === oi;
-                  return (
-                    <motion.div
-                      key={oi}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: oi * 0.08 }}
-                      className={`rounded-xl p-4 border transition-all ${
-                        isSelected
-                          ? 'bg-emerald-500/[0.08] border-emerald-500/[0.2] shadow-sm shadow-emerald-500/10'
-                          : 'bg-white/[0.02] border-white/[0.05] hover:border-indigo-400/[0.15]'
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold shrink-0 ${
-                          isSelected
-                            ? 'bg-emerald-500/[0.15] text-emerald-300 border border-emerald-500/[0.2]'
-                            : 'bg-indigo-500/[0.08] text-indigo-300 border border-indigo-500/[0.1]'
-                        }`}>
-                          {oi + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p className={`text-sm leading-relaxed ${isSelected ? 'text-emerald-200 font-medium' : 'text-slate-300'}`}>
-                            {opt}
-                          </p>
-                          <p className="text-[10px] text-slate-600 mt-1 font-mono">
-                            Say "Option {oi + 1}"
-                          </p>
-                        </div>
-                        {isSelected && <span className="text-emerald-400 text-sm mt-1">✓</span>}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Written Answer Input */}
-            {currentQuestion.type !== 'mcq' && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-6"
-              >
-                <AnswerInputBox
-                  questionId={currentQuestion.id}
-                  questionText={currentQuestion.text}
-                  value={isRecording && isWrittenDictation
-                    ? [dictationFinalText, interimText].filter(Boolean).join(' ').trim()
-                    : (writtenAnswers.get(currentQuestion.id) || '')}
-                  onChange={(text) => {
-                    setWrittenAnswers(prev => new Map(prev).set(currentQuestion.id, text));
-                  }}
-                  isRecording={isRecording && isWrittenDictation}
-                  interimText={interimText && isWrittenDictation ? interimText : ''}
-                  iFormattedAnswer={formattedAnswer}
-                  expectedAnswerLength={currentQuestion.expectedAnswerLength || 'medium'}
-                  placeholder="Say 'start answer' to record, or type your answer here..."
-                />
-              </motion.div>
-            )}
-          </motion.div>
-        )}
-
-        {/* AI answer review */}
-        <AnimatePresence>
-          {voiceState === 'ANSWER_REVIEW' && (
-            <FormattedAnswerReview
-              rawText={rawTranscript} formattedText={formattedAnswer}
-              isFormatting={isFormatting} formatError={formatError} questionNumber={currentIndex + 1}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Saved answer readback */}
-        <AnimatePresence>
-          {voiceState === 'COMMAND_MODE' && savedAnswer && (
-            <motion.div key="saved" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              className="glass-card rounded-xl p-4 border-emerald-500/[0.06]">
-              <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-2">Saved Answer</p>
-              <p className="text-slate-300 text-sm leading-relaxed">{savedAnswer.formattedText}</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Pause overlay */}
-        <AnimatePresence>
-          {voiceState === 'PAUSE_MODE' && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 z-40 bg-[#0a0e1a]/90 backdrop-blur-md flex items-center justify-center">
-              <div className="text-center space-y-5">
-                <div className="w-20 h-20 rounded-3xl bg-amber-500/[0.08] border border-amber-500/[0.12] flex items-center justify-center mx-auto">
-                  <span className="text-amber-400 text-3xl">⏸</span>
-                </div>
-                <h2 className="text-white text-2xl font-bold tracking-tight">Exam Paused</h2>
-                <p className="text-amber-300/80 text-sm font-mono">Say "Resume exam" to continue</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Submission gate */}
-        <AnimatePresence>
-          {voiceState === 'SUBMISSION_GATE' && (
-            <SubmissionGate
-              windowSeconds={60}
-              onTimeout={() => { transition('COMMAND_MODE'); speak('Submission cancelled. Returning to exam.'); }}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Last heard text — always visible when listening */}
-        {(lastHeardText || heardText) && (
-          <motion.div
-            key={lastHeardText || heardText}
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            className={`rounded-xl px-5 py-3 flex items-center gap-3 border ${
-              wasMatched || heardMatched
-                ? 'bg-emerald-500/[0.06] border-emerald-500/[0.15]'
-                : 'bg-white/[0.03] border-white/[0.06]'
-            }`}
-          >
-            <span className="text-[10px] uppercase tracking-widest shrink-0 font-bold" style={{ color: wasMatched || heardMatched ? '#6ee7b7' : '#94a3b8' }}>
-              {wasMatched || heardMatched ? '✓ Heard' : '🎤 Heard'}
-            </span>
-            <span className={`text-base font-semibold truncate ${
-              wasMatched || heardMatched ? 'text-emerald-300' : 'text-slate-300'
-            }`}>
-              "{lastHeardText || heardText}"
-            </span>
-            {!(wasMatched || heardMatched) && (
-              <span className="ml-auto text-amber-400/60 text-[10px] shrink-0 font-medium">no match</span>
-            )}
-          </motion.div>
-        )}
-
-        {/* Command hints */}
-        {(voiceState === 'COMMAND_MODE' || voiceState === 'ANSWER_REVIEW') && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            {(voiceState === 'ANSWER_REVIEW' ? [
-              { cmd: '"Confirm answer"', icon: '✓' }, { cmd: '"Edit answer"', icon: '✎' },
-              { cmd: '"Continue dictation"', icon: '+' }, { cmd: '"Repeat question"', icon: '↻' },
-              { cmd: '"Read my answer"', icon: '◈' }, { cmd: '"Start answering"', icon: '◉' },
-            ] : currentQuestion?.type === 'mcq' ? [
-              { cmd: '"Option 1"', icon: '①' }, { cmd: '"Option 2"', icon: '②' },
-              { cmd: '"Option 3"', icon: '③' }, { cmd: '"Option 4"', icon: '④' },
-              { cmd: '"Next question"', icon: '→' }, { cmd: '"Previous"', icon: '←' },
-              { cmd: '"Repeat"', icon: '↻' }, { cmd: '"Submit exam"', icon: '↗' },
-            ] : [
-              { cmd: '"Start answering"', icon: '◉' }, { cmd: '"Next question"', icon: '→' },
-              { cmd: '"Previous"', icon: '←' }, { cmd: '"Repeat"', icon: '↻' },
-              { cmd: '"Read answer"', icon: '◈' }, { cmd: '"Clear answer"', icon: '⊘' },
-              { cmd: '"Pause exam"', icon: '‖' }, { cmd: '"Submit exam"', icon: '↗' },
-            ]).map(item => (
-              <div key={item.cmd} className="bg-white/[0.02] border border-white/[0.03] rounded-lg px-3 py-2 flex items-center gap-2">
-                <span className="text-indigo-400/40 text-xs">{item.icon}</span>
-                <span className="text-slate-500 text-[11px] font-mono">{item.cmd}</span>
-              </div>
-            ))}
-          </motion.div>
-        )}
-
-        {/* Progress dots */}
-        {questions.length > 0 && questions.length <= 30 && (
-          <div className="flex flex-wrap gap-1.5 justify-center mt-3">
-            {questions.map((q, i) => (
-              <div key={q.id} className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-                i === currentIndex
-                  ? 'bg-indigo-400 scale-125 shadow-sm shadow-indigo-400/50'
-                  : answers.has(q.id)
-                  ? 'bg-emerald-500/80'
-                  : 'bg-white/[0.06]'
-              }`} />
-            ))}
+            <button className="ei-submit" onClick={() => handleCommand('submit_exam', 1)}>
+              Submit Exam
+            </button>
           </div>
-        )}
 
-        <p className="text-center text-slate-600 text-[11px] mt-1 tracking-wide">
-          {answers.size} of {questions.length} answered · Voice-only mode
-        </p>
+          {/* MAIN BODY AREA (Centered container) */}
+          <div className="ei-body">
+            <div className="ei-body-content">
+            {/* Voice Error Banners */}
+          {(!isVoiceSupported || voiceEngineError || dictationError) && (
+            <div style={{ padding: '12px 16px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: '12px', color: 'var(--wave)', fontSize: '13px', marginBottom: '24px' }}>
+              <strong>Voice Input Issue:</strong> {voiceEngineError || dictationError || 'Speech recognition is not supported in this browser.'}
+            </div>
+          )}
+
+          {/* AI answer review */}
+          <AnimatePresence>
+            {voiceState === 'ANSWER_REVIEW' && (
+              <div style={{ marginBottom: '24px' }}>
+                <FormattedAnswerReview
+                  rawText={rawTranscript} formattedText={formattedAnswer}
+                  isFormatting={isFormatting} formatError={formatError} questionNumber={currentIndex + 1}
+                />
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Question Box */}
+          {currentQuestion && (
+            <motion.div 
+              key={currentQuestion.id} 
+              initial={{ opacity: 0, scale: 0.98 }} 
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="question-box"
+            >
+              <div className="q-toprow">
+                <div className="q-id">Question {currentIndex + 1} <span>of {questions.length}</span></div>
+                {currentQuestion.marks && <div className="marks-tag">{currentQuestion.marks} Mark{currentQuestion.marks > 1 ? 's' : ''}</div>}
+                
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {savedAnswer && (
+                    <span className="chip chip-done" style={{ fontSize: '10px', padding: '2px 6px' }}>
+                      <div className="chip-dot"></div> SAVED
+                    </span>
+                  )}
+                  {currentQuestion.type === 'mcq' && (
+                    <span className="chip chip-avail" style={{ fontSize: '10px', padding: '2px 6px' }}>
+                      <div className="chip-dot"></div> MCQ
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="qb-text">{currentQuestion.text}</div>
+
+              {/* MCQ Options */}
+              {currentQuestion.type === 'mcq' && currentQuestion.options && currentQuestion.options.length > 0 && (
+                <div className="options">
+                  {currentQuestion.options.map((opt, oi) => {
+                    const isSelected = savedAnswer?.selectedOption === oi;
+                    return (
+                      <div 
+                        key={oi} 
+                        className="opt" 
+                        data-selected={isSelected ? "true" : "false"}
+                        onClick={() => handleCommand(`option_${oi+1}`, 1)}
+                        style={{ cursor: 'pointer', transition: 'all 0.2s', borderColor: isSelected ? 'var(--green-lt)' : 'var(--border)', backgroundColor: isSelected ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.01)' }}
+                      >
+                        <div className="opt-ltr" style={{ color: isSelected ? 'var(--green-lt)' : 'var(--text-sec)', backgroundColor: isSelected ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)' }}>
+                          {String.fromCharCode(65 + oi)}
+                        </div> 
+                        <div className="opt-txt" style={{ flex: 1, color: isSelected ? 'white' : 'var(--text-sec)' }}>{opt}</div>
+                        {isSelected && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green-lt)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Written Answer Input Box */}
+              {currentQuestion.type !== 'mcq' && (
+                <div style={{ marginTop: '24px' }}>
+                  <AnswerInputBox
+                    questionId={currentQuestion.id}
+                    questionText={currentQuestion.text}
+                    value={isRecording && isWrittenDictation
+                      ? [dictationFinalText, interimText].filter(Boolean).join(' ').trim()
+                      : (writtenAnswers.get(currentQuestion.id) || '')}
+                    onChange={(text) => {
+                      setWrittenAnswers(prev => new Map(prev).set(currentQuestion.id, text));
+                    }}
+                    isRecording={isRecording && isWrittenDictation}
+                    interimText={interimText && isWrittenDictation ? interimText : ''}
+                    iFormattedAnswer={formattedAnswer}
+                    expectedAnswerLength={currentQuestion.expectedAnswerLength || 'medium'}
+                    placeholder="Say 'start answer' to record, or type your answer here..."
+                  />
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* Voice Hint */}
+          {currentQuestion?.type === 'mcq' && (
+            <div className="voice-cue">
+              <span style={{ color: 'var(--green-lt)' }}>💬</span>
+              Say "Option A", "B", "C", or "D" to select your answer
+            </div>
+          )}
+
+          {/* Sub hints / Commands */}
+          {(voiceState === 'COMMAND_MODE' || voiceState === 'ANSWER_REVIEW') && (
+            <div style={{ marginTop: '28px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {(voiceState === 'ANSWER_REVIEW' ? [
+                { cmd: '"Confirm"', icon: '✓' }, { cmd: '"Edit"', icon: '✎' }, { cmd: '"Continue"', icon: '+' }, { cmd: '"Repeat"', icon: '↻' }
+              ] : currentQuestion?.type === 'mcq' ? [
+                { cmd: '"Option A/1"', icon: '①' }, { cmd: '"Next"', icon: '→' }, { cmd: '"Previous"', icon: '←' }, { cmd: '"Submit"', icon: '↗' }
+              ] : [
+                { cmd: '"Start answer"', icon: '◉' }, { cmd: '"Next"', icon: '→' }, { cmd: '"Clear"', icon: '⊘' }, { cmd: '"Submit"', icon: '↗' }
+              ]).map(item => (
+                <div key={item.cmd} style={{ backgroundColor: 'var(--surface2)', padding: '7px 13px', borderRadius: '40px', fontSize: '12px', color: 'var(--text-sec)', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid var(--border)', fontWeight: '500' }}>
+                  <span style={{ color: 'var(--accent-lt)', opacity: 0.8 }}>{item.icon}</span>
+                  {item.cmd}
+                </div>
+              ))}
+            </div>
+          )}
+
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 

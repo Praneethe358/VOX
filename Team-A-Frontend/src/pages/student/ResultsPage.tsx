@@ -82,13 +82,10 @@ export default function ResultsPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden">
-      {/* Ambient */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-indigo-600/[0.06] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 left-1/3 w-[400px] h-[400px] bg-violet-600/[0.04] rounded-full blur-[100px]" />
-      </div>
-
+    <section id="s-results">
+      {/* Ambient Background */}
+      <div className="fixed inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse 50% 50% at 50% -10%, rgba(45,78,232,0.08) 0%, transparent 70%)' }} />
+      
       {/* Voice UI */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
       <VoiceSpeaker position="bottom-center" />
@@ -104,72 +101,101 @@ export default function ResultsPage() {
         ]}
       />
 
-      {/* Header */}
-      <header className="relative z-10 glass border-b border-white/[0.04]">
-        <div className="max-w-4xl mx-auto px-6 py-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Results</h1>
-            <p className="text-slate-500 text-sm mt-1">Your exam performance history</p>
+      {/* Main Content */}
+      <motion.div 
+        className="sub-modal" 
+        style={{ maxWidth: '720px', width: '100%', marginTop: '-60px' }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        {/* Header */}
+        <div className="sub-hdr">
+          <div className="sub-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </div>
-          <button
-            onClick={() => navigate('/student/exams')}
-            className="glass-card px-4 py-2.5 rounded-xl text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
-          >
-            <span className="text-lg">‹</span> Back
-          </button>
+          <div>
+            <div className="sub-title">Your Results</div>
+            <div className="sub-exam">Exam performance history</div>
+          </div>
         </div>
-      </header>
 
-      <main className="relative z-10 max-w-4xl mx-auto px-6 py-8">
+        {/* Content */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24">
-            <div className="w-10 h-10 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin mb-4" />
-            <p className="text-slate-500 text-sm">Loading results...</p>
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <div style={{ display: 'inline-flex', width: '32px', height: '32px', borderRadius: '50%', border: '2px solid var(--surface3)', borderTopColor: 'var(--accent)', animation: 'spin 1s linear infinite', marginBottom: '12px' }} />
+            <p style={{ color: 'var(--text-sec)', fontSize: '13px' }}>Loading results...</p>
           </div>
         ) : results.length === 0 ? (
-          <div className="text-center py-24">
-            <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.04] flex items-center justify-center mx-auto mb-5">
-              <span className="text-2xl text-slate-600">◇</span>
-            </div>
-            <p className="text-lg text-slate-300 font-medium mb-1">No results yet</p>
-            <p className="text-sm text-slate-500">Complete an exam to see your results here</p>
+          <div style={{ textAlign: 'center', paddingY: '48px' }}>
+            <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', color: 'var(--text-muted)' }}>◇</div>
+            <p style={{ fontSize: 'clamp(14px, 2.5vw, 16px)', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>No results yet</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-sec)' }}>Complete an exam to see your results</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {results.map((result, index) => {
               const pct = Math.round((result.score / Math.max(result.totalMarks, 1)) * 100);
               const grade = pct >= 90 ? 'A+' : pct >= 80 ? 'A' : pct >= 70 ? 'B' : pct >= 60 ? 'C' : pct >= 50 ? 'D' : 'F';
-              const gradeColor = pct >= 70 ? 'text-emerald-400' : pct >= 50 ? 'text-amber-400' : 'text-red-400';
+              const gradeColor = pct >= 70 ? 'var(--green-lt)' : pct >= 50 ? 'var(--amber-lt)' : 'var(--red-lt)';
+              
               return (
                 <motion.div
                   key={result.sessionId + index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.04 }}
-                  className="glass-card rounded-2xl p-5 flex items-center gap-5"
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.08 }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '14px',
+                    padding: 'clamp(12px, 2vw, 14px) clamp(12px, 3vw, 16px)',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border2)',
+                    borderRadius: 'var(--radius)',
+                    cursor: 'pointer',
+                    transition: 'all .18s'
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(45,78,232,0.4)';
+                    (e.currentTarget as HTMLDivElement).style.background = 'var(--surface2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border2)';
+                    (e.currentTarget as HTMLDivElement).style.background = 'var(--surface)';
+                  }}
                 >
-                  {/* Grade Circle */}
-                  <div className={`w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center flex-shrink-0`}>
-                    <span className={`text-lg font-bold ${gradeColor}`}>{grade}</span>
+                  {/* Grade Badge */}
+                  <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius)', background: 'var(--surface3)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <span style={{ fontSize: '16px', fontWeight: 800, color: gradeColor }}>{grade}</span>
                   </div>
 
                   {/* Details */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white truncate">{result.examTitle}</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{result.submittedAt}</p>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 'clamp(13px, 2vw, 14px)', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '2px' }}>{result.examTitle}</p>
+                    <p style={{ fontSize: 'clamp(10px, 2vw, 12px)', color: 'var(--text-sec)' }}>{result.submittedAt}</p>
                   </div>
 
                   {/* Score */}
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-lg font-bold text-indigo-300">{result.score}<span className="text-slate-500 text-sm font-normal">/{result.totalMarks}</span></p>
-                    <p className="text-[11px] text-slate-500">{pct}%</p>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <p style={{ fontSize: 'clamp(14px, 2.5vw, 16px)', fontWeight: 800, color: 'var(--accent-lt)', marginBottom: '2px' }}>
+                      {result.score}<span style={{ fontSize: 'clamp(11px, 2vw, 12px)', color: 'var(--text-sec)', fontWeight: 500, marginLeft: '4px' }}>/{result.totalMarks}</span>
+                    </p>
+                    <p style={{ fontSize: 'clamp(10px, 2vw, 11px)', color: 'var(--text-muted)' }}>{pct}%</p>
                   </div>
                 </motion.div>
               );
             })}
           </div>
         )}
-      </main>
-    </div>
+      </motion.div>
+
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </section>
   );
 }

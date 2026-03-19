@@ -227,179 +227,87 @@ export function FaceRecognitionLogin() {
   // ── JSX ───────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden flex items-center justify-center p-4">
-      {/* Ambient background glow */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-30%] left-[-15%] w-[60%] h-[60%] rounded-full bg-indigo-600/[0.04] blur-[100px]" />
-        <div className="absolute bottom-[-25%] right-[-10%] w-[55%] h-[55%] rounded-full bg-purple-600/[0.04] blur-[100px]" />
-        <div className="absolute top-[30%] right-[15%] w-[35%] h-[35%] rounded-full bg-cyan-600/[0.02] blur-[80px]" />
+    <section className="screen" id="s-faceauth">
+      <div className="back-btn" onClick={() => navigate('/')}>
+        <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+        Cancel & Return
       </div>
-      {/* Dot grid texture */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.03]"
-        style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.3) 1px, transparent 0)', backgroundSize: '32px 32px' }}
-      />
 
-      <motion.div
-        initial={{ opacity: 0, y: 30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-lg flex flex-col gap-6 z-10"
-      >
-        {/* Branding */}
-        <motion.div className="text-center space-y-2" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 }}>
-          <h1 className="text-5xl font-black text-gradient tracking-tight">Vox</h1>
-          <p className="text-slate-500 text-xs tracking-[0.2em] uppercase font-medium">AI-Powered Accessible Examination</p>
-        </motion.div>
+      <div className="auth-wrap">
+        <h1 className="auth-h1">Identity Verification</h1>
+        <div className="auth-sub">Please position your face within the frame to continue.</div>
 
-        {/* Camera card — glass morphism */}
-        <motion.div
-          initial={{ scale: 0.96, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="relative rounded-3xl overflow-hidden glass-card shadow-2xl shadow-indigo-500/[0.05]"
-        >
-          <div className="relative aspect-video bg-slate-950">
-            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-            <canvas ref={canvasRef} width={640} height={480} className="hidden" />
+        <div className="face-box">
+          <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <canvas ref={canvasRef} width={640} height={480} className="hidden" />
 
-            {/* Scan frame with corner markers */}
-            {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <motion.div
-                  className={`w-44 h-52 rounded-2xl border-2 ${scanBorderColor}`}
-                  animate={{ scale: authStatus === 'PROCESSING' ? [1, 1.03, 1] : [1, 1.015, 1] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                {/* Corner brackets */}
-                <div className="absolute w-44 h-52">
-                  <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-indigo-400/60 rounded-tl-lg" />
-                  <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-indigo-400/60 rounded-tr-lg" />
-                  <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-indigo-400/60 rounded-bl-lg" />
-                  <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-indigo-400/60 rounded-br-lg" />
-                </div>
-                {/* Sweeping scan line */}
-                {authStatus === 'SCANNING' && (
-                  <motion.div
-                    className="absolute w-40 h-[2px] bg-gradient-to-r from-transparent via-indigo-400/70 to-transparent"
-                    animate={{ y: [-90, 90] }}
-                    transition={{ duration: 2.5, repeat: Infinity, repeatType: 'reverse', ease: 'easeInOut' }}
-                  />
-                )}
+          {/* Corners */}
+          {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
+            <>
+              <div className="corner tl"></div>
+              <div className="corner br"></div>
+              {/* TR Corner */}
+              <div style={{ position: 'absolute', top: '8px', right: '8px', width: '22px', height: '22px' }}>
+                <div style={{ position: 'absolute', top: 0, right: 0, width: '100%', height: '2px', backgroundColor: 'var(--accent-lt)' }}></div>
+                <div style={{ position: 'absolute', top: 0, right: 0, width: '2px', height: '100%', backgroundColor: 'var(--accent-lt)' }}></div>
               </div>
-            )}
-
-            {/* Multi-face warning */}
-            {faceCount > 1 && authStatus === 'SCANNING' && (
-              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                className="absolute top-3 left-3 bg-rose-500/10 backdrop-blur-md border border-rose-500/20 rounded-xl px-3 py-1.5">
-                <span className="text-rose-400 text-xs font-semibold">⚠ {faceCount} faces — only 1 allowed</span>
-              </motion.div>
-            )}
-
-            {/* Liveness chip */}
-            {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
-              <div className="absolute top-3 right-3 bg-black/30 backdrop-blur-md border border-white/5 rounded-xl px-3 py-1.5 flex items-center gap-2">
-                <div className={`w-1.5 h-1.5 rounded-full ${livenessBg}`} />
-                <span className={`text-[10px] font-mono ${livenessTextColor}`}>{Math.round(livenessScore * 100)}%</span>
+              {/* BL Corner */}
+              <div style={{ position: 'absolute', bottom: '8px', left: '8px', width: '22px', height: '22px' }}>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '2px', backgroundColor: 'var(--accent-lt)' }}></div>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, width: '2px', height: '100%', backgroundColor: 'var(--accent-lt)' }}></div>
               </div>
-            )}
+            </>
+          )}
 
-            {/* Processing overlay with dual spinner */}
-            {(isProcessing || authStatus === 'PROCESSING') && (
-              <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center">
-                <div className="relative">
-                  <motion.div className="w-16 h-16 rounded-full border-[3px] border-indigo-400/20 border-t-indigo-400"
-                    animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} />
-                  <motion.div className="absolute inset-1.5 rounded-full border-[3px] border-purple-400/15 border-b-purple-400"
-                    animate={{ rotate: -360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }} />
-                </div>
-              </div>
-            )}
+          {/* Sweeping scan line */}
+          {authStatus === 'SCANNING' && <div className="scan-sweep"></div>}
 
-            {/* Success overlay */}
-            {authStatus === 'SUCCESS' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="absolute inset-0 bg-emerald-950/40 backdrop-blur-sm flex items-center justify-center">
-                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-                  className="w-20 h-20 rounded-full bg-emerald-500/15 border-2 border-emerald-400/50 flex items-center justify-center">
-                  <span className="text-emerald-400 text-4xl font-bold">✓</span>
-                </motion.div>
-              </motion.div>
-            )}
-
-            {/* Locked overlay */}
-            {authStatus === 'LOCKED' && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="absolute inset-0 bg-rose-950/50 backdrop-blur-sm flex items-center justify-center">
-                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  className="w-20 h-20 rounded-full bg-rose-500/15 border-2 border-rose-400/50 flex items-center justify-center">
-                  <span className="text-rose-400 text-4xl">⊘</span>
-                </motion.div>
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Status card */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={authStatus}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25 }}
-            className={`${statusInfo.bgClass} ${statusInfo.borderClass} border rounded-2xl px-5 py-4 flex items-center gap-4 backdrop-blur-sm`}
-            role="status" aria-live="polite"
-          >
-            <span className={`text-2xl font-bold ${statusInfo.colorClass}`}>{statusInfo.icon}</span>
-            <div className="flex-1 min-w-0">
-              <p className={`font-semibold text-sm ${statusInfo.colorClass}`}>{statusInfo.label}</p>
-              {authStatus === 'SCANNING' && <p className="text-slate-500 text-xs mt-0.5">Auto-capturing every 2 seconds</p>}
+          {/* Multi-face warning inline */}
+          {faceCount > 1 && authStatus === 'SCANNING' && (
+            <div style={{ position: 'absolute', top: '10px', background: 'rgba(239,68,68,0.8)', color: '#fff', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', fontWeight: 700 }}>
+              ⚠ {faceCount} faces — only 1 allowed
             </div>
-            {authStatus === 'SCANNING' && (
-              <motion.div className="w-7 h-7 rounded-full border-2 border-indigo-500/25 border-t-indigo-400"
-                animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
-            )}
-          </motion.div>
-        </AnimatePresence>
+          )}
 
-        {/* Attempt dots */}
-        {authStatus !== 'LOCKED' && authStatus !== 'SUCCESS' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
-            className="flex justify-center gap-2.5" aria-label={`${attemptsLeft} attempts remaining`}>
-            {[...Array(MAX_ATTEMPTS)].map((_, i) => (
-              <motion.div key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.4 + i * 0.04 }}
-                className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
-                  i < attemptsLeft ? 'bg-indigo-400 shadow-sm shadow-indigo-400/30' : 'bg-slate-700/40'
-                }`}
-              />
-            ))}
-          </motion.div>
-        )}
+          {/* Success overlay */}
+          {authStatus === 'SUCCESS' && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(34,197,94,0.2)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--green-lt)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '32px', fontWeight: 'bold' }}>✓</div>
+            </div>
+          )}
 
-        {/* Security badges */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
-          className="flex items-center justify-center gap-4 text-[10px] text-slate-600 uppercase tracking-[0.15em]">
-          <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-emerald-600/40" />End-to-end encrypted</span>
-          <span className="w-px h-3 bg-slate-700/30" />
-          <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-emerald-600/40" />Liveness detection</span>
-          <span className="w-px h-3 bg-slate-700/30" />
-          <span className="flex items-center gap-1.5"><span className="w-1 h-1 rounded-full bg-emerald-600/40" />AI-powered</span>
-        </motion.div>
-
-        {/* Fallback link */}
-        <div className="text-center">
-          <button
-            onClick={() => navigate('/student/login-fallback')}
-            className="text-slate-600 hover:text-slate-400 text-xs transition-colors duration-200"
-            tabIndex={0} aria-label="Fall back to password login"
-          >
-            Use password login instead
-          </button>
+          {/* Locked overlay */}
+          {authStatus === 'LOCKED' && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(239,68,68,0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'var(--red-lt)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '32px', fontWeight: 'bold' }}>⊘</div>
+            </div>
+          )}
         </div>
-      </motion.div>
-    </div>
+
+        <div className="scan-title">{statusInfo.label}</div>
+        <div className="scan-caption">
+          {authStatus === 'SCANNING' ? 'Auto-capturing every 2 seconds' : lastError || (authStatus === 'SUCCESS' ? 'Redirecting...' : 'Hold still for a moment')}
+        </div>
+
+        <div className="prog-track">
+          <div className="prog-fill" style={{ width: `${(attemptsLeft / MAX_ATTEMPTS) * 100}%` }}></div>
+        </div>
+
+        <div className="scan-row">
+          <div style={{ display: 'flex', gap: '5px' }}>
+            <span>{attemptsLeft}</span> attempts remaining
+          </div>
+          {(authStatus === 'SCANNING' || authStatus === 'PROCESSING') && (
+            <div className="live-chip">
+              <div className="live-dot" style={{ backgroundColor: livenessScore > 0.6 ? 'var(--green-lt)' : livenessScore > 0.3 ? 'var(--amber-lt)' : 'var(--red-lt)' }}></div>
+              LIVENESS {Math.round(livenessScore * 100)}%
+            </div>
+          )}
+        </div>
+
+        <div className="pw-link" onClick={() => navigate('/student/login-fallback')}>Switch to Password Login</div>
+      </div>
+    </section>
   );
 }
 

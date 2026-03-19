@@ -366,6 +366,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
 
       // Pause while TTS is speaking to avoid Whisper hearing TTS audio
       if (isSpeakingRef.current) {
+        setIsListening(false);
         backendLoopTimerRef.current = setTimeout(runOneChunk, 500);
         return;
       }
@@ -392,6 +393,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
 
       recorder.onstop = async () => {
         if (!isActiveRef.current || !usingBackendSttRef.current) return;
+        setIsListening(false);
 
         try {
           const audioBlob = new Blob(chunks, { type: 'audio/webm' });
@@ -682,6 +684,14 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
       if (recognitionRef.current) {
         console.log('[VoiceEngine] TTS started — pausing recognition');
         try { recognitionRef.current.abort(); } catch {}
+      }
+    }
+
+    // In backend STT mode, stop active recording immediately when TTS starts.
+    if (!wasSpeaking && isSpeaking && isActiveRef.current && usingBackendSttRef.current) {
+      setIsListening(false);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch {}
       }
     }
   }, [isSpeaking, startBrowserRecognition]);

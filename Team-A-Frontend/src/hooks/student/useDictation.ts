@@ -50,6 +50,8 @@ export function useDictation({
   const onEndRef = useRef(onDictationEnd);
   const stopRequestedRef = useRef(false);
   const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedByTtsRef = useRef(false);
+  const prevSpeakingRef = useRef(false);
   onEndRef.current = onDictationEnd;
 
   const getSR = useCallback(() => {
@@ -184,11 +186,19 @@ export function useDictation({
         return;
       }
 
+      setIsRecording(false);
+
+      // TTS pause is resumed by the isSpeaking effect below.
+      if (isSpeakingRef.current) {
+        return;
+      }
+
       clearRestartTimer();
       restartTimerRef.current = setTimeout(() => {
         if (!isActiveRef.current || stopRequestedRef.current) return;
         try {
           recognition.start();
+          setIsRecording(true);
         } catch {}
       }, 120);
     };
@@ -206,6 +216,36 @@ export function useDictation({
 
   // Keep isSpeakingRef in sync with TTS state
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+
+  useEffect(() => {
+    const wasSpeaking = prevSpeakingRef.current;
+    prevSpeakingRef.current = isSpeaking;
+
+    if (!wasSpeaking && isSpeaking && isActiveRef.current && recognitionRef.current) {
+      pausedByTtsRef.current = true;
+      clearSilenceTimer();
+      setIsRecording(false);
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      return;
+    }
+
+    if (wasSpeaking && !isSpeaking && pausedByTtsRef.current && isActiveRef.current && !stopRequestedRef.current) {
+      pausedByTtsRef.current = false;
+      clearRestartTimer();
+      restartTimerRef.current = setTimeout(() => {
+        if (!isActiveRef.current || stopRequestedRef.current || isSpeakingRef.current || !recognitionRef.current) {
+          return;
+        }
+        try {
+          recognitionRef.current.start();
+          setIsRecording(true);
+          armSilenceTimer();
+        } catch {}
+      }, 250);
+    }
+  }, [armSilenceTimer, isSpeaking]);
 
   useEffect(() => {
     return () => stopInternal(false);

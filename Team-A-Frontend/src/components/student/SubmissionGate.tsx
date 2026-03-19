@@ -1,21 +1,21 @@
 /**
- * SubmissionGate — Visual countdown during double-confirm submission window.
+ * SubmissionGate — Final exam submission review with stat blocks.
  * Shown when voiceState = SUBMISSION_GATE.
- * Purely display; action comes from voice command engine.
+ * Displays answered/skipped/flagged counts with countdown.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 
 interface SubmissionGateProps {
-  /** Seconds allocated for confirmation. Default 20. */
+  /** Seconds allocated for confirmation. Default 60. */
   windowSeconds?: number;
   /** Called when the window expires without confirmation. */
   onTimeout: () => void;
 }
 
 export default function SubmissionGate({
-  windowSeconds = 20,
+  windowSeconds = 60,
   onTimeout,
 }: SubmissionGateProps) {
   const [remaining, setRemaining] = useState(windowSeconds);
@@ -53,38 +53,91 @@ export default function SubmissionGate({
       aria-modal="true"
       aria-live="assertive"
     >
-      <div className="bg-gradient-to-br from-orange-900/90 to-slate-900/90 border border-orange-500/60 rounded-2xl p-10 max-w-md w-full mx-4 flex flex-col items-center gap-6 shadow-2xl">
-        <div className="text-6xl select-none" aria-hidden="true">⚠️</div>
-
-        <h2 className="text-white text-2xl font-bold text-center">
-          Submit Exam?
-        </h2>
-        <p className="text-orange-200 text-center text-lg leading-relaxed">
-          Say{' '}
-          <span className="font-bold text-orange-300 bg-orange-500/20 px-2 py-0.5 rounded">
-            "Confirm submission"
-          </span>{' '}
-          to finalize. Anything else will cancel.
-        </p>
-
-        {/* Countdown bar */}
-        <div className="w-full">
-          <div className="flex justify-between text-sm text-orange-300/70 mb-1">
-            <span>Canceling in</span>
-            <span className="font-mono font-bold text-orange-300">{remaining}s</span>
+      <div className="bg-slate-950/95 border border-slate-700/60 rounded-3xl p-8 max-w-lg w-full mx-4 space-y-6 shadow-2xl">
+        {/* Warning Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-950/40 border border-red-500/40 rounded-2xl p-4 flex items-start gap-3"
+        >
+          <span className="text-red-400 text-2xl shrink-0" aria-hidden="true">⚠</span>
+          <div>
+            <p className="text-red-300 font-semibold text-sm">Are you ready to submit?</p>
+            <p className="text-red-400/70 text-xs mt-1">Review your answers before submitting. This action cannot be undone.</p>
           </div>
-          <div className="w-full h-3 rounded-full bg-slate-700 overflow-hidden">
+        </motion.div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-3 gap-3">
+          {/* Answered */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-4 text-center"
+          >
+            <p className="text-emerald-400 text-2xl font-bold">—</p>
+            <p className="text-emerald-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Answered</p>
+          </motion.div>
+
+          {/* Skipped */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-amber-950/30 border border-amber-500/30 rounded-xl p-4 text-center"
+          >
+            <p className="text-amber-400 text-2xl font-bold">—</p>
+            <p className="text-amber-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Skipped</p>
+          </motion.div>
+
+          {/* Flagged */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-rose-950/30 border border-rose-500/30 rounded-xl p-4 text-center"
+          >
+            <p className="text-rose-400 text-2xl font-bold">0</p>
+            <p className="text-rose-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Flagged</p>
+          </motion.div>
+        </div>
+
+        {/* Confirmation instruction */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="bg-indigo-950/20 border border-indigo-500/20 rounded-xl p-4 text-center"
+        >
+          <p className="text-indigo-300 font-semibold text-sm">
+            Say{' '}
+            <span className="inline-block font-bold text-indigo-200 bg-indigo-500/20 px-3 py-1 rounded-lg border border-indigo-500/30 mx-1">
+              "Confirm submission"
+            </span>
+          </p>
+          <p className="text-indigo-300/60 text-xs mt-2">Any other command will cancel and return to exam</p>
+        </motion.div>
+
+        {/* Countdown timer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.25 }}
+          className="space-y-2"
+        >
+          <div className="flex justify-between items-center text-xs">
+            <span className="text-slate-500">Auto-cancel in</span>
+            <span className="font-mono font-bold text-slate-300 text-lg">{remaining}s</span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-orange-500 to-red-500"
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400"
               animate={{ width: `${pct}%` }}
               transition={{ duration: 0.8, ease: 'linear' }}
             />
           </div>
-        </div>
-
-        <p className="text-slate-400 text-sm text-center">
-          Silence or any other command will return to your exam.
-        </p>
+        </motion.div>
       </div>
     </motion.div>
   );

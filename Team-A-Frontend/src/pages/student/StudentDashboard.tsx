@@ -139,25 +139,25 @@ export function StudentDashboard() {
 
   if (!student) {
     return (
-      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center">
+      <section className="screen flex-center">
         <div className="text-center space-y-4">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-            className="w-10 h-10 rounded-full border-2 border-indigo-500/20 border-t-indigo-400 mx-auto" />
+            className="w-10 h-10 rounded-full border-2 border-accent/20 border-t-accent mx-auto" />
           <p className="text-slate-500 text-sm">Loading your dashboard…</p>
         </div>
-      </div>
+      </section>
     );
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center">
+      <section className="screen flex-center">
         <div className="text-center space-y-4">
           <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-            className="w-10 h-10 rounded-full border-2 border-indigo-500/20 border-t-indigo-400 mx-auto" />
+            className="w-10 h-10 rounded-full border-2 border-accent/20 border-t-accent mx-auto" />
           <p className="text-slate-500 text-sm">Loading dashboard…</p>
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -175,13 +175,7 @@ export function StudentDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] relative">
-      {/* Ambient glow */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-[-15%] right-[-5%] w-[40%] h-[40%] rounded-full bg-indigo-600/[0.03] blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[35%] h-[35%] rounded-full bg-purple-600/[0.03] blur-[100px]" />
-      </div>
-
+    <section className="screen" style={{ overflowY: 'auto' }}>
       {/* Voice UI overlays */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" />
       <VoiceSpeaker position="bottom-center" />
@@ -376,7 +370,7 @@ export function StudentDashboard() {
           </div>
         </motion.div>
       </main>
-    </div>
+    </section>
   );
 }
 

@@ -96,18 +96,21 @@ export default function PasswordFallbackLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
+    <section className="screen" id="s-landing" style={{ alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md flex flex-col gap-6"
+        style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '24px' }}
       >
         {/* Branding */}
-        <div className="text-center">
-          <h1 className="text-4xl font-black bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">
-            Vox
-          </h1>
-          <p className="text-slate-400 text-sm mt-1 tracking-wide">
+        <div style={{ textAlign: 'center' }}>
+          <div className="landing-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px', gap: '12px' }}>
+            <svg width="48" height="36" viewBox="0 0 48 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M 0 24 L 6 24 C 9 24, 9 10, 12 10 C 15 10, 15 24, 18 24 C 21 24, 21 4, 24 4 C 27 4, 27 32, 30 32 C 33 32, 33 16, 36 16 C 39 16, 39 24, 42 24 L 48 24" stroke="var(--wave)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+            <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: '32px', fontWeight: 800, color: 'var(--text)', letterSpacing: '-1px' }}>VOX</span>
+          </div>
+          <p style={{ color: 'var(--text-sec)', fontSize: '14px', letterSpacing: '0.5px' }}>
             Password Login
           </p>
         </div>
@@ -115,11 +118,12 @@ export default function PasswordFallbackLogin() {
         {/* Login Card */}
         <form
           onSubmit={handleLogin}
-          className="bg-slate-800/60 backdrop-blur-sm border border-slate-700 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl"
+          className="glass-card"
+          style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '32px' }}
         >
           {/* Email */}
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="email" className="text-sm font-medium text-slate-300">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="email" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Email
             </label>
             <input
@@ -129,13 +133,15 @@ export default function PasswordFallbackLogin() {
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoFocus
-              className="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              style={{ width: '100%', padding: '12px 16px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text)', fontSize: '15px', outline: 'none', transition: 'border-color 0.2s' }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
             />
           </div>
 
           {/* Password */}
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="password" className="text-sm font-medium text-slate-300">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label htmlFor="password" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Password
             </label>
             <input
@@ -144,7 +150,9 @@ export default function PasswordFallbackLogin() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-4 py-2.5 rounded-lg bg-slate-900 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+              style={{ width: '100%', padding: '12px 16px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text)', fontSize: '15px', outline: 'none', transition: 'border-color 0.2s' }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)' }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
             />
           </div>
 
@@ -153,7 +161,7 @@ export default function PasswordFallbackLogin() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-red-400 text-sm text-center"
+              style={{ color: '#ef4444', fontSize: '13px', textAlign: 'center', background: 'rgba(239, 68, 68, 0.1)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}
             >
               {error}
             </motion.p>
@@ -163,11 +171,12 @@ export default function PasswordFallbackLogin() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold transition-colors"
+            className="ex-btn primary"
+            style={{ width: '100%', marginTop: '8px' }}
           >
             {isLoading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
                 Logging in…
               </span>
             ) : (
@@ -177,15 +186,15 @@ export default function PasswordFallbackLogin() {
         </form>
 
         {/* Back to face login */}
-        <div className="text-center">
+        <div style={{ textAlign: 'center' }}>
           <button
             onClick={() => navigate('/student/login')}
-            className="text-slate-500 hover:text-slate-300 text-sm underline transition-colors"
+            style={{ background: 'none', border: 'none', color: 'var(--text-sec)', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
           >
             ← Back to face recognition login
           </button>
         </div>
       </motion.div>
-    </div>
+    </section>
   );
 }

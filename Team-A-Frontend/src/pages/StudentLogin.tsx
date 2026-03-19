@@ -153,41 +153,43 @@ export default function StudentLogin() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-6">
-      <div className="max-w-2xl w-full">
+    <section className="screen flex-center" style={{ padding: '24px' }}>
+      <div style={{ maxWidth: '600px', width: '100%' }}>
         {/* Back Button */}
         <motion.button
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           onClick={() => navigate('/')}
-          className="mb-6 text-slate-400 hover:text-white transition-colors flex items-center gap-2"
+          style={{ marginBottom: '24px', color: 'var(--text-sec)', display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}
         >
-          ← Back to Home
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          Back to Home
         </motion.button>
 
         {/* Main Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-8"
+          className="glass-card"
+          style={{ padding: '32px' }}
         >
-          <h1 className="text-3xl font-bold text-white mb-2 text-center">Student Login</h1>
-          <p className="text-slate-400 text-center mb-8">Verify your identity using face recognition</p>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text)', marginBottom: '8px', textAlign: 'center', letterSpacing: '-0.5px' }}>Student Login</h1>
+          <p style={{ color: 'var(--text-sec)', textAlign: 'center', marginBottom: '32px', fontSize: '14px' }}>Verify your identity using face recognition</p>
 
           {/* Loading State */}
           {isLoading && (
-            <div className="text-center py-8">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent"></div>
-              <p className="text-slate-400 mt-4">Loading face detection models...</p>
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div className="w-12 h-12 rounded-full border-2 border-accent/30 border-t-accent-lt animate-spin mx-auto"></div>
+              <p style={{ color: 'var(--text-sec)', marginTop: '16px', fontSize: '14px' }}>Loading face detection models...</p>
             </div>
           )}
 
           {/* Camera Section */}
           {!isLoading && (
-            <div className="space-y-6">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               {/* Exam Code Input */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Exam Code (Optional)
                 </label>
                 <input
@@ -195,32 +197,34 @@ export default function StudentLogin() {
                   value={examCode}
                   onChange={(e) => setExamCode(e.target.value)}
                   placeholder="e.g., TECH101"
-                  className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none"
+                  style={{ width: '100%', padding: '12px 16px', background: 'var(--bg2)', border: '1px solid var(--border)', borderRadius: '12px', color: 'var(--text)', fontSize: '15px', outline: 'none', transition: 'border-color 0.2s' }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)' }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)' }}
                 />
               </div>
 
               {/* Video Preview */}
-              <div className="relative bg-black rounded-lg overflow-hidden">
+              <div style={{ position: 'relative', background: '#000', borderRadius: '16px', overflow: 'hidden', border: '1px solid var(--border)', aspectRatio: '4/3' }}>
                 <video
                   ref={videoRef}
                   autoPlay
                   muted
                   playsInline
-                  className="w-full"
-                  style={{ maxHeight: '360px' }}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
                 <canvas
                   ref={canvasRef}
-                  className="absolute top-0 left-0 w-full h-full"
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
                 />
                 {!cameraActive && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50">
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(11, 13, 20, 0.8)', backdropFilter: 'blur(4px)' }}>
                     <button
                       onClick={startCamera}
                       disabled={!modelsLoaded}
-                      className="px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all disabled:opacity-50"
+                      className="ex-btn primary"
+                      style={{ opacity: !modelsLoaded ? 0.5 : 1, cursor: !modelsLoaded ? 'not-allowed' : 'pointer' }}
                     >
-                      📷 Start Camera
+                      <span style={{ marginRight: '8px' }}>📷</span> Start Camera
                     </button>
                   </div>
                 )}
@@ -231,22 +235,25 @@ export default function StudentLogin() {
                 <button
                   onClick={detectFace}
                   disabled={detecting}
-                  className="w-full py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="ex-btn primary"
+                  style={{ width: '100%', opacity: detecting ? 0.7 : 1 }}
                 >
                   {detecting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
                       Verifying...
-                    </>
+                    </div>
                   ) : (
-                    <>🔍 Detect & Verify Face</>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '16px' }}>🔍</span> Detect & Verify Face
+                    </div>
                   )}
                 </button>
               )}
 
               {/* Error Message */}
               {error && (
-                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/50 text-red-400 text-sm">
+                <div style={{ padding: '16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#ef4444', fontSize: '13px', lineHeight: 1.5 }}>
                   {error}
                 </div>
               )}
@@ -260,12 +267,16 @@ export default function StudentLogin() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="mt-6 text-center text-slate-500 text-sm space-y-2"
+          style={{ marginTop: '24px', textAlign: 'center', color: 'var(--text-sec)', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '8px' }}
         >
-          <p>📌 Position your face clearly in the camera frame</p>
-          <p>💡 Ensure good lighting for better detection</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <span style={{ opacity: 0.6 }}>📌</span> Position your face clearly in the camera frame
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <span style={{ opacity: 0.6 }}>💡</span> Ensure good lighting for better detection
+          </div>
         </motion.div>
       </div>
-    </div>
+    </section>
   );
 }

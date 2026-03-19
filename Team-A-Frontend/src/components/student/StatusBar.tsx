@@ -5,6 +5,8 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { VoiceSystemState } from '../../context/VoiceContext';
+import VoxLogo from '../branding/VoxLogo';
+import ExamIcon from '../icons/ExamIcon';
 
 interface StatusBarProps {
   currentQ: number;
@@ -48,9 +50,18 @@ export default function StatusBar({
   return (
     <div className="bg-slate-900/80 backdrop-blur border-b border-slate-700/50 px-6 py-3 flex items-center justify-between gap-4">
       {/* Left: Exam name */}
-      <span className="text-slate-300 text-sm font-medium truncate max-w-xs" title={examTitle}>
-        {examTitle}
-      </span>
+      <div className="flex items-center gap-3 min-w-0">
+        <VoxLogo size="sm" showTagline={false} />
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-1.5">
+            <ExamIcon className="h-3.5 w-3.5 text-indigo-300" />
+            <span className="text-[11px] text-slate-500 uppercase tracking-[0.18em]">Active Exam</span>
+          </div>
+          <p className="text-slate-300 text-sm font-medium truncate max-w-xs" title={examTitle}>
+            {examTitle}
+          </p>
+        </div>
+      </div>
 
       {/* Center: Question counter */}
       <div className="flex items-center gap-2">

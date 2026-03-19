@@ -31,12 +31,17 @@ interface VoiceListenerProps {
 // ─── Waveform bars ──────────────────────────────────────────────────────────
 
 function WaveformBars({ active, barCount = 8 }: { active: boolean; barCount?: number }) {
+  const barColor = active ? 'var(--accent-lt)' : 'var(--text-muted)';
   return (
     <div className="flex items-center gap-[2px] h-5" aria-hidden="true">
       {Array.from({ length: barCount }).map((_, i) => (
         <motion.div
           key={i}
-          className={`w-[3px] rounded-full ${active ? 'bg-green-400' : 'bg-slate-600'}`}
+          style={{
+            background: barColor,
+            width: '3px',
+            borderRadius: '2px',
+          }}
           animate={
             active
               ? {
@@ -62,12 +67,37 @@ function WaveformBars({ active, barCount = 8 }: { active: boolean; barCount?: nu
 
 // ─── Mode colors ─────────────────────────────────────────────────────────────
 
-const MODE_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
-  Navigation: { bg: 'bg-indigo-500/10', text: 'text-indigo-300', dot: 'bg-indigo-400' },
-  Command:    { bg: 'bg-blue-500/10',   text: 'text-blue-300',   dot: 'bg-blue-400' },
-  Dictation:  { bg: 'bg-red-500/10',    text: 'text-red-300',    dot: 'bg-red-400' },
-  Paused:     { bg: 'bg-yellow-500/10', text: 'text-yellow-300', dot: 'bg-yellow-400' },
-  Idle:       { bg: 'bg-slate-500/10',  text: 'text-slate-300',  dot: 'bg-slate-400' },
+const MODE_STYLES: Record<string, { bg: string; text: string; dot: string; border: string }> = {
+  Navigation: { 
+    bg: 'rgba(45, 78, 232, 0.12)',
+    text: 'var(--accent-lt)',
+    dot: 'var(--accent-lt)',
+    border: 'rgba(45, 78, 232, 0.2)'
+  },
+  Command: {
+    bg: 'rgba(45, 78, 232, 0.12)',
+    text: 'var(--accent-lt)',
+    dot: 'var(--accent-lt)',
+    border: 'rgba(45, 78, 232, 0.2)'
+  },
+  Dictation: {
+    bg: 'rgba(217, 119, 6, 0.12)',
+    text: 'var(--amber-lt)',
+    dot: 'var(--amber-lt)',
+    border: 'rgba(217, 119, 6, 0.2)'
+  },
+  Paused: {
+    bg: 'rgba(217, 119, 6, 0.12)',
+    text: 'var(--amber-lt)',
+    dot: 'var(--amber-lt)',
+    border: 'rgba(217, 119, 6, 0.2)'
+  },
+  Idle: {
+    bg: 'rgba(255, 255, 255, 0.04)',
+    text: 'var(--text-muted)',
+    dot: 'var(--text-muted)',
+    border: 'rgba(255, 255, 255, 0.08)'
+  },
 };
 
 const POSITION_CLASSES: Record<string, string> = {
@@ -95,13 +125,24 @@ export function VoiceListener({
         role="status"
         aria-label={`Microphone ${isListening ? 'active' : 'inactive'}`}
       >
-        <div className="flex items-center gap-2 bg-slate-800/90 backdrop-blur rounded-full px-3 py-1.5 border border-slate-700/50">
+        <div className="flex items-center gap-2 rounded-full px-3 py-1.5 border" style={{
+          background: 'var(--surface2)',
+          borderColor: 'var(--border)',
+          backdropFilter: 'blur(10px)',
+        }}>
           <motion.div
-            className={`w-2.5 h-2.5 rounded-full ${isListening ? style.dot : 'bg-slate-600'}`}
+            style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              background: isListening ? style.dot : 'var(--text-muted)',
+            }}
             animate={isListening ? { scale: [1, 1.4, 1] } : {}}
             transition={isListening ? { duration: 1.2, repeat: Infinity } : {}}
           />
-          <span className={`text-xs font-medium ${isListening ? style.text : 'text-slate-500'}`}>
+          <span className="text-xs font-medium" style={{
+            color: isListening ? style.text : 'var(--text-muted)'
+          }}>
             {isListening ? mode : 'Mic Off'}
           </span>
         </div>
@@ -119,21 +160,33 @@ export function VoiceListener({
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`${style.bg} backdrop-blur border border-slate-700/40 rounded-xl shadow-lg overflow-hidden`}
+        className="rounded-xl shadow-lg overflow-hidden"
+        style={{
+          background: style.bg,
+          border: `1px solid ${style.border}`,
+          backdropFilter: 'blur(12px)',
+        }}
       >
         {/* Main status bar */}
         <div className="flex items-center gap-3 px-4 py-2.5">
           {/* Pulsing mic icon */}
           <div className="relative">
             <motion.div
-              className={`w-3 h-3 rounded-full ${isListening ? style.dot : 'bg-slate-600'}`}
+              style={{
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                background: isListening ? style.dot : 'var(--text-muted)',
+              }}
               animate={isListening ? { scale: [1, 1.5, 1], opacity: [1, 0.6, 1] } : {}}
               transition={isListening ? { duration: 1.5, repeat: Infinity } : {}}
             />
           </div>
 
           {/* Mode label */}
-          <span className={`text-xs font-bold uppercase tracking-widest ${style.text}`}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{
+            color: style.text
+          }}>
             {isListening ? mode : 'Mic Off'}
           </span>
 
@@ -151,9 +204,15 @@ export function VoiceListener({
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="border-t border-slate-700/30 px-4 py-1.5 bg-slate-900/40"
+              className="px-4 py-1.5"
+              style={{
+                borderTop: `1px solid ${style.border}`,
+                background: 'rgba(255, 255, 255, 0.02)',
+              }}
             >
-              <p className="text-slate-300 text-xs truncate max-w-[300px] italic">
+              <p className="text-xs truncate max-w-[300px] italic" style={{
+                color: 'var(--text-sec)'
+              }}>
                 "{interimText}"
               </p>
             </motion.div>

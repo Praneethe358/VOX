@@ -42,6 +42,7 @@ export default function App() {
                 {/* Public Routes */}
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/admin-login" element={<AdminLogin />} />
+                <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/splash" element={<SplashScreen />} />
 
                 {/* Legacy Redirects */}

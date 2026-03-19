@@ -17,14 +17,27 @@ import { useVoiceContext } from '../../context/VoiceContext';
 import { VoiceCommandEngine } from '../../components/student/VoiceCommandEngine';
 import { VoiceListener } from '../../components/student/VoiceListener';
 import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
+import VoxLogo from '../../components/branding/VoxLogo';
+import ExamIcon from '../../components/icons/ExamIcon';
 
 export function ExamSelector() {
   const navigate = useNavigate();
-  const { student, authState, setStudent, updateAuthState } = useExamContext();
+  const { student, setStudent, updateAuthState } = useExamContext();
   const [exams, setExams] = useState<ExamData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'available' | 'completed'>('available');
   const { speak } = useVoiceContext();
+
+  // ── Voice: auto-speak greeting ─────────────────────────────────────────
+  useAutoSpeak(
+    () => {
+      if (!student) return null;
+      const hour = new Date().getHours();
+      const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+      return `${greeting}, ${student.name}. Welcome to your exams.`;
+    },
+    [student?.name],
+    { delay: 400 },
+  );
 
   // ── Voice: auto-speak exam list ────────────────────────────────────────
   useAutoSpeak(
@@ -41,7 +54,7 @@ export function ExamSelector() {
       );
     },
     [loading, exams.length],
-    { delay: 600 },
+    { delay: 900 },
   );
 
   // ── Voice: navigation + exam selection ─────────────────────────────────
@@ -175,17 +188,15 @@ export function ExamSelector() {
     navigate(`/student/exam/${exam.examCode}/checklist`, { state: { exam } });
   };
 
-  const getExamStatus = (exam: ExamData) => {
+  const getExamStatus = (exam: ExamData): 'available' | 'completed' | 'upcoming' => {
     if (exam.examCode.includes('completed')) return 'completed';
+    if (exam.examCode.includes('upcoming')) return 'upcoming';
     return 'available';
   };
 
-  const filteredExams = exams.filter(exam => {
-    const status = getExamStatus(exam);
-    if (filter === 'available') return status === 'available';
-    if (filter === 'completed') return status === 'completed';
-    return true;
-  });
+  const availableExams = exams.filter(e => getExamStatus(e) === 'available');
+  const completedExams = exams.filter(e => getExamStatus(e) === 'completed');
+  const upcomingExams = exams.filter(e => getExamStatus(e) === 'upcoming');
 
   if (!student) {
     return (
@@ -199,13 +210,7 @@ export function ExamSelector() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] relative overflow-hidden">
-      {/* Ambient background */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/[0.07] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-violet-600/[0.05] rounded-full blur-[100px]" />
-      </div>
-
+    <section className="screen" id="s-examselect">
       {/* Voice UI overlays */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" />
       <VoiceSpeaker position="bottom-center" />
@@ -223,164 +228,154 @@ export function ExamSelector() {
       {/* Voice feedback toast */}
       {(lastHeard || voiceError) && (
         <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 max-w-sm w-full px-4">
-          <div className={`glass rounded-2xl px-5 py-3 text-sm text-center ${
-            voiceError
-              ? 'border-red-500/20 text-red-300'
+          <div className="rounded-2xl px-5 py-3 text-sm text-center border" style={{
+            background: 'var(--surface2)',
+            backdropFilter: 'blur(12px)',
+            borderColor: voiceError
+              ? 'rgba(239, 68, 68, 0.2)'
               : lastHeard.startsWith('OK:')
-              ? 'border-emerald-500/20 text-emerald-300'
-              : 'text-slate-300'
-          }`}>
+              ? 'rgba(34, 197, 94, 0.2)'
+              : 'rgba(255, 255, 255, 0.08)',
+            color: voiceError
+              ? 'var(--red-lt)'
+              : lastHeard.startsWith('OK:')
+              ? 'var(--green-lt)'
+              : 'var(--text-sec)',
+          }}>
             {voiceError ?? lastHeard}
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <header className="relative z-10 glass border-b border-white/[0.04]">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Exam Library</h1>
-            <p className="text-slate-500 text-sm mt-1">Browse and select your exams</p>
-          </div>
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/')}
-            className="glass-card px-4 py-2.5 rounded-xl text-sm text-slate-300 hover:text-white transition-colors flex items-center gap-2"
-          >
-            <span className="text-lg">‹</span> Home
-          </motion.button>
+      {/* Topbar */}
+      <div className="es-topbar">
+        <div className="landing-brand" style={{ margin: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <svg width="40" height="30" viewBox="0 0 48 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 0 24 L 6 24 C 9 24, 9 10, 12 10 C 15 10, 15 24, 18 24 C 21 24, 21 4, 24 4 C 27 4, 27 32, 30 32 C 33 32, 33 16, 36 16 C 39 16, 39 24, 42 24 L 48 24" 
+              stroke="var(--wave)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+          </svg>
+          <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: '18px', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>VOX</span>
         </div>
-      </header>
+        <div className="es-topbar-actions">
+          <div className="icon-btn" onClick={() => navigate('/')} title="Logout">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          </div>
+          <div className="avatar-chip">
+            {student?.name.substring(0,2).toUpperCase() || 'ST'}
+          </div>
+        </div>
+      </div>
 
-      <main className="relative z-10 max-w-7xl mx-auto px-6 py-8">
-        {/* Filter Pills */}
-        <div className="flex gap-2 mb-8">
-          {(['all', 'available', 'completed'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setFilter(tab)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                filter === tab
-                  ? 'bg-indigo-500/[0.15] text-indigo-300 border border-indigo-500/[0.25] shadow-lg shadow-indigo-500/[0.08]'
-                  : 'text-slate-500 hover:text-slate-300 border border-transparent'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-              {tab === 'available' && !loading && (
-                <span className="ml-2 text-xs opacity-60">({exams.filter(e => getExamStatus(e) !== 'completed').length})</span>
-              )}
-            </button>
-          ))}
+      <div className="es-content">
+        <div className="es-greeting">
+          {(() => {
+            const h = new Date().getHours();
+            return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+          })()}, {student.name.split(' ')[0]}
+        </div>
+        <div className="es-date">
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · {exams.length} exams available
         </div>
 
-        {/* Loading */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-24">
-            <div className="w-10 h-10 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin mb-4" />
-            <p className="text-slate-500 text-sm">Loading exams...</p>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="w-8 h-8 rounded-full border-2 border-accent/30 border-t-accent-lt animate-spin mb-4" />
+            <p className="text-sec text-sm">Loading assessments...</p>
           </div>
-        )}
-
-        {/* Exam Cards */}
-        {!loading && filteredExams.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredExams.map((exam, idx) => {
-              const completed = getExamStatus(exam) === 'completed';
-              const questionCount = exam.sections.reduce((sum, s) => sum + s.questions.length, 0);
-              return (
-                <motion.div
-                  key={exam.examCode}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.06, duration: 0.4 }}
-                  className={`group glass-card rounded-2xl p-6 transition-all duration-300 hover:border-indigo-500/[0.15] hover:shadow-xl hover:shadow-indigo-500/[0.06] ${
-                    completed ? 'opacity-60' : ''
-                  }`}
-                >
-                  {/* Top Row: Subject + Voice hint */}
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="px-2.5 py-1 bg-indigo-500/[0.08] text-indigo-400 text-[11px] font-semibold uppercase tracking-wider rounded-lg border border-indigo-500/[0.08]">
-                      {exam.subject}
-                    </span>
-                    <span className="text-[11px] text-slate-600 font-mono">
-                      🎙 exam {idx + 1}
-                    </span>
-                  </div>
-
-                  {/* Title */}
-                  <h3 className="text-[15px] font-semibold text-white mb-1.5 group-hover:text-indigo-200 transition-colors leading-snug">
-                    {exam.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 mb-5 leading-relaxed line-clamp-2">{exam.description}</p>
-
-                  {/* Stats Row */}
-                  <div className="grid grid-cols-3 gap-3 mb-5">
-                    <div className="text-center p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                      <p className="text-xs text-slate-500 mb-0.5">Duration</p>
-                      <p className="text-sm font-semibold text-slate-200">{exam.durationMinutes}m</p>
-                    </div>
-                    <div className="text-center p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                      <p className="text-xs text-slate-500 mb-0.5">Questions</p>
-                      <p className="text-sm font-semibold text-slate-200">{questionCount}</p>
-                    </div>
-                    <div className="text-center p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-                      <p className="text-xs text-slate-500 mb-0.5">Marks</p>
-                      <p className="text-sm font-semibold text-slate-200">{exam.totalMarks}</p>
-                    </div>
-                  </div>
-
-                  {/* Sections */}
-                  <div className="flex flex-wrap gap-1.5 mb-5">
-                    {exam.sections.map(section => (
-                      <span
-                        key={section.sectionId}
-                        className="text-[11px] px-2 py-0.5 bg-white/[0.03] text-slate-400 rounded-md border border-white/[0.04]"
-                      >
-                        {section.sectionName}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Status + Action */}
-                  <div className="flex items-center gap-3">
-                    {completed ? (
-                      <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/[0.1] text-emerald-400 text-sm font-medium">
-                        <span>✓</span> Completed
+        ) : (
+          <>
+            {/* Available Exams */}
+            {availableExams.length > 0 && (
+              <>
+                <div className="sec-label">Available Now</div>
+                {availableExams.map((exam, idx) => {
+                  const questionCount = exam.sections.reduce((sum, s) => sum + s.questions.length, 0);
+                  const iconLetter = exam.title.charAt(0).toUpperCase() || 'A';
+                  return (
+                    <div className="exam-card" key={exam.examCode} onClick={() => handleExamSelect(exam)}>
+                      <div className="ex-icon ph">{iconLetter}</div>
+                      <div className="ex-info">
+                        <div className="ex-name">{exam.title}</div>
+                        <div className="ex-meta">
+                          {exam.durationMinutes} mins <span className="dot">•</span> {questionCount} Questions <span className="dot">•</span> {exam.totalMarks} Marks
+                        </div>
+                        <div className="chip chip-avail">
+                          <div className="chip-dot"></div>Available
+                        </div>
                       </div>
-                    ) : (
-                      <motion.button
-                        whileHover={{ scale: 1.01 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => handleExamSelect(exam)}
-                        className="flex-1 py-2.5 rounded-xl bg-indigo-500/[0.12] hover:bg-indigo-500/[0.2] border border-indigo-500/[0.15] text-indigo-300 hover:text-indigo-200 text-sm font-semibold transition-all duration-200"
-                      >
-                        Start Exam →
-                      </motion.button>
-                    )}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
+                      <button className="ex-btn primary" onClick={(e) => { e.stopPropagation(); handleExamSelect(exam); }} style={{ borderRadius: '8px' }}>
+                        Start exam
+                      </button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
 
-        {/* Empty State */}
-        {!loading && filteredExams.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-24"
-          >
-            <div className="w-16 h-16 rounded-2xl bg-slate-800/50 border border-white/[0.04] flex items-center justify-center mx-auto mb-5">
-              <span className="text-2xl">◇</span>
-            </div>
-            <p className="text-lg text-slate-300 font-medium mb-1">No exams found</p>
-            <p className="text-sm text-slate-500">Check back later for available exams</p>
-          </motion.div>
+            {/* Completed Exams */}
+            {completedExams.length > 0 && (
+              <>
+                <div className="sec-label" style={{ marginTop: '32px' }}>Completed</div>
+                {completedExams.map((exam, idx) => {
+                  const questionCount = exam.sections.reduce((sum, s) => sum + s.questions.length, 0);
+                  const iconLetter = exam.title.charAt(0).toUpperCase() || 'C';
+                  return (
+                    <div className="exam-card" key={exam.examCode} style={{ opacity: 0.85 }}>
+                      <div className="ex-icon ch">{iconLetter}</div>
+                      <div className="ex-info">
+                        <div className="ex-name">{exam.title}</div>
+                        <div className="ex-meta">
+                          {exam.durationMinutes} mins <span className="dot">•</span> {questionCount} Questions <span className="dot">•</span> {exam.totalMarks} Marks
+                        </div>
+                        <div className="chip chip-done">
+                          <div className="chip-dot"></div>Completed
+                        </div>
+                      </div>
+                      <button className="ex-btn ghost" style={{ borderRadius: '8px' }}>View results</button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* Upcoming Exams */}
+            {upcomingExams.length > 0 && (
+              <>
+                <div className="sec-label" style={{ marginTop: '32px' }}>Upcoming</div>
+                {upcomingExams.map((exam, idx) => {
+                  const questionCount = exam.sections.reduce((sum, s) => sum + s.questions.length, 0);
+                  const iconLetter = exam.title.charAt(0).toUpperCase() || 'U';
+                  return (
+                    <div className="exam-card" key={exam.examCode} style={{ opacity: 0.6 }}>
+                      <div className="ex-icon ma">{iconLetter}</div>
+                      <div className="ex-info">
+                        <div className="ex-name">{exam.title}</div>
+                        <div className="ex-meta">
+                          {exam.durationMinutes} mins <span className="dot">•</span> {questionCount} Questions <span className="dot">•</span> {exam.totalMarks} Marks
+                        </div>
+                        <div className="chip chip-lock">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginRight: '4px' }}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                          </svg>
+                          LOCKED
+                        </div>
+                      </div>
+                      <button className="ex-btn locked" disabled>Start Exam</button>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            
+            {exams.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-sec)', fontSize: '14px' }}>
+                No assessments available at this time.
+              </div>
+            )}
+          </>
         )}
-      </main>
-    </div>
+      </div>
+    </section>
   );
 }
 

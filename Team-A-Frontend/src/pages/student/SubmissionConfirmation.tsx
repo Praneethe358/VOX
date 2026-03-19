@@ -140,16 +140,13 @@ export function SubmissionConfirmation() {
 
   if (isSubmitting) {
     return (
-      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[400px] h-[400px] bg-indigo-500/[0.06] rounded-full blur-[120px]" />
+      <section className="screen flex-center" id="s-success">
+        <div className="success-card pb-10" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div className="w-14 h-14 rounded-full border-2 border-accent/30 border-t-accent-lt animate-spin mx-auto mb-5" />
+          <div className="sc-title">Submitting Assessment...</div>
+          <div className="sc-desc">Processing your responses securely</div>
         </div>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative z-10 text-center">
-          <div className="w-14 h-14 rounded-full border-2 border-indigo-500/30 border-t-indigo-400 animate-spin mx-auto mb-5" />
-          <p className="text-lg text-slate-300 font-medium">Submitting Exam...</p>
-          <p className="text-slate-500 text-sm mt-1">Processing your responses</p>
-        </motion.div>
-      </div>
+      </section>
     );
   }
 
@@ -158,13 +155,7 @@ export function SubmissionConfirmation() {
   const timePct = submissionData ? Math.round((submissionData.timeSpent / durMin) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] p-4 relative overflow-hidden">
-      {/* Ambient */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/3 w-[500px] h-[500px] bg-emerald-600/[0.06] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-indigo-600/[0.04] rounded-full blur-[100px]" />
-      </div>
-
+    <section className="screen flex-center" id="s-success">
       {/* Voice overlays */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
       <VoiceSpeaker position="bottom-center" />
@@ -173,159 +164,92 @@ export function SubmissionConfirmation() {
         lastCommand={lastCommand}
         position="bottom-right"
         hints={[
-          { command: '"Results"',    icon: '📊', description: 'View all results' },
+          { command: '"Dashboard"', icon: '🏠', description: 'Return to dashboard' },
+          { command: '"Results"', icon: '📊', description: 'View all results' },
         ]}
       />
 
-      <div className="relative z-10 max-w-2xl mx-auto pt-8">
+      <motion.div 
+        className="sub-modal"
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.4 }}
+      >
         {/* Success Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-8"
-        >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}
-            className="w-20 h-20 rounded-3xl bg-emerald-500/[0.1] border border-emerald-500/[0.15] flex items-center justify-center mx-auto mb-5"
-          >
-            <span className="text-emerald-400 text-3xl">✓</span>
-          </motion.div>
-          <h1 className="text-2xl font-bold text-white tracking-tight mb-2">Exam Submitted</h1>
-          <p className="text-sm text-slate-500">Your responses have been recorded securely</p>
-        </motion.div>
+        <div className="sub-hdr">
+          <div className="sub-icon" style={{ background: 'rgba(22,163,74,0.14)', border: '1px solid rgba(22,163,74,0.2)' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: '22px', height: '22px', stroke: 'var(--green-lt)' }}>
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <div>
+            <div className="sub-title">Exam Submitted</div>
+            <div className="sub-exam">{submissionData?.examTitle}</div>
+          </div>
+        </div>
 
         {/* Summary Grid */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="glass-card rounded-2xl p-6 mb-5"
-        >
-          <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-4">Submission Summary</p>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-              <p className="text-[11px] text-slate-500 mb-1">Exam</p>
-              <p className="text-sm text-white font-medium truncate">{submissionData?.examTitle}</p>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-              <p className="text-[11px] text-slate-500 mb-1">Submitted</p>
-              <p className="text-sm text-white font-medium">{submissionData?.submittedAt}</p>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-              <p className="text-[11px] text-slate-500 mb-1">Answered</p>
-              <p className="text-sm font-semibold text-indigo-300">
-                {submissionData?.answeredQuestions} / {submissionData?.totalQuestions}
-              </p>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-              <p className="text-[11px] text-slate-500 mb-1">Time Used</p>
-              <p className="text-sm text-white font-medium">
-                {submissionData?.timeSpent} / {durMin} min
-              </p>
-            </div>
-            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-              <p className="text-[11px] text-slate-500 mb-1">Review Items</p>
-              <p className="text-sm text-white font-medium">{submissionData?.markedForReview ?? 0}</p>
-            </div>
+        <div className="stats-grid">
+          <div className="stat-cell">
+            <span className="stat-n g">{submissionData?.estimatedScore}</span>
+            <span className="stat-l">Est. Score</span>
           </div>
-        </motion.div>
-
-        {/* Performance Bars */}
-        {submissionData?.answeredQuestions > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="glass-card rounded-2xl p-6 mb-5"
-          >
-            <p className="text-[11px] text-slate-500 uppercase tracking-widest font-semibold mb-4">Performance</p>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-slate-400">Completion</span>
-                  <span className="text-indigo-300 font-semibold">{completionPct}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${completionPct}%` }}
-                    transition={{ duration: 0.8, delay: 0.4 }}
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-indigo-400"
-                  />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-slate-400">Time Utilization</span>
-                  <span className="text-emerald-300 font-semibold">{timePct}%</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${timePct}%` }}
-                    transition={{ duration: 0.8, delay: 0.5 }}
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400"
-                  />
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Info Notice */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.35 }}
-          className="glass-card rounded-xl p-4 mb-6 border-indigo-500/[0.06]"
-        >
-          <div className="flex gap-3">
-            <div className="w-5 h-5 rounded-md bg-indigo-500/[0.1] flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-indigo-400 text-[10px]">!</span>
-            </div>
-            <ul className="text-[11px] text-slate-400 space-y-1 leading-relaxed">
-              <li>Your exam has been submitted and cannot be modified</li>
-              <li>Results will be available within 24-48 hours</li>
-              <li>Check your email for result notifications</li>
-            </ul>
+          <div className="stat-cell">
+            <span className="stat-n a">{submissionData?.timeSpent}</span>
+            <span className="stat-l">Min Taken</span>
           </div>
-        </motion.div>
+          <div className="stat-cell">
+            <span className="stat-n a">{submissionData?.answeredQuestions}</span>
+            <span className="stat-l">Attempted</span>
+          </div>
+        </div>
 
-        {/* Auto-redirect countdown */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="text-center mb-4"
-        >
-          <p className="text-sm text-slate-400">
-            Redirecting to landing page in{' '}
-            <span className="text-indigo-300 font-semibold">{countdown}s</span>
-          </p>
-          <div className="mt-2 h-1 rounded-full bg-white/[0.04] overflow-hidden max-w-xs mx-auto">
-            <motion.div
-              initial={{ width: '100%' }}
-              animate={{ width: '0%' }}
-              transition={{ duration: 30, ease: 'linear' }}
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-400"
+        {/* Detailed Stats */}
+        <div className="time-strip">
+          <span className="lbl">Total Marks</span>
+          <span className="val">{submissionData?.totalMarks}</span>
+        </div>
+
+        <div className="time-strip">
+          <span className="lbl">Total Questions</span>
+          <span className="val">{submissionData?.totalQuestions}</span>
+        </div>
+
+        {/* Completion Rate Bar */}
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'clamp(10px, 2vw, 11px)', color: 'var(--text-sec)', marginBottom: '8px' }}>
+            <span>Completion Rate</span>
+            <span style={{ color: 'var(--text)', fontWeight: 600 }}>{completionPct}%</span>
+          </div>
+          <div style={{ width: '100%', height: '4px', backgroundColor: 'var(--surface3)', borderRadius: '100px', overflow: 'hidden' }}>
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${completionPct}%` }}
+              transition={{ delay: 0.5, duration: 1 }}
+              style={{ height: '100%', background: 'linear-gradient(90deg, var(--accent), var(--accent-lt))', borderRadius: '100px' }}
             />
           </div>
-        </motion.div>
+        </div>
 
-        {/* Footer */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="mt-8 text-center text-slate-600 text-[11px] pb-6"
-        >
-          <p>Vox Exam Platform</p>
-        </motion.div>
-      </div>
-    </div>
+        {/* Action Stack */}
+        <div className="action-stack">
+          <button className="a-btn cfm" onClick={() => navigate('/')}>
+            Return to Dashboard
+          </button>
+          <button className="a-btn ret" onClick={() => navigate('/student/exams')}>
+            Take Another Exam
+          </button>
+        </div>
+
+        {/* Auto-redirect Timer */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', marginTop: '12px', fontSize: 'clamp(10px, 2vw, 11px)', color: 'var(--text-muted)' }}>
+          <div style={{ width: '14px', height: '14px', flexShrink: 0 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <span>Redirecting in <strong style={{ color: 'var(--text)' }}>{countdown}s</strong></span>
+        </div>
+      </motion.div>
+    </section>
   );
 }
 

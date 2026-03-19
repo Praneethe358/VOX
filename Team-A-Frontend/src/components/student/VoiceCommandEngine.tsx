@@ -80,8 +80,11 @@ export function VoiceCommandEngine({
     }
   }, [lastCommand]);
 
-  const confidenceColor = (c: number) =>
-    c >= 0.8 ? 'bg-green-500' : c >= 0.5 ? 'bg-yellow-500' : 'bg-red-500';
+  const confidenceColor = (c: number) => {
+    if (c >= 0.8) return 'var(--green-lt)';
+    if (c >= 0.5) return 'var(--amber-lt)';
+    return 'var(--red-lt)';
+  };
 
   const actionLabel = (action: string) => {
     const labels: Record<string, string> = {
@@ -111,23 +114,33 @@ export function VoiceCommandEngine({
             initial={{ opacity: 0, y: 12, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.95 }}
-            className="bg-slate-800/95 backdrop-blur border border-indigo-500/40 rounded-xl px-4 py-3 shadow-xl min-w-[200px]"
+            className="rounded-xl px-4 py-3 shadow-xl min-w-[200px]"
+            style={{
+              background: 'var(--surface2)',
+              border: '1px solid rgba(45, 78, 232, 0.2)',
+              backdropFilter: 'blur(12px)',
+            }}
           >
             <div className="flex items-center gap-3">
               <span className="text-lg">{actionLabel(lastCommand.action).split(' ')[0]}</span>
               <div className="flex-1">
-                <p className="text-white text-sm font-semibold">
+                <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
                   {actionLabel(lastCommand.action)}
                 </p>
-                <p className="text-slate-400 text-xs font-mono">"{lastCommand.raw}"</p>
+                <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>"{lastCommand.raw}"</p>
               </div>
             </div>
             {/* Confidence bar */}
-            <div className="mt-2 w-full h-1.5 rounded-full bg-slate-700 overflow-hidden">
+            <div className="mt-2 w-full h-1.5 rounded-full overflow-hidden" style={{
+              background: 'rgba(255, 255, 255, 0.08)'
+            }}>
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${lastCommand.confidence * 100}%` }}
-                className={`h-full rounded-full ${confidenceColor(lastCommand.confidence)}`}
+                className="h-full rounded-full"
+                style={{
+                  background: confidenceColor(lastCommand.confidence)
+                }}
               />
             </div>
           </motion.div>
@@ -141,7 +154,12 @@ export function VoiceCommandEngine({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="bg-red-900/80 backdrop-blur border border-red-500/40 rounded-xl px-4 py-2 text-red-200 text-sm max-w-[280px]"
+            className="rounded-xl px-4 py-2 text-sm max-w-[280px]"
+            style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              color: 'var(--red-lt)',
+            }}
           >
             {error}
           </motion.div>
@@ -155,9 +173,16 @@ export function VoiceCommandEngine({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 12 }}
-            className="bg-slate-800/95 backdrop-blur border border-slate-700/50 rounded-xl p-3 shadow-xl min-w-[240px]"
+            className="rounded-xl p-3 shadow-xl min-w-[240px]"
+            style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              backdropFilter: 'blur(12px)',
+            }}
           >
-            <p className="text-slate-400 text-xs uppercase tracking-wider mb-2 font-semibold">
+            <p className="text-xs uppercase tracking-wider mb-2 font-semibold" style={{
+              color: 'var(--text-muted)'
+            }}>
               Voice Commands
             </p>
             <div className="space-y-1.5">
@@ -167,7 +192,9 @@ export function VoiceCommandEngine({
                   className="flex items-center gap-2 text-sm"
                 >
                   <span>{hint.icon}</span>
-                  <span className="text-indigo-300 font-mono text-xs">{hint.command}</span>
+                  <span className="font-mono text-xs" style={{
+                    color: 'var(--accent-lt)'
+                  }}>{hint.command}</span>
                 </div>
               ))}
             </div>
@@ -179,17 +206,21 @@ export function VoiceCommandEngine({
       <motion.button
         whileTap={{ scale: 0.92 }}
         onClick={() => setHintsExpanded(h => !h)}
-        className={`w-14 h-14 rounded-full flex items-center justify-center shadow-xl border-2 transition-colors ${
-          isListening
-            ? 'bg-indigo-600 border-indigo-400 shadow-indigo-500/30'
-            : 'bg-slate-800 border-slate-600 shadow-slate-900/30'
-        }`}
+        className="w-14 h-14 rounded-full flex items-center justify-center shadow-xl border-2 transition-colors"
+        style={{
+          background: isListening ? 'rgba(45, 78, 232, 0.2)' : 'var(--surface2)',
+          borderColor: isListening ? 'rgba(45, 78, 232, 0.3)' : 'var(--border)',
+          boxShadow: isListening ? '0 0 20px rgba(45, 78, 232, 0.2)' : 'none',
+        }}
         aria-label={isListening ? 'Microphone active - tap for command hints' : 'Microphone inactive - tap for command hints'}
       >
         {/* Animated pulse ring when listening */}
         {isListening && (
           <motion.div
-            className="absolute inset-0 rounded-full border-2 border-indigo-400"
+            className="absolute inset-0 rounded-full border-2"
+            style={{
+              borderColor: 'rgba(45, 78, 232, 0.4)',
+            }}
             animate={{ scale: [1, 1.5, 1.5], opacity: [0.6, 0, 0] }}
             transition={{ duration: 2, repeat: Infinity }}
           />

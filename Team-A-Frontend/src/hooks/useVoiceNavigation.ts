@@ -133,8 +133,10 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
   const isSpeakingRef      = useRef(false);
   const usingBackendRef    = useRef(false);
   const mediaStreamRef     = useRef<MediaStream | null>(null);
+  const mediaRecorderRef   = useRef<MediaRecorder | null>(null);
   const backendTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const consecutiveFailuresRef = useRef(0);
+  const prevSpeakingRef    = useRef(false);
   const MAX_FAILURES     = 3;
 
   shouldListenRef.current  = enabled;
@@ -221,18 +223,22 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
 
       // Pause while TTS is speaking to avoid echo
       if (isSpeakingRef.current) {
+        setIsListening(false);
         backendTimerRef.current = setTimeout(runOneChunk, 400);
         return;
       }
 
       const chunks: BlobPart[] = [];
       const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e: BlobEvent) => {
         if (e.data && e.data.size > 0) chunks.push(e.data);
       };
 
       recorder.onstop = async () => {
+        setIsListening(false);
+        mediaRecorderRef.current = null;
         if (!shouldListenRef.current || !usingBackendRef.current) return;
         try {
           const blob = new Blob(chunks, { type: 'audio/webm' });
@@ -427,11 +433,42 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
     }
   }, [dispatchCommand, startBackendSttLoop]);
 
+  // Hard pause mic capture while TTS is active, resume shortly after TTS ends.
+  useEffect(() => {
+    const wasSpeaking = prevSpeakingRef.current;
+    prevSpeakingRef.current = isSpeaking;
+
+    if (!wasSpeaking && isSpeaking) {
+      setIsListening(false);
+
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch {}
+      }
+
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch {}
+      }
+
+      return;
+    }
+
+    if (wasSpeaking && !isSpeaking && shouldListenRef.current) {
+      if (restartTimerRef.current) {
+        clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = null;
+      }
+      restartTimerRef.current = setTimeout(() => {
+        if (shouldListenRef.current) startOnce();
+      }, 250);
+    }
+  }, [isSpeaking, startOnce]);
+
   const stopListening = useCallback(() => {
     shouldListenRef.current = false;
     usingBackendRef.current = false;
     if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
     if (backendTimerRef.current) { clearTimeout(backendTimerRef.current); backendTimerRef.current = null; }
+    mediaRecorderRef.current = null;
     if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} recognitionRef.current = null; }
     if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
     setIsListening(false);
