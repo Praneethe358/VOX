@@ -8,7 +8,7 @@
 
 - **100% hands-free student journey** — face login → voice navigation → voice dictation → voice submission
 - **13 in-exam voice commands** with fuzzy matching (Levenshtein ≥ 0.78)
-- **Offline AI stack** — Whisper STT, Ollama/Llama 3 LLM, espeak-ng TTS, face-api.js — zero cloud dependency
+- **Hybrid AI stack** — Web Speech API dictation + Ollama/Llama 3 formatting + espeak-ng TTS + face-api.js
 - **Python FastAPI backend** — modern async framework with automatic API documentation
 - **Real-time auto-save** every 15 seconds with revision history
 
@@ -30,9 +30,9 @@
 - Login attempt history & tracking
 
 ### Voice & AI
-- **STT (Speech-to-Text)** — OpenAI Whisper `small` model, local & offline
-  - Command mode (`/api/ai/stt-command`) — short commands
-  - Answer mode (`/api/ai/stt-answer`) — long-form dictation with hallucination filtering (`no_speech_prob`, `avg_logprob`, `compression_ratio`)
+- **STT (Speech-to-Text)** — Browser-native Web Speech API for command recognition and written-answer dictation
+  - Command mode (`useVoiceEngine`) — instant command detection
+  - Written answer mode (`useDictation`) — real-time transcript directly inside the answer box
 - **TTS (Text-to-Speech)** — dual system:
   - Server-side: espeak-ng WAV synthesis (`/api/ai/tts-speak`)
   - Client-side: Web Speech API with serial queue, beep tones, voice priority selection
@@ -50,8 +50,10 @@
 - Pre-exam checklist (mic, camera, internet, fullscreen, speakers, storage)
 - Exam briefing with audio walkthrough
 - Full exam interface with:
-  - Voice dictation (continuous, 3s silence auto-stop)
-  - AI-formatted answer review (side-by-side raw vs formatted)
+  - Voice dictation directly into the written answer box (10s silence auto-stop)
+  - `continue dictation` appends to the existing answer text
+  - `edit answer` clears the current draft and starts fresh dictation
+  - AI-formatted answer review for review-mode flows
   - Question flagging & navigation
   - Pause/resume with persisted timer
   - 20-second submission confirmation gate
@@ -109,8 +111,6 @@
 ### External AI Binaries (local, offline)
 | Binary | Purpose |
 |--------|---------|
-| OpenAI Whisper (`small` model) | Speech-to-text transcription |
-| ffmpeg | Audio format conversion (WebM → 16kHz WAV) |
 | espeak-ng | Text-to-speech WAV synthesis |
 | Ollama + Llama 3 | Grammar correction & answer formatting |
 
@@ -200,9 +200,6 @@ PORT=3000
 JWT_SECRET=vox-local-dev-secret-change-this
 
 # AI / Speech binaries
-WHISPER_BIN=whisper                                  # or full path
-WHISPER_MODEL_PATH=small
-FFMPEG_BIN=ffmpeg                                    # or full path
 ESPEAK_BIN="C:\Program Files\eSpeak NG\espeak-ng.exe"
 
 # LLM
@@ -228,11 +225,10 @@ Install these external binaries for full AI functionality:
 
 ```powershell
 # Windows (via Chocolatey, admin PowerShell)
-choco install espeak-ng ffmpeg
-pip install -U openai-whisper
+choco install espeak-ng
 ```
 
-The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` HTTP surface used by the frontend. AI endpoints still depend on external binaries such as Whisper, ffmpeg, espeak-ng, and Ollama.
+The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` HTTP surface used by the frontend. Phase 2 dictation now uses browser-native STT and no longer depends on backend audio transcription.
 
 ---
 
@@ -244,7 +240,7 @@ The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` H
 | Health | `/health` | `GET /health` |
 | Auth | `/api/auth` | `POST /login`, `POST /face-recognize` |
 | Face | `/api/face` | `POST /register`, `POST /verify`, `POST /verify-by-id`, `GET /students`, `GET /embedding/:id`, `DELETE /embedding/:id`, `GET /attempts/:id` |
-| AI/Voice | `/api/ai` | `POST /stt-command`, `POST /stt-answer`, `POST /tts-speak`, `POST /format-answer` |
+| AI/Voice | `/api/ai` | `POST /tts-speak`, `POST /format-answer` |
 | Admin | `/api/admin` | `POST /login`, `GET /exams`, `POST /create-exam`, `POST /upload-exam-pdf`, `POST /publish-exam` |
 | Student | `/api/student` | `GET /exams`, `POST /verify-face`, `GET /exam/:code`, `POST /start-exam`, `POST /submit-answer`, `POST /end-exam` |
 | Students | `/api/students` | `GET /dashboard`, `GET /profile` |
@@ -340,6 +336,28 @@ The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` H
 - Backend checks and logs the availability of Whisper, ffmpeg, and espeak-ng binaries on startup
 - For full API reference and data flow details, see `INTEGRATION_GUIDE.md`
 - For detailed tech stack rationale and architecture, see `TECH_STACK.md`
+
+---
+
+## 📚 Documentation
+
+| Document | Purpose |
+|----------|---------|
+| **[QUICKSTART.md](QUICKSTART.md)** | 5-minute setup guide — fastest way to get running |
+| **[SETUP.md](SETUP.md)** | Complete development environment setup with IDE configuration |
+| **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** | Detailed file organization and directory layout |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture, data flows, component interactions, and design patterns |
+| **[TECH_STACK.md](TECH_STACK.md)** | Technology stack components and detailed architecture |
+| **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** | Complete API reference and backend integration details |
+| **[PHASE_2_WRITTEN_EXAMS.md](PHASE_2_WRITTEN_EXAMS.md)** | Phase 2 implementation — written exam support with voice dictation |
+
+**Getting Started:**
+1. Start with [QUICKSTART.md](QUICKSTART.md) to get running in 5 minutes
+2. Read [SETUP.md](SETUP.md) for detailed environment setup
+3. Check [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) to understand the codebase organization
+4. Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design and data flows
+5. See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for API documentation
+6. Read [PHASE_2_WRITTEN_EXAMS.md](PHASE_2_WRITTEN_EXAMS.md) for Phase 2 features and voice commands
 
 ---
 

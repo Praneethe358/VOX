@@ -18,6 +18,7 @@ import apiService from '../../services/student/api.service';
 
 export type CommandAction =
   | 'start_answering'
+  | 'start_answer'
   | 'stop_dictating'
   | 'repeat_question'
   | 'next_question'
@@ -51,8 +52,12 @@ const COMMAND_TABLE: CommandEntry[] = [
   },
   {
     action: 'start_answering',
-    phrases: ['start answering', 'begin answering', 'answer now', 'start answer', 'begin answer',
+    phrases: ['start answering', 'begin answering', 'answer now', 'begin answer',
       'answer question', 'i want to answer', 'record answer', 'start recording', 'begin recording'],
+  },
+  {
+    action: 'start_answer',
+    phrases: ['start answer', 'start writing', 'begin writing', 'write answer', 'start writing answer'],
   },
   {
     action: 'stop_dictating',

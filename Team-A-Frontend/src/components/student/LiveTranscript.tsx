@@ -101,7 +101,7 @@ export default function LiveTranscript({
 
         {/* Footer hint */}
         <p className="text-slate-500 text-xs mt-2 select-none">
-          Speak naturally — recording stops after 3 seconds of silence · Say{' '}
+          Speak naturally — recording stops after 10 seconds of silence · Say{' '}
           <span className="font-mono text-slate-400">"stop dictating"</span> to stop early
         </p>
       </motion.div>

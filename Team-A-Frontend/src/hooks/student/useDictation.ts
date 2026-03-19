@@ -1,9 +1,8 @@
 /**
  * useDictation — Continuous speech-to-text for answer dictation.
  *
- * Records audio via MediaRecorder and sends chunks to the backend Whisper
- * STT endpoint (/api/ai/stt-answer) for transcription.
- * 3-second silence (no new text) triggers auto-stop and calls onDictationEnd.
+ * Uses browser-native SpeechRecognition for low-latency transcription.
+ * A silence timeout (default: 10s) triggers auto-stop and calls onDictationEnd.
  *
  * Usage:
  *   const { isRecording, interimText, start, stop } = useDictation({
@@ -13,12 +12,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useVoiceContext } from '../../context/VoiceContext';
-import apiService from '../../services/student/api.service';
 
 interface UseDictationOptions {
   /** Called when dictation ends (silence timeout or manual stop). */
   onDictationEnd: (finalTranscript: string) => void;
-  /** Silence timeout in ms before auto-stop. Default: 3000 */
+  /** Silence timeout in ms before auto-stop. Default: 10000 */
   silenceTimeout?: number;
   lang?: string;
 }
@@ -28,14 +26,14 @@ export interface UseDictationReturn {
   interimText: string;
   finalText: string;
   lastError: string | null;
-  start: () => void;
+  start: (initialText?: string) => void;
   stop: () => void;
   reset: () => void;
 }
 
 export function useDictation({
   onDictationEnd,
-  silenceTimeout = 3000,
+  silenceTimeout = 10000,
   lang = 'en-US',
 }: UseDictationOptions): UseDictationReturn {
   const { playBeep, isSpeaking } = useVoiceContext();
@@ -45,14 +43,20 @@ export function useDictation({
   const [finalText, setFinalText] = useState('');
   const [lastError, setLastError] = useState<string | null>(null);
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recognitionRef = useRef<any>(null);
   const accumulatedRef = useRef('');
   const isActiveRef = useRef(false);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const chunkLoopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEndRef = useRef(onDictationEnd);
+  const stopRequestedRef = useRef(false);
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   onEndRef.current = onDictationEnd;
+
+  const getSR = useCallback(() => {
+    const SR =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    return SR ?? null;
+  }, []);
 
   const clearSilenceTimer = () => {
     if (silenceTimerRef.current) {
@@ -61,20 +65,23 @@ export function useDictation({
     }
   };
 
+  const clearRestartTimer = () => {
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+  };
+
   const stopInternal = useCallback((emitEnd: boolean) => {
     clearSilenceTimer();
-    if (chunkLoopTimerRef.current) {
-      clearTimeout(chunkLoopTimerRef.current);
-      chunkLoopTimerRef.current = null;
-    }
+    clearRestartTimer();
+    stopRequestedRef.current = true;
     isActiveRef.current = false;
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try { mediaRecorderRef.current.stop(); } catch {}
-    }
-    mediaRecorderRef.current = null;
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
     }
     setIsRecording(false);
     setInterimText('');
@@ -85,141 +92,117 @@ export function useDictation({
     }
   }, []);
 
+  const armSilenceTimer = useCallback(() => {
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      console.log('[Dictation] Silence timeout reached');
+      stopInternal(true);
+    }, silenceTimeout);
+  }, [silenceTimeout, stopInternal]);
+
   const stop = useCallback(() => stopInternal(true), [stopInternal]);
   const reset = useCallback(() => {
     stopInternal(false);
     accumulatedRef.current = '';
     setFinalText('');
     setInterimText('');
+    setLastError(null);
   }, [stopInternal]);
 
-  const start = useCallback(() => {
-    const bootstrap = async () => {
-      console.log('[Dictation] Bootstrapping with backend Whisper STT...');
+  const start = useCallback((initialText = '') => {
+    if (isActiveRef.current) return;
 
-      if (isActiveRef.current) {
-        console.log('[Dictation] Already active, skipping bootstrap');
-        return;
+    const SR = getSR();
+    if (!SR) {
+      setLastError('Speech recognition is not supported in this browser.');
+      playBeep('error');
+      return;
+    }
+
+    stopRequestedRef.current = false;
+    isActiveRef.current = true;
+    setLastError(null);
+    const seedText = initialText.trim();
+    accumulatedRef.current = seedText;
+    setFinalText(seedText);
+    setInterimText('');
+    setIsRecording(true);
+
+    const recognition = new SR();
+    recognitionRef.current = recognition;
+    recognition.lang = lang;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      if (!isActiveRef.current || isSpeakingRef.current) return;
+
+      let newInterim = '';
+      let newFinal = '';
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcript = String(event.results[i][0]?.transcript ?? '').trim();
+        if (!transcript) continue;
+        if (event.results[i].isFinal) {
+          newFinal += (newFinal ? ' ' : '') + transcript;
+        } else {
+          newInterim += (newInterim ? ' ' : '') + transcript;
+        }
       }
 
-      // Request microphone permission
-      try {
-        console.log('[Dictation] Requesting microphone permission...');
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaStreamRef.current = stream;
-        console.log('[Dictation] Microphone permission granted');
-      } catch (err) {
-        console.error('[Dictation] Microphone permission denied:', err);
-        setLastError('Microphone permission denied. Allow mic access and try dictation again.');
-        playBeep('error');
-        return;
+      if (newFinal) {
+        accumulatedRef.current += (accumulatedRef.current ? ' ' : '') + newFinal;
+        setFinalText(accumulatedRef.current);
       }
+      setInterimText(newInterim);
 
-      isActiveRef.current = true;
-      setLastError(null);
-      accumulatedRef.current = '';
-      setFinalText('');
-      setInterimText('');
-      setIsRecording(true);
-      playBeep('dictation');
-
-      // Start silence timer — auto-stop if no new text arrives
-      clearSilenceTimer();
-      silenceTimerRef.current = setTimeout(() => {
-        console.log('[Dictation] Silence timeout reached');
-        stopInternal(true);
-      }, silenceTimeout);
-
-      // Record-and-transcribe loop: record ~4s chunks, send to Whisper, accumulate
-      const recordChunk = () => {
-        if (!isActiveRef.current || !mediaStreamRef.current) return;
-
-        // Pause while TTS is speaking to avoid echo
-        if (isSpeakingRef.current) {
-          chunkLoopTimerRef.current = setTimeout(recordChunk, 400);
-          return;
-        }
-
-        const chunks: BlobPart[] = [];
-        let recorder: MediaRecorder;
-        try {
-          recorder = new MediaRecorder(mediaStreamRef.current, { mimeType: 'audio/webm' });
-        } catch {
-          // Fallback without specifying mimeType
-          try {
-            recorder = new MediaRecorder(mediaStreamRef.current);
-          } catch (e2) {
-            console.error('[Dictation] Cannot create MediaRecorder:', e2);
-            setLastError('Unable to start audio recording.');
-            stopInternal(false);
-            return;
-          }
-        }
-        mediaRecorderRef.current = recorder;
-
-        recorder.ondataavailable = (event: BlobEvent) => {
-          if (event.data && event.data.size > 0) chunks.push(event.data);
-        };
-
-        recorder.onstart = () => {
-          console.log('[Dictation] Recording chunk...');
-        };
-
-        recorder.onstop = async () => {
-          if (!isActiveRef.current) return;
-
-          try {
-            const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-            console.log('[Dictation] Sending', audioBlob.size, 'bytes to backend Whisper...');
-            setInterimText('Transcribing...');
-
-            const result = await apiService.convertSpeechToText(audioBlob, lang);
-            const text = (result?.text ?? '').trim();
-            const confidence = result?.confidence ?? 0;
-            console.log('[Dictation] Whisper result:', text || '(empty)', '| confidence:', confidence.toFixed(2));
-
-            setInterimText('');
-
-            if (text && text.length >= 2 && confidence >= 0.3) {
-              // Append transcribed text
-              accumulatedRef.current += (accumulatedRef.current ? ' ' : '') + text;
-              setFinalText(accumulatedRef.current);
-
-              // Reset silence timer — we got new speech
-              clearSilenceTimer();
-              silenceTimerRef.current = setTimeout(() => {
-                console.log('[Dictation] Silence timeout reached');
-                stopInternal(true);
-              }, silenceTimeout);
-            }
-          } catch (err) {
-            console.error('[Dictation] Whisper transcription failed:', err);
-            setLastError('Transcription failed. Check backend connection.');
-          }
-
-          // Schedule next chunk
-          if (isActiveRef.current) {
-            chunkLoopTimerRef.current = setTimeout(recordChunk, 250);
-          }
-        };
-
-        try {
-          recorder.start();
-          // 5 s chunks give Whisper enough context on CPU
-          setTimeout(() => {
-            if (recorder.state !== 'inactive') recorder.stop();
-          }, 5000);
-        } catch (err) {
-          console.error('[Dictation] Error starting MediaRecorder:', err);
-          setLastError('Unable to start audio capture.');
-          stopInternal(false);
-        }
-      };
-
-      recordChunk();
+      if (newFinal || newInterim) {
+        armSilenceTimer();
+      }
     };
-    void bootstrap();
-  }, [lang, silenceTimeout, stopInternal, playBeep]);
+
+    recognition.onerror = (event: any) => {
+      if (!isActiveRef.current) return;
+
+      const errorCode = String(event?.error ?? 'unknown');
+      if (errorCode === 'aborted' || errorCode === 'no-speech') {
+        return;
+      }
+
+      if (errorCode === 'not-allowed' || errorCode === 'service-not-allowed') {
+        setLastError('Microphone permission denied. Allow access and try again.');
+        playBeep('error');
+        stopInternal(false);
+        return;
+      }
+
+      setLastError(`Speech recognition error: ${errorCode}`);
+    };
+
+    recognition.onend = () => {
+      if (!isActiveRef.current || stopRequestedRef.current) {
+        return;
+      }
+
+      clearRestartTimer();
+      restartTimerRef.current = setTimeout(() => {
+        if (!isActiveRef.current || stopRequestedRef.current) return;
+        try {
+          recognition.start();
+        } catch {}
+      }, 120);
+    };
+
+    try {
+      recognition.start();
+      playBeep('dictation');
+      armSilenceTimer();
+    } catch {
+      setLastError('Unable to start speech recognition.');
+      playBeep('error');
+      stopInternal(false);
+    }
+  }, [armSilenceTimer, getSR, lang, playBeep, stopInternal]);
 
   // Keep isSpeakingRef in sync with TTS state
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);

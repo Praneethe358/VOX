@@ -21,12 +21,13 @@ import TimerDisplay from '../../components/student/TimerDisplay';
 import SubmissionGate from '../../components/student/SubmissionGate';
 import FormattedAnswerReview from '../../components/student/FormattedAnswerReview';
 import LiveTranscript from '../../components/student/LiveTranscript';
+import { AnswerInputBox } from '../../components/student/AnswerInputBox';
 
 import { studentApi, unifiedApiClient } from '../../api/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Question { id: number | string; text: string; marks?: number; type?: 'mcq' | 'descriptive'; options?: string[]; correctAnswer?: number; }
+interface Question { id: number | string; text: string; marks?: number; type?: 'mcq' | 'descriptive' | 'numerical'; options?: string[]; correctAnswer?: number; expectedAnswerLength?: 'short' | 'medium' | 'long'; difficulty?: 'easy' | 'medium' | 'hard'; }
 interface SavedAnswer { questionId: string | number; rawText: string; formattedText: string; selectedOption?: number; }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -56,6 +57,9 @@ export function ExamInterface() {
   const [confirmClearPending, setConfirmClearPending] = useState(false);
   const [heardText, setHeardText] = useState('');          // always show what mic heard
   const [heardMatched, setHeardMatched] = useState(false);  // did it match a command?
+  // Written answer support
+  const [writtenAnswers, setWrittenAnswers] = useState<Map<string | number, string>>(new Map());
+  const [isWrittenDictation, setIsWrittenDictation] = useState(false);  // flag: are we dictating for written answer?
 
   // Resolve studentId from all possible fields
   const resolvedStudentId = (student as any)?.studentId || (student as any)?.rollNumber || (student as any)?.registerNumber || sessionStorage.getItem('studentId') || 'UNKNOWN';
@@ -82,9 +86,11 @@ export function ExamInterface() {
             id: q.id ?? i + 1,
             text: q.text ?? q.question ?? `Question ${i + 1}`,
             marks: q.marks ?? 1,
-            type: q.type === 'mcq' ? 'mcq' : 'descriptive',
+            type: q.type === 'mcq' ? 'mcq' : (q.type === 'numerical' ? 'numerical' : 'descriptive'),
             options: Array.isArray(q.options) ? q.options : undefined,
             correctAnswer: q.correctAnswer,
+            expectedAnswerLength: q.expectedAnswerLength ?? 'medium',
+            difficulty: q.difficulty ?? 'medium',
           }));
           setQuestions(qs);
         }
@@ -106,7 +112,7 @@ export function ExamInterface() {
       const optionsText = currentQuestion.options.map((o, i) => `Option ${i + 1}: ${o}`).join('. ');
       speak(`Question ${currentIndex + 1} of ${questions.length}. ${currentQuestion.text}. ${optionsText}. Say option 1, 2, 3, or 4 to answer.`, { rate: 0.9 });
     } else {
-      speak(`Question ${currentIndex + 1} of ${questions.length}. ${currentQuestion.text}. Say start answering to record your answer.`, { rate: 0.9 });
+      speak(`Question ${currentIndex + 1} of ${questions.length}. ${currentQuestion.text}. Say start answer or start answering to record your response. You can also type your answer in the text box below.`, { rate: 0.9 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, questions.length]);
@@ -137,10 +143,24 @@ export function ExamInterface() {
   // ── Dictation ───────────────────────────────────────────────────────────────
   const handleDictationEnd = useCallback(async (transcript: string) => {
     if (!transcript.trim()) {
-      await speak('No speech detected. Returning to command mode.');
+      await speak('No speech detected.');
+      if (isWrittenDictation) {
+        transition('COMMAND_MODE');
+      } else {
+        transition('COMMAND_MODE');
+      }
+      return;
+    }
+
+    // For written questions: keep answer equal to this dictation session transcript
+    if (isWrittenDictation && currentQuestion && currentQuestion.type !== 'mcq') {
+      setWrittenAnswers(prev => new Map(prev).set(currentQuestion.id, transcript));
+      await speak('Dictation updated. Say continue dictation to add more, confirm answer to save, or edit answer to redo.');
       transition('COMMAND_MODE');
       return;
     }
+
+    // For MCQ: go to answer review (original behavior)
     setRawTranscript(transcript);
     transition('ANSWER_REVIEW');
     setIsFormatting(true);
@@ -158,10 +178,22 @@ export function ExamInterface() {
       setFormattedAnswer(transcript);
       await speak(`Your answer is: ${transcript}. Say confirm answer to save, or edit answer to redo.`);
     } finally { setIsFormatting(false); }
-  }, [speak, transition, setRawTranscript, setFormattedAnswer, currentQuestion]);
+  }, [speak, transition, setRawTranscript, setFormattedAnswer, currentQuestion, isWrittenDictation]);
 
   const { isRecording, interimText, finalText: dictationFinalText, lastError: dictationError, start: startDictation, stop: stopDictation, reset: resetDictation } =
-    useDictation({ onDictationEnd: handleDictationEnd, silenceTimeout: 3500 });
+    useDictation({ onDictationEnd: handleDictationEnd, silenceTimeout: 10_000 });
+
+  // Keep written answer draft synced with finalized dictated text while recording.
+  useEffect(() => {
+    if (!isRecording || !isWrittenDictation || !currentQuestion || currentQuestion.type === 'mcq') return;
+    setWrittenAnswers(prev => {
+      const existing = prev.get(currentQuestion.id) || '';
+      if (!dictationFinalText || existing === dictationFinalText) return prev;
+      const next = new Map(prev);
+      next.set(currentQuestion.id, dictationFinalText);
+      return next;
+    });
+  }, [isRecording, isWrittenDictation, currentQuestion, dictationFinalText]);
 
   // ── Command handler ─────────────────────────────────────────────────────────
   async function handleCommand(action: string, _confidence: number, rawText?: string) {
@@ -213,6 +245,7 @@ export function ExamInterface() {
         if (voiceState === 'ANSWER_REVIEW') {
           // Allow re-starting dictation from answer review
           stopEngine(); setRawTranscript(''); setFormattedAnswer(''); resetDictation();
+          setIsWrittenDictation(!!currentQuestion && currentQuestion.type !== 'mcq');
           transition('DICTATION_MODE');
           await speak('Re-dictating. Speak your new answer.');
           startDictation();
@@ -222,8 +255,20 @@ export function ExamInterface() {
         if (currentQuestion?.type === 'mcq') { speak('This is a multiple choice question. Say option 1, 2, 3, or 4.'); return; }
         stopEngine();
         setRawTranscript(''); setFormattedAnswer(''); resetDictation();
+        setIsWrittenDictation(true);
         transition('DICTATION_MODE');
-        await speak('Dictation active. Speak your answer now. I will stop after 3 seconds of silence.');
+        await speak('Dictation active. Speak your answer now. I will stop after 10 seconds of silence.');
+        startDictation();
+        break;
+      case 'start_answer':
+        // New command for written questions: directly start recording for written answer
+        if (voiceState !== 'COMMAND_MODE') return;
+        if (!currentQuestion || currentQuestion.type === 'mcq') { speak('This command works for written questions only.'); return; }
+        stopEngine();
+        setIsWrittenDictation(true);
+        resetDictation();
+        transition('DICTATION_MODE');
+        await speak('Dictation active. Speak your written answer now. I will stop after 10 seconds of silence.');
         startDictation();
         break;
       case 'option_1': case 'option_2': case 'option_3': case 'option_4': {
@@ -257,22 +302,62 @@ export function ExamInterface() {
         stopDictation();
         break;
       case 'confirm_answer':
-        if (voiceState !== 'ANSWER_REVIEW') return;
+        if (voiceState !== 'ANSWER_REVIEW' && voiceState !== 'COMMAND_MODE') return;
+        // For written answers in COMMAND_MODE, save the written answer
+        if (voiceState === 'COMMAND_MODE' && currentQuestion && currentQuestion.type !== 'mcq') {
+          const writtenText = writtenAnswers.get(currentQuestion.id) || '';
+          if (!writtenText.trim()) {
+            speak('No answer to confirm. Say start answer to record.');
+            return;
+          }
+          confirmWrittenAnswer(currentQuestion.id, writtenText);
+          return;
+        }
+        // For MCQ in ANSWER_REVIEW, confirm the formatted answer
         confirmAnswer();
         break;
       case 'edit_answer':
+        if (currentQuestion && currentQuestion.type !== 'mcq' && voiceState === 'COMMAND_MODE') {
+          stopEngine();
+          setWrittenAnswers(prev => {
+            const next = new Map(prev);
+            next.set(currentQuestion.id, '');
+            return next;
+          });
+          setRawTranscript('');
+          setFormattedAnswer('');
+          resetDictation();
+          setIsWrittenDictation(true);
+          transition('DICTATION_MODE');
+          await speak('Starting fresh. Speak your new answer now.');
+          startDictation();
+          return;
+        }
         if (voiceState !== 'ANSWER_REVIEW') return;
         stopEngine(); setRawTranscript(''); setFormattedAnswer(''); resetDictation();
+        setIsWrittenDictation(!!currentQuestion && currentQuestion.type !== 'mcq');
         transition('DICTATION_MODE');
         await speak('Re-dictating. Speak your new answer.');
         startDictation();
         break;
       case 'continue_dictation':
-        if (voiceState !== 'ANSWER_REVIEW') return;
+        if (voiceState !== 'ANSWER_REVIEW' && voiceState !== 'COMMAND_MODE') return;
+        const isWrittenQuestion = !!currentQuestion && currentQuestion.type !== 'mcq';
+        // For written answers in COMMAND_MODE, continue recording
+        if (isWrittenQuestion) {
+          const existingText = (writtenAnswers.get(currentQuestion!.id) || '').trim();
+          stopEngine();
+          setIsWrittenDictation(true);
+          transition('DICTATION_MODE');
+          await speak('Continuing. Speak to add more to your answer.');
+          startDictation(existingText);
+          return;
+        }
+        // For MCQ in ANSWER_REVIEW, continue recording
+        const baseMcqText = (rawTranscript || formattedAnswer || '').trim();
         stopEngine(); transition('DICTATION_MODE');
         await speak('Continuing. Speak to add more to your answer.');
-        // Don't reset — dictation will append to existing accumulated text
-        startDictation();
+        startDictation(baseMcqText);
         break;
       case 'read_my_answer':
         if (voiceState !== 'COMMAND_MODE' && voiceState !== 'ANSWER_REVIEW') return;
@@ -308,7 +393,8 @@ export function ExamInterface() {
       case 'submit_exam':
         if (voiceState !== 'COMMAND_MODE') return;
         {
-          const unanswered = questions.length - answers.size;
+          const totalAnswered = answers.size + writtenAnswers.size;
+          const unanswered = questions.length - totalAnswered;
           const summaryMsg = unanswered > 0
             ? `You have ${unanswered} unanswered question${unanswered > 1 ? 's' : ''}. `
             : 'All questions answered. ';
@@ -355,9 +441,14 @@ export function ExamInterface() {
     if (failCount === 3) {
       if (voiceState === 'COMMAND_MODE') {
         const isMcq = currentQuestion?.type === 'mcq';
-        speak(isMcq
-          ? 'Available commands: Option 1, 2, 3, or 4. Next question. Previous question. Repeat question. Pause exam. Submit exam.'
-          : 'Available commands: Start answering. Next question. Previous question. Repeat question. Read my answer. Clear answer. Pause exam. Submit exam.');
+        const isWritten = !!currentQuestion && currentQuestion.type !== 'mcq';
+        if (isMcq) {
+          speak('Available commands: Option 1, 2, 3, or 4. Next question. Previous question. Repeat question. Pause exam. Submit exam.');
+        } else if (isWritten) {
+          speak('Available commands: Start answer to record. Continue dictation to add more. Confirm answer to save. Next question. Previous question. Repeat question. Pause exam. Submit exam.');
+        } else {
+          speak('Available commands: Start answering. Next question. Previous question. Repeat question. Read my answer. Clear answer. Pause exam. Submit exam.');
+        }
       } else if (voiceState === 'ANSWER_REVIEW') {
         speak('Available commands: Confirm answer. Edit answer. Continue dictation. Repeat question.');
       } else if (voiceState === 'PAUSE_MODE') {
@@ -398,25 +489,54 @@ export function ExamInterface() {
     if (currentIndex < questions.length - 1) { questionReadRef.current = null; setCurrentIndex(i => i + 1); }
   }
 
+  async function confirmWrittenAnswer(questionId: string | number, text: string) {
+    if (!text.trim()) { speak('No answer to save.'); return; }
+    // For written answers, save without AI formatting
+    setAnswers(p => new Map(p).set(questionId, { questionId, rawText: text, formattedText: text }));
+    playBeep('success');
+    // Save to backend
+    try { await studentApi.autoSaveSession({ sessionId, examCode, questionId: String(questionId), draftAnswer: text } as any); } catch {}
+    try { await studentApi.v1AutosaveAnswer({ examSessionId: sessionId, questionNumber: typeof questionId === 'number' ? questionId : parseInt(String(questionId), 10) || (currentIndex + 1), rawSpeechText: text, formattedAnswer: text }); } catch {}
+    try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof questionId === 'number' ? questionId : parseInt(String(questionId), 10) || (currentIndex + 1), rawAnswer: text, formattedAnswer: text, confidence: 1 }); } catch {}
+    try { await studentApi.logAudit({ studentId: resolvedStudentId, examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId, wordCount: text.split(/\s+/).length, answerType: 'written' } }); } catch {}
+    await speak('Answer saved.' + (currentIndex < questions.length - 1 ? ' Moving to next question.' : ' All questions answered.'));
+    setWrittenAnswers(prev => { const n = new Map(prev); n.delete(questionId); return n; });  // clear from draft
+    transition('COMMAND_MODE');
+    if (currentIndex < questions.length - 1) { questionReadRef.current = null; setCurrentIndex(i => i + 1); }
+  }
+
   async function finalizeSubmission() {
     transition('FINALIZE');
     stopEngine(); stopSpeaking();
     await speak('Submitting your exam. Please wait.');
     const studentId = resolvedStudentId;
     const studentName = resolvedStudentName;
+
+    // Merge written answers into saved answers for submission
+    const allAnswers = new Map(answers);
+    writtenAnswers.forEach((text, qId) => {
+      if (!allAnswers.has(qId)) {
+        allAnswers.set(qId, {
+          questionId: qId,
+          rawText: text,
+          formattedText: text,
+        });
+      }
+    });
+
     // Submit to legacy endpoint
-    try { await studentApi.submitExamSession({ sessionId, examCode, studentId, studentName, answers: Array.from(answers.values()) } as any); } catch {}
+    try { await studentApi.submitExamSession({ sessionId, examCode, studentId, studentName, answers: Array.from(allAnswers.values()) } as any); } catch {}
     // Submit to V1 endpoint
     try { await studentApi.v1SubmitSession(sessionId); } catch {}
     // Submit to legacy DB
-    try { await studentApi.logAudit({ studentId, examCode, action: 'EXAM_SUBMITTED', metadata: { answeredCount: answers.size, totalQuestions: questions.length, studentName } }); } catch {}
+    try { await studentApi.logAudit({ studentId, examCode, action: 'EXAM_SUBMITTED', metadata: { answeredCount: allAnswers.size, totalQuestions: questions.length, studentName } }); } catch {}
     // End exam via legacy student API
     try { await studentApi.endExam(studentId, examCode); } catch {}
     setIsSubmitted(true);
     playBeep('success');
     await speak('Exam submitted successfully. Thank you.');
     // Pass real answer data via navigation state
-    const answeredCount = answers.size;
+    const answeredCount = allAnswers.size;
     const totalQ = questions.length;
     const elapsedMin = Math.max(1, Math.round((durationMinutes * 60 - remaining) / 60));
     // For MCQ: count correct answers for estimated score
@@ -484,7 +604,7 @@ export function ExamInterface() {
 
         {/* Live transcript during dictation */}
         <AnimatePresence>
-          {voiceState === 'DICTATION_MODE' && (
+          {voiceState === 'DICTATION_MODE' && !isWrittenDictation && (
             <LiveTranscript
               finalText={dictationFinalText}
               interimText={interimText}
@@ -575,6 +695,31 @@ export function ExamInterface() {
                   );
                 })}
               </div>
+            )}
+
+            {/* Written Answer Input */}
+            {currentQuestion.type !== 'mcq' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-6"
+              >
+                <AnswerInputBox
+                  questionId={currentQuestion.id}
+                  questionText={currentQuestion.text}
+                  value={isRecording && isWrittenDictation
+                    ? [dictationFinalText, interimText].filter(Boolean).join(' ').trim()
+                    : (writtenAnswers.get(currentQuestion.id) || '')}
+                  onChange={(text) => {
+                    setWrittenAnswers(prev => new Map(prev).set(currentQuestion.id, text));
+                  }}
+                  isRecording={isRecording && isWrittenDictation}
+                  interimText={interimText && isWrittenDictation ? interimText : ''}
+                  iFormattedAnswer={formattedAnswer}
+                  expectedAnswerLength={currentQuestion.expectedAnswerLength || 'medium'}
+                  placeholder="Say 'start answer' to record, or type your answer here..."
+                />
+              </motion.div>
             )}
           </motion.div>
         )}

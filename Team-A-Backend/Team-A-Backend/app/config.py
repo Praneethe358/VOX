@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:5173"
     jwt_secret: str = "vox-local-dev-secret-change-this"
     whisper_bin: str = "whisper"
-    whisper_model_path: str = "small"
+    whisper_model_path: str = "tiny.en"
     ffmpeg_bin: str = "ffmpeg"
     espeak_bin: str = "espeak-ng"
     ollama_url: str = "http://localhost:11434"

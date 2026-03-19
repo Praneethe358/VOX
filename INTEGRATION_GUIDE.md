@@ -8,7 +8,7 @@ Complete API reference and frontend↔backend integration details for the Vox ex
 - **Backend:** Python + FastAPI (`http://localhost:3000`)
 - **Database:** MongoDB 7.x (database: `vox`, dual driver: native + Mongoose)
 - **Face Recognition:** face-api.js client-side embeddings + backend cosine similarity
-- **Voice Stack:** Whisper STT + espeak-ng TTS + Web Speech API + Ollama Llama 3
+- **Voice Stack:** Web Speech API STT + espeak-ng TTS + Ollama Llama 3
 
 ---
 
@@ -77,11 +77,6 @@ FRONTEND_URL=http://localhost:5173
 # JWT
 JWT_SECRET=vox-local-dev-secret-change-this
 
-# Speech-to-Text
-WHISPER_BIN=whisper                    # or full path to whisper.exe
-WHISPER_MODEL_PATH=small
-FFMPEG_BIN=ffmpeg                      # or full path to ffmpeg.exe
-
 # Text-to-Speech
 ESPEAK_BIN="C:\Program Files\eSpeak NG\espeak-ng.exe"
 ESPEAK_NG_BIN=espeak-ng
@@ -104,11 +99,9 @@ VITE_API_BASE_URL=http://localhost:3000
 | Binary | Install Command | Purpose |
 |--------|----------------|---------|
 | espeak-ng | `choco install espeak-ng` | Server-side TTS WAV synthesis |
-| ffmpeg | `choco install ffmpeg` | Audio conversion (WebM → 16kHz WAV) |
-| OpenAI Whisper | `pip install -U openai-whisper` | Speech-to-text transcription |
 | Ollama | `https://ollama.ai` | Local LLM server (Llama 3) |
 
-The Python backend keeps the same `/health`, `/api/*`, and `/api/v1/*` contract the frontend already uses. Without Whisper, ffmpeg, espeak-ng, or Ollama installed, `/api/ai/*` endpoints can fail while the rest of the app still works.
+The Python backend keeps the same `/health`, `/api/*`, and `/api/v1/*` contract the frontend already uses. Phase 2 written dictation now runs fully in the browser via Web Speech API.
 
 ---
 
@@ -145,8 +138,6 @@ The Python backend keeps the same `/health`, `/api/*`, and `/api/v1/*` contract 
 ### AI / Voice (`/api/ai`)
 | Method | Path | Auth | Body | Response | Description |
 |--------|------|------|------|----------|-------------|
-| POST | `/api/ai/stt-command` | — | `multipart: audio (file)` | `{ text, confidence }` | Short command STT via Whisper |
-| POST | `/api/ai/stt-answer` | — | `multipart: audio (file)` | `{ text, confidence }` | Long-form answer STT via Whisper (with hallucination filtering) |
 | POST | `/api/ai/tts-speak` | — | `{ text, speed?, voice?, pitch? }` | `audio/wav` buffer | Text-to-speech via espeak-ng |
 | POST | `/api/ai/format-answer` | — | `{ rawText, questionContext? }` | `{ formattedText }` | Grammar correction via Ollama Llama 3 |
 
@@ -369,24 +360,18 @@ All V1 routes require JWT authentication via `Authorization: Bearer <token>` hea
 
 ### Speech-to-Text (STT)
 
-**Backend Pipeline:**
-1. Frontend records audio via `MediaRecorder` API (WebM/Opus)
-2. Sends as multipart `audio` field to `/api/ai/stt-command` or `/api/ai/stt-answer`
-3. Backend (speech.service.ts):
-   - Saves temp file via `multer`
-   - Converts to 16kHz mono WAV using `ffmpeg`
-   - Runs Whisper CLI: `whisper <file> --model small --output_format json --no_speech_threshold 0.5`
-   - Parses JSON output, applies hallucination filters:
-     - `no_speech_prob > 0.5` → discard segment
-     - `avg_logprob < -1.0` → discard segment
-     - `compression_ratio > 2.4` → discard segment
-   - Returns `{ text, confidence }`
+**Frontend-first Pipeline (Phase 2):**
+1. Browser uses `window.SpeechRecognition || window.webkitSpeechRecognition`
+2. Dictation transcripts stream in real time into the written answer box
+3. A 10-second silence timer auto-stops dictation
+4. `continue dictation` resumes from existing answer text
+5. `edit answer` clears the draft and restarts dictation from scratch
 
 **Frontend STT Paths:**
-1. **useDictation hook** — continuous recording in ~4s chunks → Whisper (`/api/ai/stt-answer`), 3-second silence auto-stop
+1. **useDictation hook** — Web Speech API streaming dictation directly into written answers with 10-second silence auto-stop
 2. **useVoiceEngine hook** — Web Speech API (`webkitSpeechRecognition`) for command detection (browser-native, no backend call)
 3. **useVoiceNavigation hook** — Web Speech API for non-exam page navigation
-4. **useSpeech hook** — legacy backend-based STT via `/api/ai/stt-command`
+4. **useSpeech hook** — legacy compatibility path
 
 ### Text-to-Speech (TTS)
 
@@ -419,7 +404,7 @@ All V1 routes require JWT authentication via `Authorization: Bearer <token>` hea
    - Prompt: clean grammar/punctuation without altering meaning
    - Timeout: 30s
    - Fallback: return raw text unchanged
-4. Frontend displays side-by-side: raw speech text | AI-formatted answer
+4. Frontend displays formatted review for review-mode flows while written dictation appears directly in the answer box
 5. Student voice commands: "Confirm answer", "Edit answer", "Continue dictation"
 
 ---

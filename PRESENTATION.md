@@ -24,7 +24,7 @@
 - **Voice-first exam interface** — no keyboard, no mouse, no typing
 - **Face recognition login** — no passwords to remember or type
 - **13 voice commands** control the entire exam lifecycle
-- **Offline AI stack** — Whisper STT + Llama 3 LLM + espeak-ng TTS
+- **Hybrid AI stack** — Web Speech API STT + Llama 3 LLM + espeak-ng TTS
 - **Kiosk lockdown** — prevents tab switching, DevTools, copy/paste
 
 ---
@@ -34,12 +34,12 @@
 |---------|-------------|
 | Face Login | Webcam → 128D embedding → cosine similarity ≥ 0.85 → JWT |
 | 13 Voice Commands | "Start answering", "Next question", "Submit exam", etc. |
-| Voice Dictation | Speak answers → Whisper STT → AI formatting → auto-save |
+| Voice Dictation | Speak answers → real-time text in answer box → confirm/continue/edit via voice |
 | AI Answer Formatting | Llama 3 fixes grammar/punctuation without changing meaning |
 | Dual TTS | Web Speech API (client) + espeak-ng (server) — TTS never fails |
 | Kiosk Lockdown | Fullscreen + blocked Alt+Tab/F12/Ctrl+W + no right-click/copy |
 | Auto-Save | Every 15 seconds with revision history (max 20 revisions) |
-| Offline-First | Zero cloud API calls — all AI runs locally |
+| Low-Latency First | Browser-native STT for dictation + local AI formatting/TTS |
 | $0 Per Exam | No per-request costs for STT, TTS, or LLM |
 
 ---
@@ -65,8 +65,8 @@
 │   9 Legacy Route Modules (/api/*)                                   │
 │   7 Vox V1 Route Modules (/api/v1/*)                       │
 │                                                                     │
-│   Whisper STT · espeak-ng TTS · Ollama Llama 3 · MongoDB           │
-│   JWT Auth · bcrypt · PDFKit · Multer · ffmpeg                      │
+│   Web Speech API STT · espeak-ng TTS · Ollama Llama 3 · MongoDB    │
+│   JWT Auth · bcrypt · PDFKit                                         │
 │   Electron IPC Bridge (13 channels) — kiosk lockdown               │
 └───────────────────────────┬─────────────────────────────────────────┘
                             │
@@ -103,13 +103,12 @@
 | JWT | 9.0.3 | Stateless auth, 8-hour expiry |
 | Multer | 2.0 | Audio/file multipart uploads |
 
-### AI Stack (All Local & Offline)
+### AI Stack
 | Technology | Purpose | Key Detail |
 |-----------|---------|------------|
-| OpenAI Whisper (small) | Speech-to-Text | Hallucination filtering (no_speech_prob, avg_logprob, compression_ratio) |
+| Web Speech API | Speech-to-Text | Browser-native recognition for commands and written dictation |
 | Ollama + Llama 3 | Answer Formatting | Temperature 0.2, 30s timeout, graceful fallback |
 | espeak-ng | Server TTS | 150 WPM, en-us voice, WAV output |
-| ffmpeg | Audio Conversion | WebM → 16kHz mono WAV for Whisper |
 | face-api.js | Face Detection | TinyFaceDetector + 128D FaceRecognitionNet |
 --- 
 
@@ -142,8 +141,9 @@ Step 5: EXAM IN PROGRESS (13 Voice Commands)
    → TTS reads Question 1 aloud
    → "Start answering" → DICTATION MODE (continuous recording)
    → Student speaks answer naturally
-   → "Stop dictating" → Whisper transcribes → Llama 3 formats
-   → Side-by-side: raw speech vs AI-formatted answer
+   → Transcript appears live inside the main answer box
+   → "Continue dictation" appends to existing answer
+   → "Edit answer" clears the draft and starts over
    → "Confirm answer" → saved, moves to next question
    → Auto-save every 15 seconds
 
@@ -193,9 +193,9 @@ FACE_AUTH → LOCKED (after 5 failures)
 - Works outside exam on all student pages
 
 ### Layer 4: useDictation — Answer Recording
-- Continuous ~4-second audio chunks → Whisper STT
-- 3-second silence auto-stop
-- Accumulates transcript incrementally
+- Browser-native Web Speech API recognition
+- 10-second silence auto-stop
+- Streams transcript directly into the written answer box
 
 ---
 
@@ -229,17 +229,13 @@ FACE_AUTH → LOCKED (after 5 failures)
 
 ## Slide 9: AI Pipeline Deep Dive
 
-### Speech-to-Text (Whisper)
+### Speech-to-Text (Web Speech API)
 ```
-Browser MediaRecorder (WebM/Opus)
-    → POST /api/ai/stt-answer (multipart)
-    → ffmpeg converts to 16kHz mono WAV
-    → Whisper CLI: --model small --output_format json
-    → Hallucination filters:
-        no_speech_prob > 0.5  → discard
-        avg_logprob < -1.0    → discard
-        compression_ratio > 2.4 → discard
-    → Return { text, confidence }
+Browser SpeechRecognition / webkitSpeechRecognition
+   → Real-time interim + final transcript events
+   → Text injected directly into answer input
+   → 10-second silence timeout auto-stop
+   → Commands: continue dictation (append), edit answer (clear + restart)
 ```
 
 ### Answer Formatting (Llama 3)
