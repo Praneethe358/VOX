@@ -259,7 +259,7 @@ Student can:
 Student speaks "start answer"
     ↓
 [DICTATION_MODE]
-    ↓ (3 sec silence)
+  ↓ (10 sec silence)
     ↓
 Text auto-fills in text box
     ↓
@@ -475,7 +475,7 @@ if (expectedAnswerLength === 'long' && wordCount < 50)
 ### Test Case 3: Hybrid Mode (Voice + Manual Editing)
 ```
 1. Say "start answer"
-2. Speak answer (dictation ends after 3 sec silence)
+2. Speak answer (dictation ends after 10 sec silence)
 3. Text fills box automatically
 4. Manually edit the text (add/remove/correct words)
 5. Say "confirm answer"
@@ -633,6 +633,381 @@ System: [Answer saved immediately]
 
 All questions → "Say 'submit exam'"
 ```
+
+---
+
+## 🎬 Complete Student Journey (End-to-End)
+
+### Phase 2 Exam Session Walkthrough
+
+#### Prerequisites
+- Student face enrolled in the system
+- Exam published by admin with mixed MCQ + descriptive questions
+- StudentDevice: Browser on Windows/Mac with microphone & speakers
+
+#### 1. **Face Login (Hands-Free)**
+```
+[Splash Screen]
+    ↓ (System beeps)
+Student: Positions face at camera
+    ↓ (System captures 5 frames)
+[Face Recognition Processing]
+    ↓
+✅ Face matched (cosine similarity ≥ 0.85) → Auto-redirect
+    OR
+❌ Face not matched → Clear screen
+    ↓
+Student: Try again (max 5 attempts per 15 min)
+    OR 
+Student: Say "use password"
+    ↓ [Password Login Page]
+    ↓
+Enter credentials manually → JWT token stored
+```
+
+#### 2. **Exam Selection (Voice-Enabled)**
+```
+[Exam Portal Dashboard]
+    ↓
+System: [TTS reads] "Your exams are: Exam 1 - Engineering, 
+                                      Exam 2 - Mathematics,
+                                      Exam 3 - Literature"
+Student: "Select exam 1"  OR  Manually clicks Exam 1
+    ↓
+[Pre-Exam Checklist]
+```
+
+#### 3. **Pre-Exam Checklist (Hybrid)**
+```
+System displays checklist items:
+  ☑ Microphone working
+  ☑ Camera working  
+  ☑ Internet connection
+  ☑ Fullscreen mode
+  ☑ Speakers working
+  ☑ Storage available
+
+Voice option:      Manual option:
+  Student: "Start exam"  OR    Click "Start Exam" button
+    ↓ (all items must pass)
+[Exam Briefing]
+```
+
+#### 4. **Exam Briefing (Audio Walkthrough)**
+```
+System: "This exam has 5 questions. 
+          Question 1-3 are multiple choice.
+          Questions 4-5 are written descriptions.
+          You have 30 minutes.
+          Good luck!"
+    ↓
+Student: Says "Ready" or clicks "Begin Exam"
+    ↓
+[Exam Interface with Question 1]
+```
+
+#### 5. **MCQ Question Flow**
+```
+[Display Question 1 - Multiple Choice]
+"Which of the following is a type of cloud?"
+
+Options:
+  A) Cumulus
+  B) Nimbus
+  C) Stratus
+  D) Cirrus
+
+Voice option:           Manual option:
+Student: "Option 2"     Student: Clicks "B) Nimbus"
+  ↓                         ↓
+[Answer Saved]
+  ↓
+[Auto-advance or Student says "Next question"]
+```
+
+#### 6. **Written Question Flow (The Key Phase 2 Feature)**
+```
+[Display Question 4 - Written/Descriptive]
+"Explain the water cycle in detail (200+ words expected)"
+
+[Answer Input Box] (empty text area, recording indicator)
+
+State: COMMAND_MODE
+    ↓
+Voice option:              Manual option:
+Student: "Start answer"    Student: Types directly in box
+  ↓
+State: DICTATION_MODE
+Recording pulse shows (red ●●●)
+    ↓
+Student: "Water cycle is the continuous 
+           movement of water on Earth.
+           It includes evaporation, 
+           condensation, and precipitation."
+    ↓
+[10 seconds of silence detected]
+    ↓ 
+State: COMMAND_MODE
+Text auto-fills in box:
+  "Water cycle is the continuous..."
+  
+Word count: 47 words (🟡 Yellow - short, expected 200+)
+Recording indicator stops
+    ↓
+Student has 3 choices:
+  1) Say "Continue dictation" 
+     → Resume recording from current text
+     
+  2) Say "Edit answer" 
+     → Clear box and restart dictation
+     
+  3) Say "Confirm answer" or manually edit
+     → Save answer and go to next question
+     
+     [OR manually type more in box]
+     [OR say "Continue dictation" to append]
+     [THEN say "Confirm answer"]
+```
+
+#### 7. **Continue Dictation Example**
+```
+After first dictation stops, text in box:
+"Water cycle is the continuous movement..."
+
+State: COMMAND_MODE
+Student: "Continue dictation"  
+    ↓
+State: DICTATION_MODE
+Recording resumes (existing text preserved)
+    ↓
+Student: "It includes evaporation where 
+           water evaporates from oceans..."
+    ↓
+[10 seconds silence]
+    ↓
+State: COMMAND_MODE
+Text in box now shows:
+"Water cycle is the continuous movement... 
+ It includes evaporation where water 
+ evaporates from oceans..."
+ 
+Word count: 78 words (still 🟡 Yellow)
+    ↓
+Student can continue again or confirm
+```
+
+#### 8. **Edit Answer Example**
+```
+Current text in box:
+"Water cycle is the processes..."
+
+State: COMMAND_MODE
+Student hears themselves made a mistake
+Student: "Edit answer"
+    ↓
+State: DICTATION_MODE
+Box cleared: ""
+Recording starts fresh
+    ↓
+Student: "The water cycle is the 
+           continuous process of..."
+    ↓
+[New answer recorded without old text]
+```
+
+#### 9. **Submission Gate**
+```
+After all questions answered:
+Student: "Submit exam"  OR  Clicks "Submit Exam"
+    ↓
+[20-second Confirmation Gate]
+System: "You are about to submit. 
+         5 questions answered. 
+ Say 'confirm submission' to proceed 
+         or 'go back' to change answers."
+    ↓
+Student: "Confirm submission"  
+    ↓
+[Exam submitted to backend]
+    ↓
+[Submission Confirmation]
+System: "Exam submitted successfully. 
+         Redirecting to results..."
+    ↓
+[Results Page - Voice readout of score]
+```
+
+---
+
+## ✅ Testing Scenarios (Phase 2 Validation)
+
+### Scenario 1: Full Voice-Only Exam (MCQ Only)
+**Setup**: Create exam with 3 MCQ questions
+
+**Steps**:
+1. Face login (hands-free)
+2. Say "Select exam 1"
+3. Say "Start exam" through checklist
+4. Say "Option 2" → Answer saved
+5. Say "Next question"
+6. Say "Option 1" → Answer saved
+7. Say "Next question"
+8. Say "Option 4" → Answer saved
+9. Say "Submit exam"
+10. Say "Confirm submission"
+
+**Expected Result**: All answers saved, exam submitted, results displayed
+
+---
+
+### Scenario 2: Hybrid Exam (MCQ + Written)
+**Setup**: Create exam with 2 MCQ + 2 written questions
+
+**Steps**:
+1. Face/Password login
+2. Select exam
+3. Complete pre-checklist
+4. Q1 (MCQ): Say "Option 1" → Saved
+5. Q2 (MCQ): Manually select option B → Saved
+6. Q3 (Written): Say "Start answer"
+7. Speak: "Machine learning is a subset of AI..."
+8. [Silence] → Text appears
+9. Say "Continue dictation"
+10. Speak: "It works by training models on data..."
+11. [Silence] → Text appends
+12. Say "Confirm answer"
+13. Q4 (Written): Manually type answer in box
+14. Say "Next question" → Advance to submission
+15. Say "Submit exam" → Confirm
+
+**Expected Result**: Mixed answers saved (voice + manual), exam submitted
+
+---
+
+### Scenario 3: Edit Answer Flow
+**Setup**: Written question with voice dictation
+
+**Steps**:
+1. Start dictation on Q4 (written)
+2. Speak: "The capital of France is..."
+3. [Silence] → Stop
+4. Notice mistake in transcription
+5. Say "Edit answer" → Box clears
+6. Speak correct answer: "Paris is the capital of France..."
+7. [Silence] → New text appears
+8. Say "Confirm answer" → Saved
+
+**Expected Result**: Original text cleared, new dictation replaces it
+
+---
+
+### Scenario 4: Continue + Manual Edit Combo
+**Setup**: Written question mixing voice + manual editing
+
+**Steps**:
+1. Start dictation: "The Renaissance was a period of..."
+2. [Silence] → Text appears
+3. Say "Continue dictation"
+4. Speak: "Cultural renewal in Europe"
+5. [Silence] → Text appends
+6. Manually click in box and add: " spanning 14th-17th centuries"
+7. Say "Confirm answer"
+
+**Expected Result**: Final answer = dictated + manual = "The Renaissance was a period of cultural renewal in Europe spanning 14th-17th centuries"
+
+---
+
+### Scenario 5: Network Interruption Recovery
+**Setup**: Exam with auto-save enabled, internet drops
+
+**Steps**:
+1. Answer Q1-Q3 successfully
+2. Start writing Q4
+3. [Network interrupts]
+4. Continue speaking (local buffer stores interim text)
+5. [Network returns within 30 seconds]
+6. Say "Confirm answer"
+7. Auto-save retry → Success
+8. Continue exam normally
+
+**Expected Result**: Draft saved when network restored, no data loss
+
+---
+
+### Scenario 6: Silence Detection Edge Case
+**Setup**: Written question with soft speaking
+
+**Steps**:
+1. Say "Start answer"
+2. Speak very quietly: "This is a soft response..."
+3. System detects speech but after 10 seconds of quietness, auto-stops
+4. Text appears with full transcript
+
+**Expected Result**: 10-second timer resets whenever new speech detected; stops only during complete silence
+
+---
+
+### Scenario 7: Word Count Advisory (Yellow Warning)
+**Setup**: Question with "medium" expected length (100-200 words)
+
+**Steps**:
+1. Answer with only 30 words
+2. Word count shows: 30 words (🟡 Yellow warning)
+3. Continue dictating to reach 150 words
+4. Word count updates: 150 words (🟢 Green OK)
+5. Submit exam
+
+**Expected Result**: Color-coded warnings guide students without enforcing limits
+
+---
+
+## 📊 Feature Matrix: Phase 2 vs Phase 1
+
+| Feature | Phase 1 (MCQ Only) | Phase 2 (Hybrid) | Notes |
+|---------|-------------------|------------------|-------|
+| Question Types | MCQ only | MCQ + Descriptive + Numerical | New question types |
+| Answer Input | Voice/Manual selection | Voice dictation + Manual typing | Direct answer box injection |
+| STT Backend | Backend Whisper (deprecated) | Browser Web Speech API | Zero-latency, no audio upload |
+| Dictation UI | Floating "LISTENING..." box | Direct into answer box | More intuitive |
+| Continue Mode | ❌ N/A | ✅ Append to existing | New command "continue dictation" |
+| Edit Command | ✅ Clear & restart | ✅ Clear & restart | Same behavior, now works for written |
+| AI Formatting | Ollama/Llama 3 | Ollama/Llama 3 (MCQ only) | Not applied to written (preserves original) |
+| Silence Detection | 3 seconds | 10 seconds | Longer buffer for speech |
+| Auto-Save | ✅ Every 15s | ✅ Every 15s | Applies to written answers too |
+| Admin: PDF Parser | ✅ MCQ only | ✅ MCQ + descriptive + numerical | Enhanced question type support |
+| Command Count | 13 commands | 13+ commands | New: "start answer", "continue dictation" |
+| Test Score Impact | Supported | Supported | All answer types count equally |
+| Voice Navigation | ✅ Full | ✅ Full | Unchanged |
+| Face Auth | ✅ Biometric | ✅ Biometric | Unchanged |
+
+---
+
+## 🏆 Success Criteria for Phase 2
+
+✅ **Completed Milestones:**
+- Written questions render dynamically based on type
+- Voice dictation streams directly into answer box (not separate overlay)
+- "Continue dictation" preserves and appends existing text
+- "Edit answer" clears and restarts from scratch
+- 10-second silence auto-stops dictation
+- Word count advisory displayed in real-time
+- Written answers NOT processed by AI formatter (preserves original)
+- MCQ + written answers submit together as unified result
+- Admin can upload PDF with descriptive questions
+- All 13+ voice commands work seamlessly during dictation
+
+✅ **Documentation:**
+- Phase 2 architecture documented
+- All voice commands documented with examples
+- End-to-end student journey documented
+- Testing scenarios provided
+- Feature matrix comparing Phase 1 vs 2
+
+✅ **Code Quality:**
+- TypeScript strict mode enabled
+- All components fully typed
+- Build passes with zero errors
+- No console warnings
 
 ---
 

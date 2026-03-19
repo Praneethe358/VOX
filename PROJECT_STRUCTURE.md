@@ -158,14 +158,14 @@ mindkraft/                                    # Workspace root
 | Route | Component | Purpose |
 |-------|-----------|---------|
 | `/` | `LandingPage.tsx` | Public landing page |
-| `/student-login` | `StudentLogin.tsx` | Student login selector |
-| `/student` | `StudentPortal.tsx` | Student dashboard |
+| `/student/login` | `FaceRecognitionLogin.tsx` | Student face login |
+| `/student/exams` | `StudentPortal.tsx` | Student exam dashboard |
 | `/admin-login` | `adminlogin.tsx` | Admin login |
 | `/admin` | `AdminPortal.tsx` | Admin dashboard |
-| `/exam` | `ExamInterface.tsx` | Active exam interface |
+| `/student/exam/:examId/interface` | `ExamInterface.tsx` | Active exam interface |
 | `/splash` | `SplashScreen.tsx` | Splash screen |
-| `/student/face-login` | `FaceRecognitionLogin.tsx` | Face authentication |
-| `/student/password-login` | `PasswordFallbackLogin.tsx` | Password fallback |
+| `/student/login` | `FaceRecognitionLogin.tsx` | Face authentication |
+| `/student/login-fallback` | `PasswordFallbackLogin.tsx` | Password fallback |
 
 ---
 

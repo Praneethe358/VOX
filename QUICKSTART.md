@@ -8,7 +8,7 @@
 
 - **Python 3.11+** (with `python` command available)
 - **Node.js 18+** (with `npm` command available)
-- **MongoDB 4.x+** running locally on `mongodb://127.0.0.1:27017`
+- **MongoDB 7.x+** running locally on `mongodb://127.0.0.1:27017`
 - **Git** for version control
 
 ---

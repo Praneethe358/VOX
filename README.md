@@ -1,14 +1,16 @@
 # Vox
 
-> A **voice-first, AI-powered, fully hands-free** examination platform with biometric face authentication, voice-dictated answers, real-time AI answer formatting, and kiosk-mode security lockdown.
+> A **voice-first, AI-powered, hybrid examination platform** with biometric face authentication, voice dictation or manual typing for answers, real-time AI answer formatting (MCQ mode), and kiosk-mode security lockdown.
 
 ---
 
 ## Key Highlights
 
-- **100% hands-free student journey** — face login → voice navigation → voice dictation → voice submission
-- **13 in-exam voice commands** with fuzzy matching (Levenshtein ≥ 0.78)
-- **Hybrid AI stack** — Web Speech API dictation + Ollama/Llama 3 formatting + espeak-ng TTS + face-api.js
+- **Hybrid student journey** — face login → voice navigation → mixed MCQ+written exams with voice commands or manual input
+- **100% hands-free option for MCQ exams** — face login → voice navigation → voice MCQ selection → voice submission
+- **Hybrid option for descriptive/written exams** — voice/manual login + voice commands + manual text typing for written answers
+- **13+ in-exam voice commands** with fuzzy matching (Levenshtein ≥ 0.78) — seamlessly works during dictation or manual mode  
+- **Hybrid AI stack** — Browser Web Speech API (STT) + Ollama/Llama 3 (MCQ formatting only) + espeak-ng TTS + face-api.js biometrics
 - **Python FastAPI backend** — modern async framework with automatic API documentation
 - **Real-time auto-save** every 15 seconds with revision history
 
@@ -30,37 +32,46 @@
 - Login attempt history & tracking
 
 ### Voice & AI
-- **STT (Speech-to-Text)** — Browser-native Web Speech API for command recognition and written-answer dictation
-  - Command mode (`useVoiceEngine`) — instant command detection
-  - Written answer mode (`useDictation`) — real-time transcript directly inside the answer box
+- **STT (Speech-to-Text)** — Browser-native Web Speech API (zero-latency, no backend audio processing)
+  - **Command mode** (`useVoiceEngine`) — instant command detection with fuzzy matching
+  - **Written dictation mode** (`useDictation`) — real-time transcript streams directly into the answer box during speaking
+  - **10-second silence detection** — auto-stops dictation when speech pauses
+  - **No external audio processing** — web browser handles all transcription locally (Chrome uses Google Cloud, other browsers vary)
 - **TTS (Text-to-Speech)** — dual system:
-  - Server-side: espeak-ng WAV synthesis (`/api/ai/tts-speak`)
-  - Client-side: Web Speech API with serial queue, beep tones, voice priority selection
-- **LLM Answer Formatting** — Ollama + Llama 3 at `localhost:11434` (temperature 0.2, graceful fallback to raw text)
+  - Client-side: Web Speech API with serial playback queue, beep tones, voice priority (Microsoft Zira/David preferred)
+  - Server-side fallback: espeak-ng WAV synthesis (`/api/ai/tts-speak`) if browser API fails
+- **LLM Answer Formatting** — Ollama + Llama 3 at `localhost:11434` (temperature 0.2)
+  - **Applied to**: MCQ review-mode dictations only (for grammar correction of spoken answers)
+  - **NOT applied to**: Written/descriptive answers (preserves student's original text as-is)
 
 ### Voice Command System (3-Layer Architecture)
 1. **VoiceContext** — global state machine: `IDLE → FACE_AUTH → EXAM_BRIEFING → COMMAND_MODE ⟷ DICTATION_MODE → SUBMISSION_GATE → FINALIZE`
 2. **useVoiceEngine** — 13+ exam commands with exact → contains → fuzzy matching
 3. **useVoiceNavigation** — regex-based page navigation (dashboard, exams, results, settings, select exam N, go back, help)
 
-### Student Experience
-- Hands-free face login with TTS guidance & automatic retry
-- Password fallback login page
-- Voice-enabled exam selector ("select exam 1")
-- Pre-exam checklist (mic, camera, internet, fullscreen, speakers, storage)
-- Exam briefing with audio walkthrough
-- Full exam interface with:
-  - Voice dictation directly into the written answer box (10s silence auto-stop)
-  - `continue dictation` appends to the existing answer text
-  - `edit answer` clears the current draft and starts fresh dictation
-  - AI-formatted answer review for review-mode flows
-  - Question flagging & navigation
-  - Pause/resume with persisted timer
-  - 20-second submission confirmation gate
+### Student Experience (Phase 2: Hybrid Exams)
+- **Face login** with TTS guidance & automatic retry (hands-free)
+- **Password fallback** login page (manual option)
+- **Voice-enabled exam selector** — "select exam 1" or manual selection
+- **Pre-exam checklist** — mic, camera, internet, fullscreen, speakers, storage (voice or manual)
+- **Exam briefing** — audio walkthrough of exam rules
+- **Dynamic exam interface** based on question type:
+  - **MCQ questions**: Voice commands ("option 1", "option 2") or manual selection; optional AI-formatted review
+  - **Descriptive/written questions**: 
+    - Start with "start answer" → voice dictation records directly into answer box
+    - 10-second silence auto-stops dictation
+    - Say "continue dictation" to append more text
+    - Say "edit answer" to clear and restart from scratch
+    - Say "confirm answer" to save, or manually type/edit the text box
+  - **Numerical questions**: Same as descriptive (voice or manual numeric entry)
+- **Full hybrid workflow**:
+  - Pause/resume with persisted timer (voice or manual)
+  - Question flagging & navigation (voice commands or buttons)
+  - 20-second submission confirmation gate (voice or manual)
   - Auto-save every 15 seconds
-- Submission confirmation page with auto-redirect
-- Results page with voice readout
-- Settings page (language, speech rate, accessibility)
+- **Submission confirmation** page with auto-redirect
+- **Results page** with voice readout of scores
+- **Settings page** — language, speech rate, accessibility options
 
 ### Admin Experience
 - Admin portal with dashboard stats & recent activity
@@ -106,13 +117,13 @@
 | python-multipart | 0.0.20 | Audio/file upload handling |
 | pypdf | 5.9 | PDF question extraction |
 | httpx | 0.28 | Ollama HTTP client |
-| Electron | 40.6 | Legacy kiosk shell only |
+| Electron | 40.6 | ⚠️ DEPRECATED — Legacy kiosk shell (not active in Phase 2) |
 
-### External AI Binaries (local, offline)
-| Binary | Purpose |
-|--------|---------|
-| espeak-ng | Text-to-speech WAV synthesis |
-| Ollama + Llama 3 | Grammar correction & answer formatting |
+### External AI Binaries (Optional, Local)
+| Binary | Purpose | Used For |
+|--------|---------|----------|
+| espeak-ng | Text-to-speech WAV synthesis | Server-side TTS fallback (`/api/ai/tts-speak`) |
+| Ollama + Llama 3 | Grammar correction & answer formatting | **MCQ review mode only** (not for written descriptive answers) |
 
 ---
 
@@ -139,19 +150,16 @@ FINAL-VOX/
 │   │   └── utils/                     ← faceApiLoader, exam utilities
 │   └── public/models/                 ← face-api.js model weights
 │
-├── Team-A-Backend/Team-A-Backend/     ← Express 5 + Electron backend
-│   ├── src/
-│   │   ├── bridge/                    ← Electron IPC handlers (13 channels)
-│   │   ├── database/                  ← MongoDB client, provider, seed, models (6 interfaces)
-│   │   ├── security/                  ← Kiosk service, face-verify stub, lockdown stub
-│   │   ├── server/                    ← Express app, routes (9 route modules)
-│   │   ├── services/                  ← AI, face, speech, TTS, LLM, PDF services
-│   │   ├── utils/                     ← Encryptor, packager (stubs)
-│   │   └── voicesecure/               ← V1 API subsystem [Legacy folder name]
-│   │       ├── core/                  ← Middleware (auth, error handler), DB connector, types
-│   │       ├── models/                ← 8 Mongoose schemas (Admin, Student, Exam, etc.)
-│   │       └── routes/                ← 7 V1 route modules (auth, students, exams, etc.)
-│   └── tmp-uploads/                   ← Temporary audio/file uploads
+├── Team-A-Backend/Team-A-Backend/     ← Python FastAPI backend
+│   ├── app/
+│   │   ├── main.py                    ← FastAPI app & route wiring
+│   │   ├── config.py                  ← Environment config
+│   │   ├── database.py                ← MongoDB repository + initialization
+│   │   ├── security.py                ← JWT + password security
+│   │   └── services/                  ← AI, face, PDF parser services
+│   ├── scripts/                       ← Smoke tests and utilities
+│   ├── requirements.txt               ← Python dependencies
+│   └── start-python-backend.ps1       ← Windows startup helper
 ```
 
 ---
@@ -333,7 +341,7 @@ The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` H
 
 - **No mock DB mode** — application always uses real MongoDB (mock mode removed)
 - Backend seeds a default admin and a sample exam (`TECH101 — Introduction to AI`) on startup
-- Backend checks and logs the availability of Whisper, ffmpeg, and espeak-ng binaries on startup
+- Backend checks and logs AI dependency readiness (espeak-ng, Ollama connection) on startup
 - For full API reference and data flow details, see `INTEGRATION_GUIDE.md`
 - For detailed tech stack rationale and architecture, see `TECH_STACK.md`
 
@@ -361,21 +369,4 @@ The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` H
 
 ---
 
-*Built by Team A — Vox Exam Platform*""  
-"## Documentation"  
-""  
-"| Document | Purpose |"  
-"|----------|---------|"  
-"| **[QUICKSTART.md](QUICKSTART.md)** | 5-minute setup guide — fastest way to get running |"  
-"| **[SETUP.md](SETUP.md)** | Complete development environment setup with IDE configuration |"  
-"| **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** | Detailed file organization and directory layout |"  
-"| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture, data flows, component interactions, and design patterns |"  
-"| **[TECH_STACK.md](TECH_STACK.md)** | Technology stack components and detailed architecture |"  
-"| **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** | Complete API reference and backend integration details |" 
-""  
-"**Getting Started:**"  
-"1. Start with [QUICKSTART.md](QUICKSTART.md) to get running in 5 minutes"  
-"2. Read [SETUP.md](SETUP.md) for detailed environment setup"  
-"3. Check [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) to understand the codebase organization"  
-"4. Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design and data flows"  
-"5. See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for API documentation" 
+*Built by Team A — Vox Exam Platform*

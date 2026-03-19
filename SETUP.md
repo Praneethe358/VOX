@@ -31,7 +31,7 @@
 - **Python**: 3.11 or higher
 - **Node.js**: 18.0 or higher
 - **npm**: 9.0 or higher
-- **MongoDB**: 4.x or higher
+- **MongoDB**: 7.x or higher
 - **Git**: Latest stable version
 
 ---
@@ -114,7 +114,7 @@ sudo apt install nodejs
 
 # Install MongoDB
 wget -qO - https://www.mongodb.org/static/pgp/server-5.0.asc | sudo apt-key add -
-echo "deb http://repo.mongodb.org/apt/ubuntu focal/mongodb-org/5.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-5.0.list
+echo "deb http://repo.mongodb.org/apt/ubuntu focal/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
 sudo apt update
 sudo apt install mongodb-org
 
@@ -229,7 +229,7 @@ cp .env.example .env || echo "No template found"
 
 # Verify .env content
 cat .env
-# Should show: VITE_API_BASE_URL=http://localhost:3000/api
+# Should show: VITE_API_BASE_URL=http://localhost:3000
 ```
 
 ---
