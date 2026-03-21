@@ -1,4 +1,4 @@
-/**
+﻿/**
  * ExamInterface.tsx — Vox hands-free exam page.
  *
  * No buttons. No mouse. No keyboard.
@@ -296,7 +296,7 @@ export function ExamInterface() {
           selectedOption: optNum,
         }));
         playBeep('success');
-        try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: `Option ${optNum + 1}`, formattedAnswer: optText, confidence: 1 }); } catch {}
+        try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: `Option ${optNum + 1}`, formattedAnswer: optText, confidence: 1 }); } catch { }
         speak(`Option ${optNum + 1} selected: ${optText}.`);
         // Auto-advance to next question after a short delay
         if (currentIndex < questions.length - 1) {
@@ -486,13 +486,13 @@ export function ExamInterface() {
     setRawTranscript(''); setFormattedAnswer('');
     playBeep('success');
     // Save to legacy autosave
-    try { await studentApi.autoSaveSession({ sessionId, examCode, questionId: String(currentQuestion.id), draftAnswer: text } as any); } catch {}
+    try { await studentApi.autoSaveSession({ sessionId, examCode, questionId: String(currentQuestion.id), draftAnswer: text } as any); } catch { }
     // Save to V1 autosave (MongoDB Atlas)
-    try { await studentApi.v1AutosaveAnswer({ examSessionId: sessionId, questionNumber: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawSpeechText: rawTranscript, formattedAnswer: text }); } catch {}
+    try { await studentApi.v1AutosaveAnswer({ examSessionId: sessionId, questionNumber: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawSpeechText: rawTranscript, formattedAnswer: text }); } catch { }
     // Save to legacy response store
-    try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: rawTranscript, formattedAnswer: text, confidence: 1 }); } catch {}
+    try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof currentQuestion.id === 'number' ? currentQuestion.id : parseInt(String(currentQuestion.id), 10) || (currentIndex + 1), rawAnswer: rawTranscript, formattedAnswer: text, confidence: 1 }); } catch { }
     // Log voice activity
-    try { await studentApi.logAudit({ studentId: resolvedStudentId, examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId: currentQuestion.id, wordCount: text.split(/\s+/).length } }); } catch {}
+    try { await studentApi.logAudit({ studentId: resolvedStudentId, examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId: currentQuestion.id, wordCount: text.split(/\s+/).length } }); } catch { }
     await speak('Answer saved.' + (currentIndex < questions.length - 1 ? ' Moving to next question.' : ' All questions answered.'));
     transition('COMMAND_MODE');
     if (currentIndex < questions.length - 1) { questionReadRef.current = null; setCurrentIndex(i => i + 1); }
@@ -504,10 +504,10 @@ export function ExamInterface() {
     setAnswers(p => new Map(p).set(questionId, { questionId, rawText: text, formattedText: text }));
     playBeep('success');
     // Save to backend
-    try { await studentApi.autoSaveSession({ sessionId, examCode, questionId: String(questionId), draftAnswer: text } as any); } catch {}
-    try { await studentApi.v1AutosaveAnswer({ examSessionId: sessionId, questionNumber: typeof questionId === 'number' ? questionId : parseInt(String(questionId), 10) || (currentIndex + 1), rawSpeechText: text, formattedAnswer: text }); } catch {}
-    try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof questionId === 'number' ? questionId : parseInt(String(questionId), 10) || (currentIndex + 1), rawAnswer: text, formattedAnswer: text, confidence: 1 }); } catch {}
-    try { await studentApi.logAudit({ studentId: resolvedStudentId, examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId, wordCount: text.split(/\s+/).length, answerType: 'written' } }); } catch {}
+    try { await studentApi.autoSaveSession({ sessionId, examCode, questionId: String(questionId), draftAnswer: text } as any); } catch { }
+    try { await studentApi.v1AutosaveAnswer({ examSessionId: sessionId, questionNumber: typeof questionId === 'number' ? questionId : parseInt(String(questionId), 10) || (currentIndex + 1), rawSpeechText: text, formattedAnswer: text }); } catch { }
+    try { await studentApi.saveResponse({ studentId: resolvedStudentId, examCode, questionId: typeof questionId === 'number' ? questionId : parseInt(String(questionId), 10) || (currentIndex + 1), rawAnswer: text, formattedAnswer: text, confidence: 1 }); } catch { }
+    try { await studentApi.logAudit({ studentId: resolvedStudentId, examCode, action: 'ANSWER_SUBMITTED', metadata: { questionId, wordCount: text.split(/\s+/).length, answerType: 'written' } }); } catch { }
     await speak('Answer saved.' + (currentIndex < questions.length - 1 ? ' Moving to next question.' : ' All questions answered.'));
     setWrittenAnswers(prev => { const n = new Map(prev); n.delete(questionId); return n; });  // clear from draft
     transition('COMMAND_MODE');
@@ -534,13 +534,13 @@ export function ExamInterface() {
     });
 
     // Submit to legacy endpoint
-    try { await studentApi.submitExamSession({ sessionId, examCode, studentId, studentName, answers: Array.from(allAnswers.values()) } as any); } catch {}
+    try { await studentApi.submitExamSession({ sessionId, examCode, studentId, studentName, answers: Array.from(allAnswers.values()) } as any); } catch { }
     // Submit to V1 endpoint
-    try { await studentApi.v1SubmitSession(sessionId); } catch {}
+    try { await studentApi.v1SubmitSession(sessionId); } catch { }
     // Submit to legacy DB
-    try { await studentApi.logAudit({ studentId, examCode, action: 'EXAM_SUBMITTED', metadata: { answeredCount: allAnswers.size, totalQuestions: questions.length, studentName } }); } catch {}
+    try { await studentApi.logAudit({ studentId, examCode, action: 'EXAM_SUBMITTED', metadata: { answeredCount: allAnswers.size, totalQuestions: questions.length, studentName } }); } catch { }
     // End exam via legacy student API
-    try { await studentApi.endExam(studentId, examCode); } catch {}
+    try { await studentApi.endExam(studentId, examCode); } catch { }
     setIsSubmitted(true);
     playBeep('success');
     await speak('Exam submitted successfully. Thank you.');
@@ -598,12 +598,12 @@ export function ExamInterface() {
         {voiceState === 'PAUSE_MODE' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-40 bg-bg2/90 backdrop-blur-md flex items-center justify-center">
-            <div className="text-center space-y-5">
-              <div className="w-20 h-20 rounded-3xl bg-amber-500/[0.08] border border-amber-500/[0.12] flex items-center justify-center mx-auto">
-                <span className="text-amber-400 text-3xl">⏸</span>
+            <div className="text-center" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+              <div style={{ width: '64px', height: '64px', borderRadius: '16px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ fontSize: '28px' }}>⏸</span>
               </div>
-              <h2 className="text-white text-2xl font-bold tracking-tight">Exam Paused</h2>
-              <p className="text-amber-300/80 text-sm font-mono">Say "Resume exam" to continue</p>
+              <h2 style={{ color: 'var(--text)', fontSize: '20px', fontWeight: 800, fontFamily: "'Manrope', sans-serif" }}>Exam Paused</h2>
+              <p style={{ color: 'var(--amber-lt)', fontSize: '13px', opacity: 0.8 }}>Say <strong>"Resume exam"</strong> to continue</p>
             </div>
           </motion.div>
         )}
@@ -619,222 +619,258 @@ export function ExamInterface() {
         )}
       </AnimatePresence>
 
-      <div id="s-examinterface" className="screen">
-        {/* SIDEBAR */}
+      {/* === LAYOUT: sidebar + main === */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+
+        {/* ── SIDEBAR ── */}
         <div className="ei-sidebar">
-          <div className="landing-brand" style={{ margin: '0 0 24px 0', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <svg width="34" height="26" viewBox="0 0 48 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M 0 24 L 6 24 C 9 24, 9 10, 12 10 C 15 10, 15 24, 18 24 C 21 24, 21 4, 24 4 C 27 4, 27 32, 30 32 C 33 32, 33 16, 36 16 C 39 16, 39 24, 42 24 L 48 24" 
-                stroke="var(--wave)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+
+          {/* Brand + exam name */}
+          <div className="sidebar-brand">
+            <svg width="30" height="22" viewBox="0 0 48 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+              <path d="M 0 24 L 6 24 C 9 24, 9 10, 12 10 C 15 10, 15 24, 18 24 C 21 24, 21 4, 24 4 C 27 4, 27 32, 30 32 C 33 32, 33 16, 36 16 C 39 16, 39 24, 42 24 L 48 24"
+                stroke="var(--wave)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             </svg>
-            <span style={{ fontFamily: "'Manrope', sans-serif", fontSize: '18px', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.5px' }}>VOX</span>
+            <div style={{ minWidth: 0 }}>
+              <div className="sidebar-brand-name">VOX</div>
+              <div className="sidebar-exam-name">{examTitle || 'Loading exam...'}</div>
+            </div>
           </div>
 
-          <div className="qs-label">
-            Questions <span className="dot">•</span> <span className="stat-em">{answers.size}/{questions.length}</span>
-          </div>
-          
-          <div className="q-grid">
-            {questions.map((q, i) => {
-              const isAnswered = answers.has(q.id);
-              const isCurrent = i === currentIndex;
-              let stateClass = 'none';
-              if (isCurrent) stateClass = 'current';
-              else if (isAnswered) stateClass = 'done';
-              
-              return (
-                <div 
-                  key={q.id} 
-                  className={`qn ${stateClass === 'done' ? 'ans' : stateClass === 'flagged' ? 'flag' : stateClass === 'current' ? 'cur' : ''}`} 
-                  onClick={() => { questionReadRef.current = null; setCurrentIndex(i); }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {i + 1}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Voice Engine Native Integrations */}
-          <div className="voice-widget" style={{ marginTop: 'auto' }}>
-            <div className="vw-header">
-              <div className="vw-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {(isListening || isRecording) && (
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'linear-gradient(135deg, #3B82F6, #2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 18.5V22M8 22h8"/>
-                    </svg>
+          {/* Questions section */}
+          <div>
+            <div className="qs-label" style={{ marginBottom: '10px' }}>
+              <span>Questions</span>
+              <span className="stat-em">{answers.size} / {questions.length}</span>
+            </div>
+            <div className="q-grid">
+              {questions.map((q, i) => {
+                const isAnswered = answers.has(q.id);
+                const isCurrent = i === currentIndex;
+                return (
+                  <div
+                    key={q.id}
+                    className={`qn${isCurrent ? ' cur' : isAnswered ? ' ans' : ''}`}
+                    onClick={() => { questionReadRef.current = null; setCurrentIndex(i); }}
+                    title={`Question ${i + 1}${isAnswered ? ' — Answered' : ''}`}
+                  >
+                    {i + 1}
                   </div>
-                )}
-                <div className={`live-dot ${isListening || isRecording ? 'pulse' : ''}`} style={{ backgroundColor: isListening || isRecording ? 'var(--green-lt)' : 'var(--text-muted)' }}></div>
-                {isRecording ? 'Dictating' : isListening ? 'Listening' : 'Ready'}
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Legend */}
+          <div className="legend">
+            <div className="leg-item"><div className="leg-dot cur" style={{ background: 'var(--accent)', borderRadius: '50%', width: '8px', height: '8px' }}></div> Current</div>
+            <div className="leg-item"><div className="leg-dot a"></div> Answered</div>
+            <div className="leg-item"><div className="leg-dot u"></div> Not answered</div>
+          </div>
+
+          {/* Voice widget */}
+          <div className="voice-widget">
+            <div className="vw-header">
+              <span className="vw-label">Voice Engine</span>
+              <div className="vw-status">
+                <div
+                  className="live-dot"
+                  style={{ backgroundColor: isListening || isRecording ? 'var(--green-lt)' : 'var(--text-muted)', width: '6px', height: '6px', borderRadius: '50%', animation: (isListening || isRecording) ? 'blink 1s ease infinite' : 'none' }}
+                />
+                <span>{isRecording ? 'Dictating' : isListening ? 'Listening' : 'Ready'}</span>
               </div>
             </div>
-            
+
+            {/* Viz or heard text */}
             {(lastHeardText || heardText) ? (
-              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border)', marginTop: '12px', fontSize: '12px', color: 'var(--text-sec)' }}>
-                <span style={{ color: (wasMatched || heardMatched) ? 'var(--green-lt)' : 'var(--text)', fontWeight: 600 }}>
-                  "{lastHeardText || heardText}"
-                </span>
+              <div className={`vw-heard${(wasMatched || heardMatched) ? ' matched' : ''}`}>
+                &ldquo;{lastHeardText || heardText}&rdquo;
               </div>
             ) : (
               <div className="vw-viz">
-                <div className="bar" style={{ height: (isListening || isRecording) ? '60%' : '10%' }}></div>
-                <div className="bar" style={{ height: (isListening || isRecording) ? '100%' : '15%' }}></div>
-                <div className="bar" style={{ height: (isListening || isRecording) ? '40%' : '10%' }}></div>
-                <div className="bar" style={{ height: (isListening || isRecording) ? '80%' : '20%' }}></div>
-                <div className="bar" style={{ height: (isListening || isRecording) ? '30%' : '10%' }}></div>
+                <div className="bar" style={{ height: (isListening || isRecording) ? '70%' : '15%', opacity: (isListening || isRecording) ? 0.9 : 0.35 }} />
+                <div className="bar" style={{ height: (isListening || isRecording) ? '100%' : '25%', opacity: (isListening || isRecording) ? 1 : 0.35 }} />
+                <div className="bar" style={{ height: (isListening || isRecording) ? '50%' : '15%', opacity: (isListening || isRecording) ? 0.8 : 0.35 }} />
+                <div className="bar" style={{ height: (isListening || isRecording) ? '85%' : '20%', opacity: (isListening || isRecording) ? 0.9 : 0.35 }} />
+                <div className="bar" style={{ height: (isListening || isRecording) ? '40%' : '10%', opacity: (isListening || isRecording) ? 0.7 : 0.35 }} />
               </div>
             )}
-            
-            <div style={{ marginTop: '12px', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-               <span>{voiceState.replace('_', ' ')}</span>
-               <span>{isSaving ? 'Saving...' : lastSaved ? `Saved ${lastSaved.toLocaleTimeString()}` : 'Not saved'}</span>
+
+            <div className="vw-footer">
+              <span className="vw-state">{voiceState.replace(/_/g, ' ')}</span>
+              <span>{isSaving ? '● Saving…' : lastSaved ? `✓ ${lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—'}</span>
             </div>
           </div>
         </div>
 
-        {/* MAIN AREA */}
+        {/* ── MAIN AREA ── */}
         <div className="ei-main">
+
           {/* Header */}
           <div className="ei-header">
             <div className="ei-exam-lbl">{examTitle}</div>
+
+            {/* Progress bar */}
+            <div className="ei-header-divider" />
+            <div className="ei-progress-wrap">
+              <span className="ei-progress-label">{answers.size}/{questions.length} answered</span>
+              <div className="ei-progress-bar">
+                <div
+                  className="ei-progress-fill"
+                  style={{ width: questions.length ? `${(answers.size / questions.length) * 100}%` : '0%' }}
+                />
+              </div>
+            </div>
+
+            <div className="ei-header-divider" />
+
+            {/* Timer */}
             <div className="ei-timer">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.6 }}>
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
+              <svg className="ei-timer-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
               </svg>
               {Math.floor(remaining / 60).toString().padStart(2, '0')}:{(remaining % 60).toString().padStart(2, '0')}
             </div>
-            <button className="ei-submit" onClick={() => handleCommand('submit_exam', 1)}>
+
+            {/* Auto-save tag */}
+            {lastSaved && (
+              <div className="saved-tag">
+                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
+                Saved
+              </div>
+            )}
+
+            <button id="btn-submit-exam" className="ei-submit" onClick={() => handleCommand('submit_exam', 1)}>
               Submit Exam
             </button>
           </div>
 
-          {/* MAIN BODY AREA (Centered container) */}
+          {/* Body */}
           <div className="ei-body">
             <div className="ei-body-content">
-            {/* Voice Error Banners */}
-          {(!isVoiceSupported || voiceEngineError || dictationError) && (
-            <div style={{ padding: '12px 16px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.2)', borderRadius: '12px', color: 'var(--wave)', fontSize: '13px', marginBottom: '24px' }}>
-              <strong>Voice Input Issue:</strong> {voiceEngineError || dictationError || 'Speech recognition is not supported in this browser.'}
-            </div>
-          )}
 
-          {/* AI answer review */}
-          <AnimatePresence>
-            {voiceState === 'ANSWER_REVIEW' && (
-              <div style={{ marginBottom: '24px' }}>
-                <FormattedAnswerReview
-                  rawText={rawTranscript} formattedText={formattedAnswer}
-                  isFormatting={isFormatting} formatError={formatError} questionNumber={currentIndex + 1}
-                />
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* Question Box */}
-          {currentQuestion && (
-            <motion.div 
-              key={currentQuestion.id} 
-              initial={{ opacity: 0, scale: 0.98 }} 
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-              className="question-box"
-            >
-              <div className="q-toprow">
-                <div className="q-id">Question {currentIndex + 1} <span>of {questions.length}</span></div>
-                {currentQuestion.marks && <div className="marks-tag">{currentQuestion.marks} Mark{currentQuestion.marks > 1 ? 's' : ''}</div>}
-                
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {savedAnswer && (
-                    <span className="chip chip-done" style={{ fontSize: '10px', padding: '2px 6px' }}>
-                      <div className="chip-dot"></div> SAVED
-                    </span>
-                  )}
-                  {currentQuestion.type === 'mcq' && (
-                    <span className="chip chip-avail" style={{ fontSize: '10px', padding: '2px 6px' }}>
-                      <div className="chip-dot"></div> MCQ
-                    </span>
-                  )}
-                </div>
-              </div>
-              
-              <div className="qb-text">{currentQuestion.text}</div>
-
-              {/* MCQ Options */}
-              {currentQuestion.type === 'mcq' && currentQuestion.options && currentQuestion.options.length > 0 && (
-                <div className="options">
-                  {currentQuestion.options.map((opt, oi) => {
-                    const isSelected = savedAnswer?.selectedOption === oi;
-                    return (
-                      <div 
-                        key={oi} 
-                        className="opt" 
-                        data-selected={isSelected ? "true" : "false"}
-                        onClick={() => handleCommand(`option_${oi+1}`, 1)}
-                        style={{ cursor: 'pointer', transition: 'all 0.2s', borderColor: isSelected ? 'var(--green-lt)' : 'var(--border)', backgroundColor: isSelected ? 'rgba(34,197,94,0.05)' : 'rgba(255,255,255,0.01)' }}
-                      >
-                        <div className="opt-ltr" style={{ color: isSelected ? 'var(--green-lt)' : 'var(--text-sec)', backgroundColor: isSelected ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)' }}>
-                          {String.fromCharCode(65 + oi)}
-                        </div> 
-                        <div className="opt-txt" style={{ flex: 1, color: isSelected ? 'white' : 'var(--text-sec)' }}>{opt}</div>
-                        {isSelected && <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green-lt)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                      </div>
-                    );
-                  })}
+              {/* Voice error banner */}
+              {(!isVoiceSupported || voiceEngineError || dictationError) && (
+                <div style={{ padding: '10px 16px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: '10px', color: 'var(--wave)', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '16px' }}>⚠</span>
+                  <span><strong>Voice unavailable:</strong> {voiceEngineError || dictationError || 'Speech recognition not supported in this browser.'}</span>
                 </div>
               )}
 
-              {/* Written Answer Input Box */}
-              {currentQuestion.type !== 'mcq' && (
-                <div style={{ marginTop: '24px' }}>
-                  <AnswerInputBox
-                    questionId={currentQuestion.id}
-                    questionText={currentQuestion.text}
-                    value={isRecording && isWrittenDictation
-                      ? [dictationFinalText, interimText].filter(Boolean).join(' ').trim()
-                      : (writtenAnswers.get(currentQuestion.id) || '')}
-                    onChange={(text) => {
-                      setWrittenAnswers(prev => new Map(prev).set(currentQuestion.id, text));
-                    }}
-                    isRecording={isRecording && isWrittenDictation}
-                    interimText={interimText && isWrittenDictation ? interimText : ''}
-                    iFormattedAnswer={formattedAnswer}
-                    expectedAnswerLength={currentQuestion.expectedAnswerLength || 'medium'}
-                    placeholder="Say 'start answer' to record, or type your answer here..."
-                  />
+              {/* AI answer review */}
+              <AnimatePresence>
+                {voiceState === 'ANSWER_REVIEW' && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <FormattedAnswerReview
+                      rawText={rawTranscript} formattedText={formattedAnswer}
+                      isFormatting={isFormatting} formatError={formatError} questionNumber={currentIndex + 1}
+                    />
+                  </div>
+                )}
+              </AnimatePresence>
+
+              {/* Question Box */}
+              {currentQuestion && (
+                <motion.div
+                  key={currentQuestion.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                  className="question-box"
+                >
+                  {/* Top row */}
+                  <div className="q-toprow">
+                    <div className="q-id">Question {currentIndex + 1} <span>/ {questions.length}</span></div>
+                    {currentQuestion.marks && (
+                      <div className="marks-tag">{currentQuestion.marks} mark{currentQuestion.marks > 1 ? 's' : ''}</div>
+                    )}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {savedAnswer && (
+                        <span className="chip chip-done" style={{ fontSize: '10px', padding: '3px 9px' }}>
+                          <div className="chip-dot" />&nbsp;Answered
+                        </span>
+                      )}
+                      {currentQuestion.type === 'mcq' && (
+                        <span className="chip chip-avail" style={{ fontSize: '10px', padding: '3px 9px' }}>
+                          MCQ
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Question text */}
+                  <div className="qb-text">{currentQuestion.text}</div>
+
+                  {/* MCQ options */}
+                  {currentQuestion.type === 'mcq' && currentQuestion.options && currentQuestion.options.length > 0 && (
+                    <div className="options">
+                      {currentQuestion.options.map((opt, oi) => {
+                        const isSelected = savedAnswer?.selectedOption === oi;
+                        return (
+                          <div
+                            key={oi}
+                            className={`opt${isSelected ? ' sel' : ''}`}
+                            onClick={() => handleCommand(`option_${oi + 1}`, 1)}
+                          >
+                            <div className="opt-ltr">{String.fromCharCode(65 + oi)}</div>
+                            <div className="opt-txt">{opt}</div>
+                            {isSelected && (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green-lt)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Written Answer */}
+                  {currentQuestion.type !== 'mcq' && (
+                    <div style={{ marginTop: '20px' }}>
+                      <AnswerInputBox
+                        questionId={currentQuestion.id}
+                        questionText={currentQuestion.text}
+                        value={isRecording && isWrittenDictation
+                          ? [dictationFinalText, interimText].filter(Boolean).join(' ').trim()
+                          : (writtenAnswers.get(currentQuestion.id) || '')}
+                        onChange={(text) => setWrittenAnswers(prev => new Map(prev).set(currentQuestion.id, text))}
+                        isRecording={isRecording && isWrittenDictation}
+                        interimText={interimText && isWrittenDictation ? interimText : ''}
+                        iFormattedAnswer={formattedAnswer}
+                        expectedAnswerLength={currentQuestion.expectedAnswerLength || 'medium'}
+                        placeholder="Say 'start answer' to record, or type your answer here…"
+                      />
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {/* Voice hint for MCQ */}
+              {currentQuestion?.type === 'mcq' && (
+                <div className="voice-cue">
+                  <span>💬</span> Say <strong style={{ color: 'var(--green-lt)', margin: '0 3px' }}>"Option A"</strong>, <strong style={{ color: 'var(--green-lt)', margin: '0 3px' }}>"B"</strong>, <strong style={{ color: 'var(--green-lt)', margin: '0 3px' }}>"C"</strong>, or <strong style={{ color: 'var(--green-lt)', margin: '0 3px' }}>"D"</strong> to select
                 </div>
               )}
-            </motion.div>
-          )}
 
-          {/* Voice Hint */}
-          {currentQuestion?.type === 'mcq' && (
-            <div className="voice-cue">
-              <span style={{ color: 'var(--green-lt)' }}>💬</span>
-              Say "Option A", "B", "C", or "D" to select your answer
-            </div>
-          )}
-
-          {/* Sub hints / Commands */}
-          {(voiceState === 'COMMAND_MODE' || voiceState === 'ANSWER_REVIEW') && (
-            <div style={{ marginTop: '28px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {(voiceState === 'ANSWER_REVIEW' ? [
-                { cmd: '"Confirm"', icon: '✓' }, { cmd: '"Edit"', icon: '✎' }, { cmd: '"Continue"', icon: '+' }, { cmd: '"Repeat"', icon: '↻' }
-              ] : currentQuestion?.type === 'mcq' ? [
-                { cmd: '"Option A/1"', icon: '①' }, { cmd: '"Next"', icon: '→' }, { cmd: '"Previous"', icon: '←' }, { cmd: '"Submit"', icon: '↗' }
-              ] : [
-                { cmd: '"Start answer"', icon: '◉' }, { cmd: '"Next"', icon: '→' }, { cmd: '"Clear"', icon: '⊘' }, { cmd: '"Submit"', icon: '↗' }
-              ]).map(item => (
-                <div key={item.cmd} style={{ backgroundColor: 'var(--surface2)', padding: '7px 13px', borderRadius: '40px', fontSize: '12px', color: 'var(--text-sec)', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid var(--border)', fontWeight: '500' }}>
-                  <span style={{ color: 'var(--accent-lt)', opacity: 0.8 }}>{item.icon}</span>
-                  {item.cmd}
+              {/* Command chips */}
+              {(voiceState === 'COMMAND_MODE' || voiceState === 'ANSWER_REVIEW') && (
+                <div className="cmd-chips">
+                  {(voiceState === 'ANSWER_REVIEW' ? [
+                    { cmd: 'Confirm', icon: '✓' }, { cmd: 'Edit', icon: '✎' }, { cmd: 'Continue', icon: '+' }, { cmd: 'Repeat', icon: '↻' },
+                  ] : currentQuestion?.type === 'mcq' ? [
+                    { cmd: 'Option A/1', icon: '①' }, { cmd: 'Next', icon: '→' }, { cmd: 'Previous', icon: '←' }, { cmd: 'Pause', icon: '⏸' }, { cmd: 'Submit', icon: '↗' },
+                  ] : [
+                    { cmd: 'Start answer', icon: '◉' }, { cmd: 'Continue', icon: '+' }, { cmd: 'Confirm', icon: '✓' }, { cmd: 'Next', icon: '→' }, { cmd: 'Submit', icon: '↗' },
+                  ]).map(item => (
+                    <div key={item.cmd} className="cmd-chip">
+                      <span className="cmd-chip-icon">{item.icon}</span>
+                      &ldquo;{item.cmd}&rdquo;
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
             </div>
           </div>

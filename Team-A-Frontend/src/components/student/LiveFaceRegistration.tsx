@@ -391,8 +391,11 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
         {status === 'IDLE' && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
             <div className="text-center">
-              <span className="text-5xl">📷</span>
-              <p className="text-slate-400 mt-3 text-sm">Camera not active</p>
+              <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(99,102,241,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{margin:'0 auto'}}>
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              <p className="text-slate-400 mt-3 text-sm" style={{color:'var(--text-muted)'}}>Camera not active</p>
             </div>
           </div>
         )}
@@ -415,7 +418,10 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
             animate={{ opacity: 1 }}
             className="absolute inset-0 flex items-center justify-center bg-green-900/60"
           >
-            <span className="text-6xl">✅</span>
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
           </motion.div>
         )}
       </div>
@@ -468,7 +474,10 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
             disabled={!studentId.trim() || !studentName.trim()}
             className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 text-white font-semibold hover:from-indigo-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            📷 Start Camera & Capture Face
+            <span className="inline-flex items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Start Camera &amp; Capture Face
+            </span>
           </motion.button>
         )}
 
@@ -479,7 +488,10 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
             onClick={handleReset}
             className="flex-1 px-4 py-3 rounded-lg bg-slate-700 text-white font-semibold hover:bg-slate-600 transition-all"
           >
-            🔄 Register Another Student
+            <span className="inline-flex items-center gap-2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              Register Another Student
+            </span>
           </motion.button>
         )}
 

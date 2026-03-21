@@ -108,7 +108,7 @@ export default function LoginFaceID() {
         </div>
 
         {/* Login Card - Enhanced Professional Style */}
-        <div style={{ padding: '48px 40px', display: 'flex', flexDirection: 'column', gap: '24px', background: 'var(--surface)', border: '1px solid rgba(45, 78, 232, 0.15)', borderRadius: '16px', backdropFilter: 'blur(20px)', boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.05)' }}>
+        <div style={{ padding: '48px 40px', display: 'flex', flexDirection: 'column', gap: '24px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.10)', borderRadius: '20px', backdropFilter: 'blur(24px) saturate(160%)', WebkitBackdropFilter: 'blur(24px) saturate(160%)', boxShadow: '0 24px 64px rgba(0, 0, 0, 0.50), inset 0 1px 1px rgba(255, 255, 255, 0.08)' }}>
           <AnimatePresence mode="wait">
             <motion.div
               key="cred"
