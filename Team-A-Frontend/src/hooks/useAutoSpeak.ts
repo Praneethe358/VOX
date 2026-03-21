@@ -21,6 +21,13 @@ export function useAutoSpeak(
   const { speak, stopSpeaking } = useVoiceContext();
   const hasSpokenRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const textOrFactoryRef = useRef<TextOrFactory>(textOrFactory);
+  const optionsRef = useRef<SpeakOptions & { delay?: number } | undefined>(options);
+
+  useEffect(() => {
+    textOrFactoryRef.current = textOrFactory;
+    optionsRef.current = options;
+  }, [textOrFactory, options]);
 
   useEffect(() => {
     // Only speak once per dependency set
@@ -28,22 +35,34 @@ export function useAutoSpeak(
   }, deps); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
     if (hasSpokenRef.current) return;
 
-    const text = typeof textOrFactory === 'function' ? textOrFactory() : textOrFactory;
+    const source = textOrFactoryRef.current;
+    const text = typeof source === 'function' ? source() : source;
     if (!text) return;
 
     hasSpokenRef.current = true;
 
-    const delay = options?.delay ?? 500;
+    const delay = optionsRef.current?.delay ?? 500;
     timeoutRef.current = setTimeout(() => {
-      speak(text, options);
+      speak(text, optionsRef.current);
     }, delay);
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [textOrFactory, speak, options, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [speak, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   /** Force re-speak */
   const reSpeakNow = (overrideText?: string) => {

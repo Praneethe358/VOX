@@ -6,13 +6,13 @@
  * Returns lastHeard for visible feedback so user knows mic is working.
  *
  * Pauses recognition while TTS is speaking to avoid echo feedback.
- * Falls back to backend Whisper STT when Web Speech API is unavailable.
+ * When silence is detected, prompts the user with TTS:
+ * "hello are you still there ?? please say the command to proceed"
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVoiceContext } from '../context/VoiceContext';
-import apiService from '../services/student/api.service';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -80,15 +80,6 @@ const NAV_PATTERNS: { pattern: RegExp; action: NavAction }[] = [
   { pattern: /\bwhat\s*can\b/i,     action: 'help' },
 ];
 
-// Known Whisper hallucinations — phantom text generated from silence/ambient noise
-const WHISPER_HALLUCINATIONS = new Set([
-  'you', 'thank you', 'thanks for watching', 'the', 'bye',
-  'hmm', 'um', 'uh', 'ah', 'oh', 'so', 'yeah', 'okay',
-  'thank you for watching', 'thanks for listening',
-  'subscribe', 'like and subscribe',
-  'i', 'a', 'the end', 'silence',
-]);
-
 export function matchNavCommand(raw: string): NavCommand {
   const text = raw.toLowerCase().replace(/[^\w\s]/g, '').trim();
   for (const { pattern, action } of NAV_PATTERNS) {
@@ -107,12 +98,19 @@ interface UseVoiceNavigationOptions {
   onCommand?: (cmd: NavCommand) => boolean | void;
   onUnknownCommand?: (raw: string) => void;
   pageName?: string;
+  silencePromptEnabled?: boolean;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
-  const { enabled = true, onCommand, onUnknownCommand, pageName = 'this page' } = options;
+  const {
+    enabled = true,
+    onCommand,
+    onUnknownCommand,
+    pageName = 'this page',
+    silencePromptEnabled = true,
+  } = options;
   const navigate = useNavigate();
   const { speak, playBeep, isSpeaking } = useVoiceContext();
 
@@ -130,14 +128,11 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
   const speakRef           = useRef(speak);
   const playBeepRef        = useRef(playBeep);
   const pageNameRef        = useRef(pageName);
+  const silencePromptEnabledRef = useRef(silencePromptEnabled);
   const isSpeakingRef      = useRef(false);
-  const usingBackendRef    = useRef(false);
-  const mediaStreamRef     = useRef<MediaStream | null>(null);
-  const mediaRecorderRef   = useRef<MediaRecorder | null>(null);
-  const backendTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const consecutiveFailuresRef = useRef(0);
-  const prevSpeakingRef    = useRef(false);
-  const MAX_FAILURES     = 3;
+  const wasSpeakingRef     = useRef(false);
+  const silencePromptSpokenRef = useRef(false);
+  const lastActivityAtRef  = useRef(0);
 
   shouldListenRef.current  = enabled;
   onCommandRef.current     = onCommand;
@@ -146,9 +141,20 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
   speakRef.current         = speak;
   playBeepRef.current      = playBeep;
   pageNameRef.current      = pageName;
+  silencePromptEnabledRef.current = silencePromptEnabled;
 
-  // Keep isSpeakingRef in sync so recognition pauses during TTS
-  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  // Keep speaking state synced and track when TTS finishes.
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+
+    if (wasSpeakingRef.current && !isSpeaking) {
+      // Start silence tracking only after TTS fully stops.
+      lastActivityAtRef.current = Date.now();
+      silencePromptSpokenRef.current = false;
+    }
+
+    wasSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
 
   const dispatchCommand = useCallback((cmd: NavCommand) => {
     console.log('[VoiceNav] ✓ Command matched:', cmd.action, '| raw:', cmd.raw, '| confidence:', cmd.confidence);
@@ -200,97 +206,12 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
     }
   }, []);
 
-  // ── Backend Whisper STT fallback ───────────────────────────────────────────
 
-  const startBackendSttLoop = useCallback(async () => {
-    console.log('[VoiceNav] Starting backend Whisper STT fallback loop');
-    usingBackendRef.current = true;
-
-    try {
-      if (!mediaStreamRef.current) {
-        mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('[VoiceNav] Mic stream acquired for backend STT');
-      }
-    } catch (err) {
-      console.error('[VoiceNav] Mic permission denied for backend STT:', err);
-      setError('Microphone blocked. Allow mic access in browser settings.');
-      usingBackendRef.current = false;
-      return;
-    }
-
-    const runOneChunk = async () => {
-      if (!shouldListenRef.current || !usingBackendRef.current || !mediaStreamRef.current) return;
-
-      // Pause while TTS is speaking to avoid echo
-      if (isSpeakingRef.current) {
-        setIsListening(false);
-        backendTimerRef.current = setTimeout(runOneChunk, 400);
-        return;
-      }
-
-      const chunks: BlobPart[] = [];
-      const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e: BlobEvent) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-
-      recorder.onstop = async () => {
-        setIsListening(false);
-        mediaRecorderRef.current = null;
-        if (!shouldListenRef.current || !usingBackendRef.current) return;
-        try {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          console.log('[VoiceNav] Sending', blob.size, 'bytes to backend STT');
-          const result = await apiService.convertCommandToText(blob);
-          const raw = (result?.text ?? '').trim();
-          console.log('[VoiceNav] Backend STT result:', raw || '(empty)');
-          // Filter out Whisper hallucinations (phantom text from silence/noise)
-          const normalized = raw.toLowerCase().replace(/[^\w\s]/g, '').trim();
-          if (raw && normalized.length >= 3 && !WHISPER_HALLUCINATIONS.has(normalized)) {
-            setLastHeard(raw);
-            const cmd = matchNavCommand(raw);
-            if (cmd.action !== 'unknown') {
-              dispatchCommand(cmd);
-            } else {
-              setLastHeard(`"${raw}" — no match`);
-              if (onUnknownRef.current) onUnknownRef.current(raw);
-            }
-          } else if (raw) {
-            console.log('[VoiceNav] Ignoring hallucination/noise:', raw);
-          }
-        } catch (err) {
-          console.error('[VoiceNav] Backend STT error:', err);
-        }
-        if (shouldListenRef.current && usingBackendRef.current) {
-          backendTimerRef.current = setTimeout(runOneChunk, 250);
-        }
-      };
-
-      try {
-        recorder.start();
-        setIsListening(true);
-        setTimeout(() => { if (recorder.state !== 'inactive') recorder.stop(); }, 3500);
-      } catch (err) {
-        console.error('[VoiceNav] Recorder start failed:', err);
-        setIsListening(false);
-      }
-    };
-
-    await runOneChunk();
-  }, [dispatchCommand]);
 
   // ── Web Speech API primary recognition ─────────────────────────────────────
 
   const startOnce = useCallback(() => {
     if (!shouldListenRef.current) return;
-
-    // If already using backend STT, don't restart browser recognition
-    if (usingBackendRef.current) {
-      console.log('[VoiceNav] Already using backend STT, skipping browser recognition');
-      return;
-    }
 
     // Delay start while TTS is speaking to prevent echo feedback
     if (isSpeakingRef.current) {
@@ -301,9 +222,8 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
 
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      console.warn('[VoiceNav] SpeechRecognition not supported — falling back to backend Whisper');
-      setError('Browser speech recognition unavailable. Using backend Whisper.');
-      void startBackendSttLoop();
+      console.warn('[VoiceNav] SpeechRecognition not supported');
+      setError('Browser speech recognition unavailable.');
       return;
     }
     if (recognitionRef.current) {
@@ -322,6 +242,9 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
       setIsListening(true);
       setError(null);
       gotResultThisSession = false;
+      if (lastActivityAtRef.current === 0 && !isSpeakingRef.current) {
+        lastActivityAtRef.current = Date.now();
+      }
     };
     r.onresult = (event: any) => {
       // Ignore results captured during TTS playback (echo feedback)
@@ -330,7 +253,8 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
         return;
       }
       gotResultThisSession = true;
-      consecutiveFailuresRef.current = 0;
+      lastActivityAtRef.current = Date.now();
+      silencePromptSpokenRef.current = false;
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript.trim();
         if (!transcript) continue;
@@ -360,64 +284,50 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
       setIsListening(false);
       recognitionRef.current = null;
 
-      // Don't restart if stopped or already switched to backend
-      if (!shouldListenRef.current || usingBackendRef.current) return;
+      // Don't restart if stopped
+      if (!shouldListenRef.current) return;
 
-      // Track consecutive failures for backoff + fallback
-      if (!gotResultThisSession) {
-        consecutiveFailuresRef.current++;
+      // Speak the silence prompt only after 15s of real inactivity
+      // (from TTS stop or last detected speech).
+      if (silencePromptEnabledRef.current && !gotResultThisSession) {
+        const now = Date.now();
+        const hasInactivityWindow =
+          lastActivityAtRef.current > 0 && now - lastActivityAtRef.current >= 15000;
+        if (!silencePromptSpokenRef.current && hasInactivityWindow) {
+          console.log('[VoiceNav] No speech detected — prompting user');
+          void speakRef.current('hello are you still there ?? please say the command to proceed');
+          silencePromptSpokenRef.current = true;
+        }
       } else {
-        consecutiveFailuresRef.current = 0;
+        silencePromptSpokenRef.current = false;
       }
 
-      // Fall back to Whisper after too many consecutive failures
-      if (consecutiveFailuresRef.current >= MAX_FAILURES) {
-        console.warn('[VoiceNav] SpeechRecognition failed', consecutiveFailuresRef.current,
-          'times — falling back to backend Whisper STT');
-        setError('Browser speech recognition not capturing audio. Switching to backend Whisper.');
-        void startBackendSttLoop();
-        return;
-      }
-
-      // Exponential backoff: 300ms, 600ms, 1200ms … capped at 3000ms
-      const baseDelay = isSpeakingRef.current ? 600 : 300;
-      const backoffDelay = Math.min(baseDelay * Math.pow(2, consecutiveFailuresRef.current), 3000);
-      console.log('[VoiceNav] SpeechRecognition ended — restarting in', backoffDelay, 'ms',
-        consecutiveFailuresRef.current > 0 ? `(failures: ${consecutiveFailuresRef.current})` : '');
-      restartTimerRef.current = setTimeout(startOnce, backoffDelay);
+      // Always restart listening
+      const restartDelay = isSpeakingRef.current ? 600 : 300;
+      console.log('[VoiceNav] SpeechRecognition ended — restarting in', restartDelay, 'ms');
+      restartTimerRef.current = setTimeout(startOnce, restartDelay);
     };
     r.onerror = (ev: any) => {
       console.error('[VoiceNav] SpeechRecognition error:', ev.error);
       setIsListening(false);
 
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
-        console.warn('[VoiceNav] Mic blocked — falling back to backend Whisper');
-        setError('Browser mic blocked. Switching to backend Whisper.');
-        void startBackendSttLoop();
+        console.warn('[VoiceNav] Mic blocked');
+        setError('Microphone access denied. Please allow mic access in browser settings.');
         return;
       }
 
-      // Count ALL errors toward the fallback threshold
-      consecutiveFailuresRef.current++;
-
       if (ev.error === 'no-speech' || ev.error === 'aborted') {
-        // Let onend handle restart/fallback to avoid double-trigger
+        // Let onend handle restart to avoid double-trigger
         return;
       }
 
       if (ev.error === 'audio-capture') {
-        setError('Microphone not detected or busy. Switching to backend recognition...');
+        setError('Microphone not detected or busy.');
       } else if (ev.error === 'network') {
-        setError('Speech recognition network error. Using backend Whisper.');
+        setError('Speech recognition network error.');
       } else {
         console.warn('[VoiceNav]', ev.error);
-      }
-
-      // Fall back to Whisper on persistent errors
-      if (consecutiveFailuresRef.current >= MAX_FAILURES) {
-        console.warn('[VoiceNav] Persistent errors — switching to backend Whisper STT');
-        void startBackendSttLoop();
-        return;
       }
 
       if (shouldListenRef.current) {
@@ -431,46 +341,14 @@ export function useVoiceNavigation(options: UseVoiceNavigationOptions = {}) {
       console.error('[VoiceNav] Failed to start SpeechRecognition:', err);
       if (shouldListenRef.current) restartTimerRef.current = setTimeout(startOnce, 500);
     }
-  }, [dispatchCommand, startBackendSttLoop]);
-
-  // Hard pause mic capture while TTS is active, resume shortly after TTS ends.
-  useEffect(() => {
-    const wasSpeaking = prevSpeakingRef.current;
-    prevSpeakingRef.current = isSpeaking;
-
-    if (!wasSpeaking && isSpeaking) {
-      setIsListening(false);
-
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch {}
-      }
-
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop(); } catch {}
-      }
-
-      return;
-    }
-
-    if (wasSpeaking && !isSpeaking && shouldListenRef.current) {
-      if (restartTimerRef.current) {
-        clearTimeout(restartTimerRef.current);
-        restartTimerRef.current = null;
-      }
-      restartTimerRef.current = setTimeout(() => {
-        if (shouldListenRef.current) startOnce();
-      }, 250);
-    }
-  }, [isSpeaking, startOnce]);
+  }, [dispatchCommand]);
 
   const stopListening = useCallback(() => {
     shouldListenRef.current = false;
-    usingBackendRef.current = false;
     if (restartTimerRef.current) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null; }
-    if (backendTimerRef.current) { clearTimeout(backendTimerRef.current); backendTimerRef.current = null; }
-    mediaRecorderRef.current = null;
     if (recognitionRef.current) { try { recognitionRef.current.abort(); } catch {} recognitionRef.current = null; }
-    if (mediaStreamRef.current) { mediaStreamRef.current.getTracks().forEach(t => t.stop()); mediaStreamRef.current = null; }
+    lastActivityAtRef.current = 0;
+    silencePromptSpokenRef.current = false;
     setIsListening(false);
   }, []);
 

@@ -12,7 +12,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useVoiceContext } from '../../context/VoiceContext';
-import apiService from '../../services/student/api.service';
 
 // ─── Command Table ────────────────────────────────────────────────────────────
 
@@ -189,15 +188,6 @@ function fuzzyRatio(a: string, b: string): number {
 
 const FUZZY_THRESHOLD = 0.65;
 
-// Known Whisper hallucinations — phantom text generated from silence/ambient noise
-const WHISPER_HALLUCINATIONS = new Set([
-  'you', 'thank you', 'thanks for watching', 'the', 'bye',
-  'hmm', 'um', 'uh', 'ah', 'oh', 'so', 'yeah', 'okay',
-  'thank you for watching', 'thanks for listening',
-  'subscribe', 'like and subscribe',
-  'i', 'a', 'the end', 'silence',
-]);
-
 export function matchCommand(raw: string): { action: CommandAction; confidence: number } | null {
   const normalized = raw
     .toLowerCase()
@@ -277,7 +267,7 @@ export interface UseVoiceEngineReturn {
 type CommandCallback = (action: CommandAction, confidence: number, raw: string) => void;
 
 export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn {
-  const { voiceState, playBeep, isSpeaking } = useVoiceContext();
+  const { playBeep, isSpeaking, speak } = useVoiceContext();
   const [isListening, setIsListening] = useState(false);
   const [lastRawText, setLastRawText] = useState('');
   const [lastHeardText, setLastHeardText] = useState('');
@@ -287,18 +277,18 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
   const [lastError, setLastError] = useState<string | null>(null);
 
   const recognitionRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const backendLoopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isActiveRef = useRef(false);
-  const usingBackendSttRef = useRef(false);
   const onCommandRef = useRef(onCommand);
   onCommandRef.current = onCommand;
+  const speakRef = useRef(speak);
+  speakRef.current = speak;
   const isSpeakingRef = useRef(false);
   const ttsStoppedAtRef = useRef(0);       // timestamp when TTS last stopped
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastEventTimeRef = useRef(0);      // timestamp of last recognition event
   const restartCountRef = useRef(0);       // count rapid restarts to avoid tight loop
+  const silencePromptSpokenRef = useRef(false);
+  const lastSilencePromptAtRef = useRef(0);
   const isSupported = Boolean(
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition,
   );
@@ -312,142 +302,18 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
 
   const stop = useCallback(() => {
     isActiveRef.current = false;
-    usingBackendSttRef.current = false;
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
       } catch {}
       recognitionRef.current = null;
     }
-    if (backendLoopTimerRef.current) {
-      clearTimeout(backendLoopTimerRef.current);
-      backendLoopTimerRef.current = null;
-    }
     if (watchdogRef.current) {
       clearInterval(watchdogRef.current);
       watchdogRef.current = null;
     }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {}
-    }
-    mediaRecorderRef.current = null;
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      mediaStreamRef.current = null;
-    }
     setIsListening(false);
   }, []);
-
-  const startBackendSttLoop = useCallback(async () => {
-    if (!isActiveRef.current) return;
-    usingBackendSttRef.current = true;
-    console.log('[VoiceEngine] Starting backend Whisper STT loop');
-
-    try {
-      if (!mediaStreamRef.current) {
-        mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log('[VoiceEngine] Mic stream acquired for backend STT');
-      }
-    } catch (err) {
-      console.error('[VoiceEngine] Mic permission denied for backend STT:', err);
-      setLastError('Microphone permission denied. Allow mic access in browser settings.');
-      setIsListening(false);
-      usingBackendSttRef.current = false;
-      return;
-    }
-
-    // Clear the browser-recognition error now that Whisper is starting
-    setLastError(null);
-
-    const runOneChunk = async () => {
-      if (!isActiveRef.current || !usingBackendSttRef.current || !mediaStreamRef.current) return;
-
-      // Pause while TTS is speaking to avoid Whisper hearing TTS audio
-      if (isSpeakingRef.current) {
-        setIsListening(false);
-        backendLoopTimerRef.current = setTimeout(runOneChunk, 500);
-        return;
-      }
-
-      // Post-TTS cooldown — wait 600ms after TTS finishes so reverb/echo dies
-      const msSinceTts = Date.now() - ttsStoppedAtRef.current;
-      if (ttsStoppedAtRef.current > 0 && msSinceTts < 600) {
-        backendLoopTimerRef.current = setTimeout(runOneChunk, 600 - msSinceTts);
-        return;
-      }
-
-      const chunks: BlobPart[] = [];
-      const recorder = new MediaRecorder(mediaStreamRef.current, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (event: BlobEvent) => {
-        if (event.data && event.data.size > 0) chunks.push(event.data);
-      };
-
-      recorder.onstart = () => {
-        console.log('[VoiceEngine] Backend STT: recording chunk...');
-        setIsListening(true);
-      };
-
-      recorder.onstop = async () => {
-        if (!isActiveRef.current || !usingBackendSttRef.current) return;
-        setIsListening(false);
-
-        try {
-          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          console.log('[VoiceEngine] Backend STT: sending', audioBlob.size, 'bytes to /api/ai/stt-command');
-          const result = await apiService.convertCommandToText(audioBlob);
-          const raw = (result?.text ?? '').trim();
-          const confidence = result?.confidence ?? 0;
-          console.log('[VoiceEngine] Backend STT result:', raw || '(empty)', '| confidence:', confidence.toFixed(2));
-
-          // Filter out low-confidence results and Whisper hallucinations
-          const normalized = raw.toLowerCase().replace(/[^\w\s]/g, '').trim();
-          if (raw && confidence >= 0.3 && normalized.length >= 3 && !WHISPER_HALLUCINATIONS.has(normalized)) {
-            setLastRawText(raw);
-            setLastHeardText(raw);
-            const matched = matchCommand(raw);
-            if (matched) {
-              console.log('[VoiceEngine] Backend STT matched command:', matched.action);
-              setWasMatched(true);
-              setFailCount(0);
-              setLastError(null);
-              playBeep('command');
-              onCommandRef.current(matched.action, matched.confidence, raw);
-            } else {
-              console.log('[VoiceEngine] Backend STT no command match for:', raw);
-              setWasMatched(false);
-              setFailCount(c => c + 1);
-            }
-          } else if (raw) {
-            console.log('[VoiceEngine] Backend STT: ignoring hallucination/noise:', raw);
-          }
-        } catch (err) {
-          console.error('[VoiceEngine] Backend STT request failed:', err);
-          setLastError('Whisper command recognition failed. Check backend and try again.');
-        }
-
-        if (isActiveRef.current && usingBackendSttRef.current) {
-          backendLoopTimerRef.current = setTimeout(runOneChunk, 250);
-        }
-      };
-
-      try {
-        recorder.start();
-        // 5 s chunks give Whisper enough context on CPU
-        setTimeout(() => {
-          if (recorder.state !== 'inactive') recorder.stop();
-        }, 5000);
-      } catch {
-        setLastError('Unable to start backend speech capture.');
-        setIsListening(false);
-      }
-    };
-
-    await runOneChunk();
-  }, [playBeep]);
 
   const startBrowserRecognition = useCallback(() => {
     const SR = getSR();
@@ -465,12 +331,14 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     recognition.lang = 'en-US';
     recognition.maxAlternatives = 3;
     recognitionRef.current = recognition;
+    let gotResultThisSession = false;
 
     recognition.onstart = () => {
       console.log('[VoiceEngine] Browser SpeechRecognition started');
       setIsListening(true);
       lastEventTimeRef.current = Date.now();
       restartCountRef.current = 0;
+      gotResultThisSession = false;
     };
 
     recognition.onaudiostart = () => {
@@ -483,6 +351,8 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
 
     recognition.onresult = (event: any) => {
       lastEventTimeRef.current = Date.now();
+      gotResultThisSession = true;
+      silencePromptSpokenRef.current = false;
 
       // Skip processing results that arrived while TTS was speaking
       // (the mic may have picked up TTS audio)
@@ -581,6 +451,18 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
         return; // The TTS-finished effect will restart recognition
       }
 
+      if (!gotResultThisSession) {
+        const now = Date.now();
+        const canPrompt = !silencePromptSpokenRef.current && (now - lastSilencePromptAtRef.current > 15000);
+        if (canPrompt) {
+          void speakRef.current('hello are you still there ?? please say the command to proceed');
+          silencePromptSpokenRef.current = true;
+          lastSilencePromptAtRef.current = now;
+        }
+      } else {
+        silencePromptSpokenRef.current = false;
+      }
+
       // Back off on rapid restarts to avoid a tight loop
       restartCountRef.current += 1;
       const delay = restartCountRef.current > 5 ? 1000 : restartCountRef.current > 2 ? 300 : 50;
@@ -620,7 +502,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     restartCountRef.current = 0;
     setLastError(null);
 
-    // Prefer browser Web Speech API (instant recognition) over backend Whisper
+    // Use browser Web Speech API for command recognition
     const SR = getSR();
     if (SR) {
       console.log('[VoiceEngine] Bootstrapping — using browser Web Speech API');
@@ -645,10 +527,11 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
         }
       }, 5000);
     } else {
-      console.log('[VoiceEngine] Browser Speech API unavailable — falling back to backend Whisper STT');
-      void startBackendSttLoop();
+      console.log('[VoiceEngine] Browser Speech API unavailable');
+      setLastError('Browser speech recognition unavailable in this browser.');
+      setIsListening(false);
     }
-  }, [getSR, playBeep, startBrowserRecognition, startBackendSttLoop]);
+  }, [getSR, startBrowserRecognition]);
 
   // Keep isSpeakingRef in sync with TTS state so recognition pauses during speech
   useEffect(() => {
@@ -659,7 +542,7 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
       ttsStoppedAtRef.current = Date.now();
 
       // TTS just finished — restart browser recognition if it was paused/stopped
-      if (isActiveRef.current && !usingBackendSttRef.current) {
+      if (isActiveRef.current) {
         setTimeout(() => {
           if (!isActiveRef.current || isSpeakingRef.current) return;
           // If recognition is dead (no instance or not listening), restart it
@@ -680,18 +563,10 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     }
 
     // TTS just started — abort recognition to prevent it picking up TTS audio
-    if (!wasSpeaking && isSpeaking && isActiveRef.current && !usingBackendSttRef.current) {
+    if (!wasSpeaking && isSpeaking && isActiveRef.current) {
       if (recognitionRef.current) {
         console.log('[VoiceEngine] TTS started — pausing recognition');
         try { recognitionRef.current.abort(); } catch {}
-      }
-    }
-
-    // In backend STT mode, stop active recording immediately when TTS starts.
-    if (!wasSpeaking && isSpeaking && isActiveRef.current && usingBackendSttRef.current) {
-      setIsListening(false);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try { mediaRecorderRef.current.stop(); } catch {}
       }
     }
   }, [isSpeaking, startBrowserRecognition]);

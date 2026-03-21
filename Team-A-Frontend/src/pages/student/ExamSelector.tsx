@@ -42,16 +42,19 @@ export function ExamSelector() {
   // ── Voice: auto-speak exam list ────────────────────────────────────────
   useAutoSpeak(
     () => {
-      if (loading || exams.length === 0) return null;
+      if (loading) return null;
+      if (exams.length === 0) return 'There are no exams available right now.';
+
       const examList = exams
         .slice(0, 5)
-        .map((e, i) => `Exam ${i + 1}: ${e.title}, ${e.durationMinutes} minutes`)
-        .join('. ');
-      return (
-        `You have ${exams.length} available exam${exams.length > 1 ? 's' : ''}. ` +
-        examList +
-        `. Say "select exam" followed by the number to begin, or "help" for more commands.`
-      );
+        .map((e, i) => `say Exam ${i + 1} for ${e.title}`)
+        .join(', ');
+
+      let text = `Please select the exam. ${examList}.`;
+      if (exams.length > 5) {
+        text += ` and ${exams.length - 5} more exams are published.`;
+      }
+      return text;
     },
     [loading, exams.length],
     { delay: 900 },

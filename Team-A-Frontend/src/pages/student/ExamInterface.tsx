@@ -113,8 +113,7 @@ export function ExamInterface() {
     } else {
       speak(`Question ${currentIndex + 1} of ${questions.length}. ${currentQuestion.text}. Say start answer or start answering to record your response. You can also type your answer in the text box below.`, { rate: 0.9 });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, questions.length]);
+  }, [currentIndex, questions.length, voiceState, currentQuestion, speak]);
 
   // ── Silence warning (60 s) ─────────────────────────────────────────────────
   useEffect(() => {
@@ -252,7 +251,7 @@ export function ExamInterface() {
           return;
         }
         if (voiceState !== 'COMMAND_MODE') return;
-        if (currentQuestion?.type === 'mcq') { speak('This is a multiple choice question. Say option 1, 2, 3, or 4.'); return; }
+        if (currentQuestion?.type === 'mcq') { speak('This is a multiple choice question, please select an option.'); return; }
         stopEngine();
         setRawTranscript(''); setFormattedAnswer(''); resetDictation();
         setIsWrittenDictation(true);
@@ -263,7 +262,7 @@ export function ExamInterface() {
       case 'start_answer':
         // New command for written questions: directly start recording for written answer
         if (voiceState !== 'COMMAND_MODE') return;
-        if (!currentQuestion || currentQuestion.type === 'mcq') { speak('This command works for written questions only.'); return; }
+        if (!currentQuestion || currentQuestion.type === 'mcq') { speak('This is a multiple choice question, please select an option.'); return; }
         stopEngine();
         setIsWrittenDictation(true);
         resetDictation();
@@ -274,7 +273,7 @@ export function ExamInterface() {
       case 'option_1': case 'option_2': case 'option_3': case 'option_4': {
         if (voiceState !== 'COMMAND_MODE') return;
         if (currentQuestion?.type !== 'mcq' || !currentQuestion.options?.length) {
-          speak('This question does not have options. Say start answering instead.');
+          speak('This is a descriptive question, please say start answering.');
           return;
         }
         const optNum = parseInt(action.split('_')[1]) - 1;
@@ -646,7 +645,15 @@ export function ExamInterface() {
           {/* Voice Engine Native Integrations */}
           <div className="voice-widget" style={{ marginTop: 'auto' }}>
             <div className="vw-header">
-              <div className="vw-status" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div className="vw-status" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {(isListening || isRecording) && (
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'linear-gradient(135deg, #3B82F6, #2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 18.5V22M8 22h8"/>
+                    </svg>
+                  </div>
+                )}
                 <div className={`live-dot ${isListening || isRecording ? 'pulse' : ''}`} style={{ backgroundColor: isListening || isRecording ? 'var(--green-lt)' : 'var(--text-muted)' }}></div>
                 {isRecording ? 'Dictating' : isListening ? 'Listening' : 'Ready'}
               </div>

@@ -1,9 +1,45 @@
-import React from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useVoiceNavigation } from '../hooks/useVoiceNavigation';
+import { useVoiceContext } from '../context/VoiceContext';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  const { speak } = useVoiceContext();
+
+  useEffect(() => {
+    // Delay slightly so StrictMode's first mount cleanup cancels the duplicate.
+    const welcomeTimer = window.setTimeout(() => {
+      void speak('Welcome to Vox. Say Student or Admin to continue.');
+    }, 350);
+
+    return () => {
+      window.clearTimeout(welcomeTimer);
+    };
+  }, [speak]);
+
+  const handleUnknownCommand = useCallback((raw: string) => {
+    const normalized = raw.toLowerCase();
+
+    if (/\bstudent\b/.test(normalized)) {
+      void speak('Opening student login.');
+      navigate('/student/login');
+      return;
+    }
+
+    if (/\badmin(?:istrator)?\b/.test(normalized)) {
+      void speak('Opening administrator login.');
+      navigate('/admin-login');
+    }
+  }, [navigate, speak]);
+
+  const { isListening, lastHeard, error: voiceError } = useVoiceNavigation({
+    enabled: true,
+    onUnknownCommand: handleUnknownCommand,
+    pageName: 'the landing page',
+    silencePromptEnabled: false,
+  });
 
   return (
     <motion.section 
@@ -58,7 +94,7 @@ const LandingPage: React.FC = () => {
       </div>
 
       {/* Voice Pill */}
-      <div className="voice-pill">
+      <div className="voice-pill" aria-live="polite">
         <div className="mic-circle">
           <svg viewBox="0 0 24 24">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -69,7 +105,12 @@ const LandingPage: React.FC = () => {
           <div className="wf-bar"></div><div className="wf-bar"></div><div className="wf-bar"></div><div className="wf-bar"></div><div className="wf-bar"></div><div className="wf-bar"></div>
         </div>
         <div className="voice-label" style={{ marginLeft: '8px' }}>
-          Listening — say <b>"Student"</b> or <b>"Admin"</b> to continue
+          {voiceError
+            ? `Voice unavailable: ${voiceError}`
+            : isListening
+              ? 'Listening — say "Student" or "Admin" to continue'
+              : 'Starting microphone...'}
+          {!voiceError && lastHeard ? <span style={{ marginLeft: '8px', opacity: 0.8 }}>({lastHeard})</span> : null}
         </div>
       </div>
     </motion.section>
