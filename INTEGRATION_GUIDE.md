@@ -96,10 +96,17 @@ VITE_API_BASE_URL=http://localhost:3000
 1. `/student/login` (face login)
 2. `/student/exams` (exam selection)
 3. `/student/exam/:examId/checklist`
-4. `/student/exam/:examId/briefing`
+4. `/student/exam-briefing`
 5. `/student/exam/:examId/interface`
 6. `/student/submission-confirmation`
 7. `/student/results`
+
+### Landing Flow
+
+1. `/` renders voice-enabled landing page.
+2. On page load, TTS says: "Welcome to Vox. Say Student or Admin to continue."
+3. Saying "student" routes to `/student/login`.
+4. Saying "admin" or "administrator" routes to `/admin-login`.
 
 ### Admin Flow
 
@@ -113,6 +120,10 @@ VITE_API_BASE_URL=http://localhost:3000
 - `useVoiceEngine`: in-exam command detection.
 - `useVoiceNavigation`: page navigation commands.
 - `useDictation`: written answer dictation.
+
+Navigation silence policy:
+- Default: 15-second inactivity reminder prompt is enabled.
+- Landing page override: `silencePromptEnabled: false` (no "hello are you still there" on landing).
 
 Behavior:
 - Real-time transcript streaming into answer input.

@@ -304,6 +304,9 @@ npm run dev
 - Open `http://localhost:5173` in browser
 - Frontend should load without errors
 - Student login should be accessible
+- Landing page should narrate: **"Welcome to Vox. Say Student or Admin to continue."**
+- Saying **Student** should navigate to `/student/login`, and **Admin** to `/admin-login`
+- Landing page should not play the 15-second silence reminder prompt
 
 ### Run Smoke Test
 

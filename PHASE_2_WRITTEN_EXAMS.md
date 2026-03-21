@@ -398,6 +398,24 @@ interface Question {
 ├─ AI Formatted Preview (green border, if available)
 │
 └─ Word/Character Count + Status (bottom)
+
+---
+
+## March 21, 2026 Flow Sync
+
+The following production behavior updates are now part of the active flow:
+
+1. Landing page voice onboarding
+- On opening `/`, TTS says: **"Welcome to Vox. Say Student or Admin to continue."**
+- Saying **student** navigates to `/student/login`
+- Saying **admin/administrator** navigates to `/admin-login`
+
+2. Navigation inactivity reminder policy
+- 15-second inactivity reminder remains active for voice-navigation pages.
+- Landing page explicitly disables this reminder to avoid repeating the "hello are you still there" prompt there.
+
+3. Exam entry narration reliability
+- Exam interface question narration now re-triggers correctly on state transitions into `COMMAND_MODE`.
 ```
 
 **Colors**:

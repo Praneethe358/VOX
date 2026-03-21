@@ -77,6 +77,11 @@ npm run dev
 - **API Documentation**: `http://localhost:3000/docs` (Swagger UI)
 - **Backend Health**: `http://localhost:3000/health`
 
+Landing behavior (current):
+- On first load of `/`, Vox speaks: **"Welcome to Vox. Say Student or Admin to continue."**
+- Voice command examples: say **Student** to open student login or **Admin** to open admin login.
+- The 15-second inactivity reminder is intentionally disabled on landing page.
+
 ---
 
 ## 4. Test Credentials

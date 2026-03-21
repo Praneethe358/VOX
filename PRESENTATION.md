@@ -46,6 +46,10 @@ Layers:
 3. useVoiceNavigation: page-level voice navigation
 4. useDictation: written answer dictation
 
+Landing onboarding:
+- On opening `/`, system says: "Welcome to Vox. Say Student or Admin to continue."
+- Landing page uses role-command routing and intentionally skips inactivity reminder.
+
 Command examples:
 - start answer
 - continue dictation
@@ -109,6 +113,7 @@ API groups:
 - Faster dictation UX via browser-native STT.
 - Cleaner written-answer experience (direct input box flow).
 - Better command consistency across exam states.
+- Reliable landing entry guidance with one-time welcome narration.
 - Unified Phase 2 documentation and operational flow.
 
 ## Slide 12 - Closing

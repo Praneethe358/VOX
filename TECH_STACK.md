@@ -41,9 +41,14 @@ Vox is a voice-first exam platform with a Phase 2 hybrid exam flow: students can
 ### Speech-to-Text (Current)
 
 - Command recognition and written dictation run in browser via Web Speech API.
+- Landing page voice onboarding is browser-native and supports "student"/"admin" role routing.
 - Dictation streams directly into the answer box.
 - 10-second silence auto-stop is enforced for written dictation.
 - Continue mode appends to existing text; edit mode clears and restarts.
+
+Navigation reminder behavior:
+- `useVoiceNavigation` can announce after 15 seconds of inactivity.
+- Landing page disables that reminder and uses only the welcome onboarding prompt.
 
 ### Text-to-Speech
 

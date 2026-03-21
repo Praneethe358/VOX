@@ -35,6 +35,15 @@ MongoDB (vox)
 
 ## Frontend Voice Model
 
+### Landing Voice Onboarding
+
+- Route: `/`
+- On load, TTS prompt: "Welcome to Vox. Say Student or Admin to continue."
+- Voice roles:
+  - "student" -> `/student/login`
+  - "admin"/"administrator" -> `/admin-login`
+- The 15-second inactivity reminder is intentionally disabled on landing.
+
 ### State Model
 
 `IDLE -> FACE_AUTH -> EXAM_BRIEFING -> COMMAND_MODE <-> DICTATION_MODE -> SUBMISSION_GATE -> FINALIZE`
@@ -47,6 +56,7 @@ Additional branch:
 
 - Command parsing uses exact, contains, and fuzzy matching.
 - Supports 13+ in-exam commands.
+- Page navigation commands run through `useVoiceNavigation` and support per-page reminder configuration.
 - Written-flow commands include:
   - `start answer`
   - `continue dictation`

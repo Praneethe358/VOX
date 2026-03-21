@@ -130,7 +130,7 @@ mindkraft/                                    # Workspace root
 
 | File | Purpose |
 |------|---------|
-| `ai.py` | Speech-to-text, text-to-speech, LLM integration |
+| `ai.py` | Text-to-speech fallback and LLM formatting integration |
 | `face.py` | Face embedding storage, similarity matching |
 | `pdf_parser.py` | PDF exam parsing & question extraction |
 
@@ -159,12 +159,12 @@ mindkraft/                                    # Workspace root
 |-------|-----------|---------|
 | `/` | `LandingPage.tsx` | Public landing page |
 | `/student/login` | `FaceRecognitionLogin.tsx` | Student face login |
-| `/student/exams` | `StudentPortal.tsx` | Student exam dashboard |
+| `/student/exams` | `ExamSelector.tsx` | Student exam selection |
 | `/admin-login` | `adminlogin.tsx` | Admin login |
 | `/admin` | `AdminPortal.tsx` | Admin dashboard |
 | `/student/exam/:examId/interface` | `ExamInterface.tsx` | Active exam interface |
+| `/student/exam-briefing` | `ExamBriefing.tsx` | Exam instructions narration page |
 | `/splash` | `SplashScreen.tsx` | Splash screen |
-| `/student/login` | `FaceRecognitionLogin.tsx` | Face authentication |
 | `/student/login-fallback` | `PasswordFallbackLogin.tsx` | Password fallback |
 
 ---

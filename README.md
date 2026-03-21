@@ -7,6 +7,7 @@
 ## Key Highlights
 
 - **Hybrid student journey** — face login → voice navigation → mixed MCQ+written exams with voice commands or manual input
+- **Landing voice onboarding** — on opening `/`, app speaks: "Welcome to Vox. Say Student or Admin to continue."
 - **100% hands-free option for MCQ exams** — face login → voice navigation → voice MCQ selection → voice submission
 - **Hybrid option for descriptive/written exams** — voice/manual login + voice commands + manual text typing for written answers
 - **13+ in-exam voice commands** with fuzzy matching (Levenshtein ≥ 0.78) — seamlessly works during dictation or manual mode  
@@ -33,9 +34,13 @@
 
 ### Voice & AI
 - **STT (Speech-to-Text)** — Browser-native Web Speech API (zero-latency, no backend audio processing)
+  - **Landing voice onboarding** (`LandingPage`) — recognizes "student"/"admin" and routes directly to login pages
   - **Command mode** (`useVoiceEngine`) — instant command detection with fuzzy matching
   - **Written dictation mode** (`useDictation`) — real-time transcript streams directly into the answer box during speaking
   - **10-second silence detection** — auto-stops dictation when speech pauses
+  - **15-second silence reminder** (`useVoiceNavigation`) — "hello are you still there ?? please say the command to proceed"
+    - Enabled for navigation pages
+    - Disabled specifically on landing page
   - **No external audio processing** — web browser handles all transcription locally (Chrome uses Google Cloud, other browsers vary)
 - **TTS (Text-to-Speech)** — dual system:
   - Client-side: Web Speech API with serial playback queue, beep tones, voice priority (Microsoft Zira/David preferred)
@@ -290,7 +295,7 @@ The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` H
 |------|------|-------------|
 | `/student/exams` | ExamSelector | Voice-enabled exam list |
 | `/student/exam/:examId/checklist` | PreExamChecklist | System verification checks |
-| `/student/exam/:examId/briefing` | ExamBriefing | Audio briefing before exam |
+| `/student/exam-briefing` | ExamBriefing | Audio briefing before exam |
 | `/student/exam/:examId/interface` | ExamInterface | Main exam (13 voice commands) |
 | `/student/submission-confirmation` | SubmissionConfirmation | Post-exam summary |
 | `/student/results` | ResultsPage | Exam results with voice readout |
