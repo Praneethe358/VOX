@@ -24,6 +24,7 @@ import { AnswerInputBox } from '../../components/student/AnswerInputBox';
 import { useToast } from '../../components/Toast';
 
 import { studentApi, unifiedApiClient } from '../../api/client';
+import { bridge } from '../../api/bridge';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -126,6 +127,15 @@ export function ExamInterface() {
     }, 60_000);
     return () => { if (silenceWarnTimerRef.current) clearTimeout(silenceWarnTimerRef.current); };
   }, [voiceState, speak]);
+
+  // ► PWA Migration (March 2026): Cleanup fullscreen on unmount
+  // Ensures fullscreen is released when leaving exam view.
+  // See: src/api/bridge.ts for exitKiosk implementation
+  useEffect(() => {
+    return () => {
+      void bridge.exitKiosk();
+    };
+  }, []);
 
   // ── Timer ───────────────────────────────────────────────────────────────────
   const { remaining, isPaused, pause: timerPause, resume: timerResume } = useExamTimer({
@@ -534,6 +544,9 @@ export function ExamInterface() {
     setIsSubmitted(true);
     playBeep('success');
     await speak('Exam submitted successfully. Thank you.');
+    // ► PWA Migration (March 2026): Exit fullscreen before navigation
+    // Releases kiosk lockdown on exam submission
+    await bridge.exitKiosk();
     // Pass real answer data via navigation state
     const answeredCount = allAnswers.size;
     const totalQ = questions.length;

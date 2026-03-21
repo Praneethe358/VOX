@@ -502,35 +502,35 @@ export function useVoiceEngine(onCommand: CommandCallback): UseVoiceEngineReturn
     restartCountRef.current = 0;
     setLastError(null);
 
-    // Use browser Web Speech API for command recognition
     const SR = getSR();
-    if (SR) {
-      console.log('[VoiceEngine] Bootstrapping — using browser Web Speech API');
-      startBrowserRecognition();
-
-      // Watchdog: if no recognition events for 15s and not TTS-speaking, force restart
-      if (watchdogRef.current) clearInterval(watchdogRef.current);
-      watchdogRef.current = setInterval(() => {
-        if (!isActiveRef.current) {
-          if (watchdogRef.current) clearInterval(watchdogRef.current);
-          return;
-        }
-        if (isSpeakingRef.current) return; // Don't watchdog during TTS
-        const silenceMs = Date.now() - lastEventTimeRef.current;
-        if (silenceMs > 15000) {
-          console.warn('[VoiceEngine] Watchdog: no events for 15s — restarting recognition');
-          if (recognitionRef.current) {
-            try { recognitionRef.current.abort(); } catch {}
-            recognitionRef.current = null;
-          }
-          startBrowserRecognition();
-        }
-      }, 5000);
-    } else {
+    if (!SR) {
       console.log('[VoiceEngine] Browser Speech API unavailable');
       setLastError('Browser speech recognition unavailable in this browser.');
       setIsListening(false);
+      return;
     }
+
+    console.log('[VoiceEngine] Bootstrapping — using browser Web Speech API');
+    startBrowserRecognition();
+
+    // Watchdog: if no recognition events for 15s and not TTS-speaking, force restart
+    if (watchdogRef.current) clearInterval(watchdogRef.current);
+    watchdogRef.current = setInterval(() => {
+      if (!isActiveRef.current) {
+        if (watchdogRef.current) clearInterval(watchdogRef.current);
+        return;
+      }
+      if (isSpeakingRef.current) return; // Don't watchdog during TTS
+      const silenceMs = Date.now() - lastEventTimeRef.current;
+      if (silenceMs > 15000) {
+        console.warn('[VoiceEngine] Watchdog: no events for 15s — restarting recognition');
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch {}
+          recognitionRef.current = null;
+        }
+        startBrowserRecognition();
+      }
+    }, 5000);
   }, [getSR, startBrowserRecognition]);
 
   // Keep isSpeakingRef in sync with TTS state so recognition pauses during speech

@@ -15,6 +15,7 @@ import { useVoiceEngine } from '../../hooks/student/useVoiceEngine';
 import type { CommandAction } from '../../hooks/student/useVoiceEngine';
 import { VoiceListener } from '../../components/student/VoiceListener';
 import { VoiceSpeaker } from '../../components/student/VoiceSpeaker';
+import { bridge } from '../../api/bridge';
 
 interface PreExamChecklistProps {
   exam?: ExamData;
@@ -124,6 +125,10 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
           browserTabs: 1
         }
       });
+      // ► PWA Migration (March 2026): Enter browser fullscreen mode
+      // Replaces Electron's enterKiosk IPC. Uses HTML5 Fullscreen API.
+      // See: src/api/bridge.ts for implementation
+      void bridge.enterKiosk();
       navigate(`/student/exam/${exam.examCode}/interface`);
     }
   };

@@ -67,39 +67,42 @@ export default function SubmissionGate({
           </div>
         </motion.div>
 
+        {/* ► Theme Update (March 2026): Stat boxes now use cyan/indigo/blue palette */}
+        {/* Previously used green/orange/pink (emerald/amber/rose) which didn't match platform theme */}
+        {/* Now harmonized with dark indigo/blue/slate theme of the platform */}
         {/* Stats Grid */}
         <div className="grid grid-cols-3 gap-3">
-          {/* Answered */}
+          {/* Answered - Cyan (cool blue, represents completion) */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-4 text-center"
+            className="bg-cyan-950/40 border border-cyan-500/40 rounded-xl p-4 text-center"
           >
-            <p className="text-emerald-400 text-2xl font-bold">—</p>
-            <p className="text-emerald-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Answered</p>
+            <p className="text-cyan-300 text-2xl font-bold">—</p>
+            <p className="text-cyan-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Answered</p>
           </motion.div>
 
-          {/* Skipped */}
+          {/* Skipped - Indigo (matches platform accent, represents questions not attempted) */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-amber-950/30 border border-amber-500/30 rounded-xl p-4 text-center"
+            className="bg-indigo-950/40 border border-indigo-500/40 rounded-xl p-4 text-center"
           >
-            <p className="text-amber-400 text-2xl font-bold">—</p>
-            <p className="text-amber-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Skipped</p>
+            <p className="text-indigo-300 text-2xl font-bold">—</p>
+            <p className="text-indigo-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Skipped</p>
           </motion.div>
 
-          {/* Flagged */}
+          {/* Flagged - Blue (platform blue family, represents marked for review) */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="bg-rose-950/30 border border-rose-500/30 rounded-xl p-4 text-center"
+            className="bg-blue-950/40 border border-blue-500/40 rounded-xl p-4 text-center"
           >
-            <p className="text-rose-400 text-2xl font-bold">0</p>
-            <p className="text-rose-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Flagged</p>
+            <p className="text-blue-300 text-2xl font-bold">0</p>
+            <p className="text-blue-300/70 text-xs uppercase tracking-wide mt-2 font-medium">Flagged</p>
           </motion.div>
         </div>
 

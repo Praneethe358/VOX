@@ -127,7 +127,8 @@ export default function ResultsPage() {
             <p style={{ color: 'var(--text-sec)', fontSize: '13px' }}>Loading results...</p>
           </div>
         ) : results.length === 0 ? (
-          <div style={{ textAlign: 'center', paddingY: '48px' }}>
+          // ► Bug Fix (March 2026): Changed invalid 'paddingY' to 'padding' for React style
+          <div style={{ textAlign: 'center', padding: '48px 0' }}>
             <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', color: 'var(--text-muted)' }}>◇</div>
             <p style={{ fontSize: 'clamp(14px, 2.5vw, 16px)', fontWeight: 600, color: 'var(--text)', marginBottom: '4px' }}>No results yet</p>
             <p style={{ fontSize: '13px', color: 'var(--text-sec)' }}>Complete an exam to see your results</p>

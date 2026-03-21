@@ -140,7 +140,7 @@ export function SubmissionConfirmation() {
 
   if (isSubmitting) {
     return (
-      <section className="screen flex-center" id="s-success">
+      <section className="screen" id="s-submission">
         <div className="success-card pb-10" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div className="w-14 h-14 rounded-full border-2 border-accent/30 border-t-accent-lt animate-spin mx-auto mb-5" />
           <div className="sc-title">Submitting Assessment...</div>
@@ -154,8 +154,11 @@ export function SubmissionConfirmation() {
   const durMin = submissionData?.durationMinutes || exam?.durationMinutes || 60;
   const timePct = submissionData ? Math.round((submissionData.timeSpent / durMin) * 100) : 0;
 
+  // ► UI Fix (March 2026): Changed id from 's-success' to 's-submission'
+  // This applies proper CSS centering from index.css #s-submission rule
+  // Previously used non-existent 'flex-center' class causing misalignment
   return (
-    <section className="screen flex-center" id="s-success">
+    <section className="screen" id="s-submission">
       {/* Voice overlays */}
       <VoiceListener isListening={isListening} mode="Navigation" position="top-right" compact />
       <VoiceSpeaker position="bottom-center" />
