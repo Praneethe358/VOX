@@ -347,30 +347,31 @@ The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` H
 - **No mock DB mode** — application always uses real MongoDB (mock mode removed)
 - Backend seeds a default admin and a sample exam (`TECH101 — Introduction to AI`) on startup
 - Backend checks and logs AI dependency readiness (espeak-ng, Ollama connection) on startup
-- For full API reference and data flow details, see `INTEGRATION_GUIDE.md`
-- For detailed tech stack rationale and architecture, see `TECH_STACK.md`
+- For full API reference and data flow details, see `docs/INTEGRATION_GUIDE.md`
+- For detailed tech stack rationale and architecture, see `docs/TECH_STACK.md`
 
 ---
 
-## 📚 Documentation
+## 📚 Documentation (in `/docs`)
 
 | Document | Purpose |
 |----------|---------|
-| **[QUICKSTART.md](QUICKSTART.md)** | 5-minute setup guide — fastest way to get running |
-| **[SETUP.md](SETUP.md)** | Complete development environment setup with IDE configuration |
-| **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** | Detailed file organization and directory layout |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System architecture, data flows, component interactions, and design patterns |
-| **[TECH_STACK.md](TECH_STACK.md)** | Technology stack components and detailed architecture |
-| **[INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)** | Complete API reference and backend integration details |
-| **[PHASE_2_WRITTEN_EXAMS.md](PHASE_2_WRITTEN_EXAMS.md)** | Phase 2 implementation — written exam support with voice dictation |
+| **[QUICKSTART.md](docs/QUICKSTART.md)** | 5-minute setup guide — fastest way to get running |
+| **[SETUP.md](docs/SETUP.md)** | Complete development environment setup with IDE configuration |
+| **[PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** | Detailed file organization and directory layout |
+| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System architecture, data flows, component interactions, and design patterns |
+| **[TECH_STACK.md](docs/TECH_STACK.md)** | Technology stack components and detailed architecture |
+| **[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)** | Complete API reference and backend integration details |
+| **[PHASE_2_WRITTEN_EXAMS.md](docs/PHASE_2_WRITTEN_EXAMS.md)** | Phase 2 implementation — written exam support with voice dictation |
+| **[ADMIN_SETTINGS_REDESIGN.md](docs/ADMIN_SETTINGS_REDESIGN.md)** | Admin portal UI redesign with glassmorphism theme |
 
 **Getting Started:**
-1. Start with [QUICKSTART.md](QUICKSTART.md) to get running in 5 minutes
-2. Read [SETUP.md](SETUP.md) for detailed environment setup
-3. Check [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) to understand the codebase organization
-4. Review [ARCHITECTURE.md](ARCHITECTURE.md) for system design and data flows
-5. See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for API documentation
-6. Read [PHASE_2_WRITTEN_EXAMS.md](PHASE_2_WRITTEN_EXAMS.md) for Phase 2 features and voice commands
+1. Start with [docs/QUICKSTART.md](docs/QUICKSTART.md) to get running in 5 minutes
+2. Read [docs/SETUP.md](docs/SETUP.md) for detailed environment setup
+3. Check [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) to understand the codebase organization
+4. Review [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flows
+5. See [docs/INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) for API documentation
+6. Read [docs/PHASE_2_WRITTEN_EXAMS.md](docs/PHASE_2_WRITTEN_EXAMS.md) for Phase 2 features and voice commands
 
 ---
 
