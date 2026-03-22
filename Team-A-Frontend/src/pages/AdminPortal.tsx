@@ -1785,92 +1785,223 @@ const SettingsSection: React.FC = () => {  const toast = useToast();  const [loa
     }
   };
   if (loading) return <LoadingOverlay />;
+
+  const autoSavePercent = ((config.autoSaveInterval - 5) / (300 - 5)) * 100;
+  const ttsSpeedPercent = ((config.ttsSpeed - 0.5) / (2.5 - 0.5)) * 100;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      {/* Configuration Card */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
+        className="ap-card"
       >
-        <h3 className="text-lg font-semibold text-white mb-6">AI & System Configuration</h3>
-        <div className="space-y-5">
-          {/* STT Engine */}
+        <div className="ap-section-header">
+          <h3 className="ap-section-title">AI & System Configuration</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(34, 197, 94, 0.12)', border: '1px solid rgba(34, 197, 94, 0.25)', padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--green-lt)' }}>
+            ✓ Active
+          </div>
+        </div>
+        <p style={{ color: 'var(--text-sec)', fontSize: '13px', marginBottom: '24px' }}>Configure voice and language models</p>
+
+        <div className="space-y-6">
+          {/* Speech-to-Text Engine */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Speech-to-Text Engine</label>
+            <label className="ap-label">Speech-to-Text Engine</label>
             <select value={config.sttEngine}
               onChange={(e) => setConfig((p) => ({ ...p, sttEngine: e.target.value as 'vosk' | 'whisper' }))}
-              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:border-indigo-500 outline-none"
+              className="ap-select"
             >
-              <option value="whisper">Whisper (OpenAI)</option>
-              <option value="vosk">Vosk (Offline)</option>
+              <option value="whisper">🌐 Whisper (OpenAI) - Cloud-powered</option>
+              <option value="vosk">🔒 Vosk (Offline) - Private</option>
             </select>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              Selected: {config.sttEngine === 'whisper' ? '🌐 Cloud' : '🔒 Offline'}
+            </p>
           </div>
+
           {/* LLM Model */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">LLM Model</label>
+            <label className="ap-label">LLM Model</label>
             <input type="text" value={config.llmModel}
               onChange={(e) => setConfig((p) => ({ ...p, llmModel: e.target.value }))}
-              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-indigo-500 outline-none font-mono" />
+              className="ap-input"
+              style={{ fontFamily: 'monospace' }}
+              placeholder="e.g., llama3.2" />
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              Current: <span style={{ color: 'var(--accent)' }}>{config.llmModel}</span>
+            </p>
           </div>
+
           {/* Auto-save Interval */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Auto-save Interval (seconds)</label>
-            <input type="number" min="5" max="300" value={config.autoSaveInterval}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <label className="ap-label">Auto-save Interval</label>
+              <div style={{ background: 'rgba(45, 78, 232, 0.12)', border: '1px solid rgba(45, 78, 232, 0.25)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>
+                {config.autoSaveInterval}s
+              </div>
+            </div>
+            <input type="range" min="5" max="300" step="5" value={config.autoSaveInterval}
               onChange={(e) => setConfig((p) => ({ ...p, autoSaveInterval: Number(e.target.value) }))}
-              className="w-full px-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:border-indigo-500 outline-none" />
+              style={{
+                width: '100%',
+                height: '6px',
+                background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${autoSavePercent}%, rgba(255, 255, 255, 0.1) ${autoSavePercent}%, rgba(255, 255, 255, 0.1) 100%)`,
+                borderRadius: '3px',
+                outline: 'none',
+                cursor: 'pointer',
+                accentColor: 'var(--accent)',
+              }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              <span>5s</span>
+              <span>300s</span>
+            </div>
           </div>
+
           {/* TTS Speed */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">TTS Speed ({config.ttsSpeed}x)</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <label className="ap-label">TTS Speed</label>
+              <div style={{ background: 'rgba(45, 78, 232, 0.12)', border: '1px solid rgba(45, 78, 232, 0.25)', padding: '2px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, color: 'var(--accent)' }}>
+                {config.ttsSpeed.toFixed(1)}x
+              </div>
+            </div>
             <input type="range" min="0.5" max="2.5" step="0.1" value={config.ttsSpeed}
               onChange={(e) => setConfig((p) => ({ ...p, ttsSpeed: Number(e.target.value) }))}
-              className="w-full accent-indigo-500" />
+              style={{
+                width: '100%',
+                height: '6px',
+                background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${ttsSpeedPercent}%, rgba(255, 255, 255, 0.1) ${ttsSpeedPercent}%, rgba(255, 255, 255, 0.1) 100%)`,
+                borderRadius: '3px',
+                outline: 'none',
+                cursor: 'pointer',
+                accentColor: 'var(--accent)',
+              }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+              <span>Slow (0.5x)</span>
+              <span>Fast (2.5x)</span>
+            </div>
           </div>
+
           {/* Toggles */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginTop: '24px' }}>
+            <label className="ap-toggle-row">
+              <div>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginBottom: '2px' }}>Grammar Correction</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Auto-correct grammar</p>
+              </div>
               <input type="checkbox" checked={config.grammarCorrection}
                 onChange={(e) => setConfig((p) => ({ ...p, grammarCorrection: e.target.checked }))}
-                className="w-4 h-4 accent-indigo-500" />
-              <div>
-                <p className="text-sm text-white font-medium">Grammar Correction</p>
-                <p className="text-xs text-slate-400">Auto-correct grammar in answers</p>
-              </div>
+                style={{ accentColor: 'var(--accent)' }} />
             </label>
-            <label className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors">
+            <label className="ap-toggle-row">
+              <div>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text)', marginBottom: '2px' }}>Multilingual Mode</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Support multiple languages</p>
+              </div>
               <input type="checkbox" checked={config.multilingualMode}
                 onChange={(e) => setConfig((p) => ({ ...p, multilingualMode: e.target.checked }))}
-                className="w-4 h-4 accent-indigo-500" />
-              <div>
-                <p className="text-sm text-white font-medium">Multilingual Mode</p>
-                <p className="text-xs text-slate-400">Support multiple languages</p>
-              </div>
+                style={{ accentColor: 'var(--accent)' }} />
             </label>
           </div>
+
           <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
             onClick={handleSave} disabled={saving}
-            className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-semibold transition-all disabled:opacity-60"
+            className="ap-btn-primary"
+            style={{ width: '100%', marginTop: '24px' }}
           >
-            {saving ? <span className="flex items-center justify-center gap-2"><Spinner size="w-4 h-4" /> Saving...</span> : 'Save Configuration'}
+            {saving ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Spinner size="w-4 h-4" /> Saving...</span> : '💾 Save Configuration'}
           </motion.button>
         </div>
       </motion.div>
-      {/* System Info */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-        className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-xl p-6"
+
+      {/* System Information */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
       >
-        <h4 className="text-lg font-semibold text-white mb-4">System Information</h4>
-        <div className="space-y-3 text-sm">
-          {[
-            ['Backend', 'Node.js + Express'],
-            ['Database', 'MongoDB Atlas'],
-            ['Voice Engine', config.sttEngine === 'whisper' ? 'OpenAI Whisper' : 'Vosk'],
-            ['LLM', config.llmModel],
-            ['Auto-save', `Every ${config.autoSaveInterval}s`],
-          ].map(([k, v]) => (
-            <div key={k} className="flex justify-between py-2 border-b border-slate-700/30">
-              <span className="text-slate-400">{k}</span>
-              <span className="text-white font-medium">{v}</span>
+        <h4 className="ap-section-title" style={{ marginBottom: '16px' }}>System Information</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+          {/* Backend */}
+          <motion.div whileHover={{ translateY: -4 }} className="ap-stat-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(45, 78, 232, 0.15)', border: '1px solid rgba(45, 78, 232, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                ⚙️
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Backend</p>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '2px' }}>Node.js</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-sec)' }}>Express Framework</p>
+              </div>
             </div>
-          ))}
+          </motion.div>
+
+          {/* Database */}
+          <motion.div whileHover={{ translateY: -4 }} className="ap-stat-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                🗄️
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Database</p>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '2px' }}>MongoDB</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-sec)' }}>Atlas Cloud</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Voice Engine */}
+          <motion.div whileHover={{ translateY: -4 }} className="ap-stat-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(249, 115, 22, 0.15)', border: '1px solid rgba(249, 115, 22, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                🎤
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Voice Engine</p>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '2px' }}>{config.sttEngine === 'whisper' ? 'OpenAI' : 'Vosk'}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-sec)' }}>{config.sttEngine === 'whisper' ? 'Whisper API' : 'Offline'}</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* LLM Model */}
+          <motion.div whileHover={{ translateY: -4 }} className="ap-stat-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                🧠
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>LLM Model</p>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '2px' }}>{config.llmModel}</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-sec)' }}>Active</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Auto-save */}
+          <motion.div whileHover={{ translateY: -4 }} className="ap-stat-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(196, 98, 255, 0.15)', border: '1px solid rgba(196, 98, 255, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                ⏱️
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Auto-save</p>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', marginBottom: '2px' }}>Every {config.autoSaveInterval}s</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-sec)' }}>Interval</p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Status */}
+          <motion.div whileHover={{ translateY: -4 }} className="ap-stat-card">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+              <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                ✓
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Status</p>
+                <p style={{ fontSize: '16px', fontWeight: 700, color: 'var(--green-lt)', marginBottom: '2px' }}>Active</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-sec)' }}>System running</p>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </motion.div>
     </motion.div>
