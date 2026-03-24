@@ -29,9 +29,16 @@ ENV PORT=3000 \
     FRONTEND_URL=http://localhost:4100 \
     JWT_SECRET=vox-docker-dev-secret-change-this
 
+# SECURITY: run as non-root user
+RUN addgroup --system --gid 1000 appgroup && \
+    adduser --system --uid 1000 --ingroup appgroup appuser && \
+    chown -R appuser:appgroup /app
+USER appuser
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
 # Start the application (no --reload in production)
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000"]
+

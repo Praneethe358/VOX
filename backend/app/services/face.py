@@ -83,8 +83,8 @@ class FaceService:
                 best_match = candidate
                 best_confidence = confidence
                 best_distance = distance
-        # Lowered thresholds for better real-world matching (was 0.85 / 0.55)
-        matched = best_match is not None and (best_confidence >= 0.75 or best_distance < 0.70)
+        # SECURITY: strict thresholds — both cosine AND euclidean must pass
+        matched = best_match is not None and (best_confidence >= 0.85 and best_distance < 0.55)
         student = self._repo.find_student_by_id(str(best_match.get("studentId"))) if best_match else None
         self._repo.collection("face_login_attempts").insert_one(
             {
@@ -112,8 +112,8 @@ class FaceService:
         embedding = candidate.get("normalizedEmbedding") or []
         confidence = _cosine_similarity(normalized_live, embedding)
         distance = _euclidean_distance(normalized_live, embedding)
-        # Lowered thresholds for better real-world matching (was 0.85 / 0.55)
-        matched = confidence >= 0.75 or distance < 0.70
+        # SECURITY: strict thresholds — both cosine AND euclidean must pass
+        matched = confidence >= 0.85 and distance < 0.55
         student = self._repo.find_student_by_id(student_id)
         self._repo.collection("face_login_attempts").insert_one(
             {

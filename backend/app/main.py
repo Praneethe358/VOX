@@ -11,6 +11,9 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from .config import get_settings
 from .database import MongoRepository
@@ -28,11 +31,25 @@ ai_service = AIService(settings)
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    # SECURITY: validate JWT secret on startup
+    secret = settings.jwt_secret
+    if secret in ("vox-local-dev-secret-change-this", "vox-docker-dev-secret-change-this", "change-this"):
+        import warnings
+        warnings.warn("\n⚠️  SECURITY WARNING: Using default JWT secret! Set JWT_SECRET env var to a random ≥32-char string.", stacklevel=1)
+    elif len(secret) < 32:
+        import warnings
+        warnings.warn(f"\n⚠️  SECURITY WARNING: JWT_SECRET is only {len(secret)} chars. Use ≥32 chars for production.", stacklevel=1)
     repo.initialize()
     yield
 
 
+# ─── Rate limiter ─────────────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+
+
 app = FastAPI(title="vox-backend", version="2.0.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — use FRONTEND_URL for production, fall back to * for local dev
 allowed_origins = [settings.frontend_url] if settings.frontend_url else ["*"]
@@ -106,7 +123,8 @@ def get_exam_by_id_compat(exam_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/admin/login")
-async def admin_login(body: dict[str, Any]) -> dict[str, Any]:
+@limiter.limit("5/minute")
+async def admin_login(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     username = safe_str(body.get("username") or "")
     password = safe_str(body.get("password") or "")
     if not username or not password:
@@ -378,7 +396,8 @@ async def end_exam(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/auth/login")
-async def auth_login(body: dict[str, Any]) -> dict[str, Any]:
+@limiter.limit("5/minute")
+async def auth_login(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     email = safe_str(body.get("email") or "")
     password = safe_str(body.get("password") or "")
     if not email or not password:
@@ -404,7 +423,8 @@ async def auth_login(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/auth/face-recognize")
-async def auth_face_recognize(body: dict[str, Any]) -> dict[str, Any]:
+@limiter.limit("30/minute")
+async def auth_face_recognize(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     exam_code = str(body.get("examCode") or "")
     descriptor = body.get("liveDescriptor") or body.get("faceDescriptor")
     if not exam_code or not isinstance(descriptor, list):
@@ -621,7 +641,8 @@ def face_attempts(student_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/v1/auth/admin-login")
-async def v1_admin_login(body: dict[str, Any]) -> dict[str, Any]:
+@limiter.limit("5/minute")
+async def v1_admin_login(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     email = str(body.get("email") or "").lower().strip()
     password = str(body.get("password") or "")
     if not email or not password:
