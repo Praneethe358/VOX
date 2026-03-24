@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('[ErrorBoundary] Caught error:', error, errorInfo);
     // Attempt to log to backend
     try {
-      const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:3000/api';
+      const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api';
       const token = localStorage.getItem('auth_token');
       fetch(`${API_BASE}/v1/config/system-logs`, {
         method: 'POST',

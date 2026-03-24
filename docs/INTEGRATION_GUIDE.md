@@ -4,8 +4,8 @@ This guide documents the active frontend-backend integration after Phase 2 rollo
 
 ## Runtime Endpoints
 
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3000`
+- Frontend: `http://localhost:4100`
+- Backend: `http://localhost:4000`
 - Health: `GET /health`
 - API base: `/api/*`
 - Protected API base: `/api/v1/*`
@@ -22,10 +22,10 @@ This guide documents the active frontend-backend integration after Phase 2 rollo
 ### Backend `.env`
 
 ```env
-MONGODB_URI=mongodb://127.0.0.1:27017
+MONGODB_URI=mongodb://127.0.0.1:4200
 MONGODB_DB_NAME=vox
-PORT=3000
-FRONTEND_URL=http://localhost:5173
+PORT=4000
+FRONTEND_URL=http://localhost:4100
 JWT_SECRET=vox-local-dev-secret-change-this
 ESPEAK_BIN=C:\Program Files\eSpeak NG\espeak-ng.exe
 OLLAMA_URL=http://localhost:11434
@@ -37,7 +37,7 @@ VOX_SUPERADMIN_PASSWORD=ChangeMe@123
 ### Frontend `.env`
 
 ```env
-VITE_API_BASE_URL=http://localhost:3000
+VITE_API_BASE_URL=http://localhost:4000
 ```
 
 ## API Surface (Active)

@@ -70,7 +70,7 @@ Create a `.env` file in the project root to override defaults:
 JWT_SECRET=your-secure-secret-key-here
 MONGODB_URI=mongodb://mongo:27017
 MONGODB_DB_NAME=vox
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:4100
 OLLAMA_BASE_URL=http://ollama:11434
 ```
 
@@ -83,7 +83,7 @@ MongoDB will automatically create the `vox` database. To initialize with seed da
 docker-compose exec mongo mongosh
 
 # Or run from host:
-mongosh "mongodb://localhost:27017/vox"
+mongosh "mongodb://localhost:4200/vox"
 ```
 
 ### Optional: Enable Ollama Service
@@ -172,8 +172,8 @@ All services include health checks:
 docker-compose ps
 
 # Manual health check
-curl http://localhost:5173    # Frontend
-curl http://localhost:3000    # Backend
+curl http://localhost:4100    # Frontend
+curl http://localhost:4000    # Backend
 ```
 
 ## Performance Tips

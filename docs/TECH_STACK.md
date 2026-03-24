@@ -81,8 +81,8 @@ Navigation reminder behavior:
 
 ### Default (Current)
 
-- Frontend in browser at `http://localhost:5173`
-- FastAPI backend at `http://localhost:3000`
+- Frontend in browser at `http://localhost:4100`
+- FastAPI backend at `http://localhost:4000`
 - MongoDB local instance
 
 ### Legacy (Deprecated)

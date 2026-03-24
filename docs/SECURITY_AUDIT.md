@@ -42,7 +42,7 @@ The MindKraft (Vox) exam platform was subjected to a comprehensive security audi
 ## Application Architecture
 
 ```
-Browser → Nginx (:4100) → FastAPI Backend (:3000) → MongoDB (:27017)
+Browser → Nginx (:4100) → FastAPI Backend (:4000) → MongoDB (:4200)
                 ↕                    ↕
          face-api.js          Whisper STT / espeak TTS
          (client-side)              Ollama LLM

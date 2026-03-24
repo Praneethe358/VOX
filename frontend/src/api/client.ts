@@ -5,11 +5,11 @@
 const RAW_API_BASE_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ||
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  'http://localhost:3000/api';
+  '/api';
 
 function normalizeApiBaseUrl(raw: string): string {
   const trimmed = raw.trim().replace(/\/+$/, '');
-  if (!trimmed) return 'http://localhost:3000/api';
+  if (!trimmed) return '/api';
   if (/\/api(?:\/|$)/.test(trimmed)) return trimmed;
   return `${trimmed}/api`;
 }

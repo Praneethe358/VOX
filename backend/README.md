@@ -6,8 +6,8 @@ This backend now runs on Python FastAPI.
 
 - Entry: app/main.py
 - Start script: start-python-backend.ps1
-- Port: 3000
-- Frontend target: Team-A-Frontend/.env -> VITE_API_BASE_URL=http://localhost:3000
+- Port: 4000
+- Frontend target: Team-A-Frontend/.env -> VITE_API_BASE_URL=http://localhost:4000
 - STT note: command and dictation STT are browser-native in the frontend flow
 - Backend AI scope: TTS fallback (`/api/ai/tts-speak`) and LLM formatting (`/api/ai/format-answer`)
 

@@ -175,14 +175,14 @@ export function PreExamChecklist({ exam: propExam, onReadyToStart: propOnReadyTo
   const checkInternet = async () => {
     updateChecklistItem('internet', 'checking');
     try {
-      const response = await fetch('http://localhost:3000/health');
+      const response = await fetch('/health');
       if (response.ok) {
         updateChecklistItem('internet', 'success', 'Connected to server');
       } else {
         throw new Error('Server unreachable');
       }
     } catch (err) {
-      updateChecklistItem('internet', 'failed', 'Cannot reach backend at localhost:3000. Make sure the server is running.');
+      updateChecklistItem('internet', 'failed', 'Cannot reach backend server. Make sure the server is running.');
     }
   };
 

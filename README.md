@@ -90,6 +90,11 @@
 - **Kiosk mode** — Electron fullscreen, blocked keyboard shortcuts (Alt+Tab, F12, Ctrl+Shift+I, Ctrl+W), disabled right-click & copy/paste
 - **JWT auth** — 8-hour expiry, role-based access (`super-admin`, `exam-admin`)
 - **bcrypt** password hashing (cost factor 10)
+- **Pydantic request validation** — strict schemas on all 22+ API endpoints preventing NoSQL injection & type confusion
+- **Rate limiting** — `slowapi` per-route limits (5/min login, 30/min face recognition, 100/min general)
+- **Nginx hardening** — CSP, Referrer-Policy, Permissions-Policy, X-Frame-Options, 10MB body limit
+- **Non-root containers** — Docker images run as `appuser:1000`
+- **MongoDB authentication** — credential-based access (`authSource=admin`)
 - **Context isolation** — Electron `contextIsolation: true`, `nodeIntegration: false`
 - **Audit logging** — every student action recorded with timestamp & metadata
 - **Activity tracking** — suspicious flags, navigation history, environment data
@@ -98,7 +103,7 @@
 
 ## Tech Stack
 
-### Frontend (`Team-A-Frontend`)
+### Frontend (`frontend/`)
 | Technology | Version | Purpose |
 |-----------|---------|---------|
 | React | 18.3.1 | Component-based exam UI |
@@ -110,19 +115,27 @@
 | React Router DOM | 6.30 | Multi-page routing with protected routes |
 | Web Speech API | Native | Client-side TTS + browser STT fallback |
 
-### Backend (`Team-A-Backend/Team-A-Backend`)
+### Backend (`backend/`)
 | Technology | Version | Purpose |
 |-----------|---------|---------|
 | Python | 3.11 | Runtime |
 | FastAPI | 0.116 | REST API server |
 | Uvicorn | 0.35 | ASGI server |
 | PyMongo | 4.12 | MongoDB data access |
+| Pydantic | 2.x | Request/response validation & NoSQL injection prevention |
+| slowapi | 0.1.9 | Per-route rate limiting |
 | bcrypt | 4.3 | Password hashing |
 | PyJWT | 2.10 | JWT authentication |
 | python-multipart | 0.0.20 | Audio/file upload handling |
 | pypdf | 5.9 | PDF question extraction |
 | httpx | 0.28 | Ollama HTTP client |
-| Electron | 40.6 | ⚠️ DEPRECATED — Legacy kiosk shell (not active in Phase 2) |
+
+### Infrastructure
+| Technology | Purpose |
+|-----------|---------|
+| Docker + Docker Compose | Container orchestration (frontend, backend, mongo, nginx) |
+| Nginx | Reverse proxy, static file serving, security headers |
+| MongoDB 7.x | Document database with authentication enabled |
 
 ### External AI Binaries (Optional, Local)
 | Binary | Purpose | Used For |
@@ -135,79 +148,112 @@
 ## Project Structure
 
 ```
-FINAL-VOX/
+mindkraft/
 ├── README.md                          ← This file
-├── TECH_STACK.md                      ← Detailed tech stack & architecture
-├── INTEGRATION_GUIDE.md               ← API reference & integration details
+├── docker-compose.yml                 ← Full-stack orchestration
 │
-├── Team-A-Frontend/                   ← React 18 + Vite frontend
+├── frontend/                          ← React 18 + Vite + TypeScript
 │   ├── src/
-│   │   ├── api/                       ← Unified API client (REST + IPC bridge)
+│   │   ├── api/client.ts              ← Unified API client (relative /api paths)
 │   │   ├── components/                ← Shared UI components
-│   │   │   └── student/               ← 13 student-specific components
+│   │   │   └── student/               ← Student-specific components (LiveFaceRegistration, etc.)
 │   │   ├── context/                   ← AuthContext, ExamContext, VoiceContext
 │   │   ├── hooks/                     ← Custom hooks (useAutoSpeak, useKiosk, etc.)
-│   │   │   └── student/               ← 10 student hooks (voice, face, timer, etc.)
+│   │   │   └── student/               ← Student hooks (voice, face, timer, etc.)
 │   │   ├── pages/                     ← Page components
-│   │   │   └── student/               ← 10 student pages (login, exam, results, etc.)
+│   │   │   └── student/               ← Student pages (login, exam, results, etc.)
 │   │   ├── services/student/          ← API service re-exports
-│   │   ├── types/student/             ← TypeScript type definitions (4 files)
+│   │   ├── types/student/             ← TypeScript type definitions
 │   │   └── utils/                     ← faceApiLoader, exam utilities
-│   └── public/models/                 ← face-api.js model weights
+│   ├── public/models/                 ← face-api.js model weights
+│   ├── Dockerfile                     ← Multi-stage build (non-root)
+│   └── .env                           ← VITE_API_BASE_URL (empty for proxy)
 │
-├── Team-A-Backend/Team-A-Backend/     ← Python FastAPI backend
+├── backend/                           ← Python FastAPI backend
 │   ├── app/
-│   │   ├── main.py                    ← FastAPI app & route wiring
+│   │   ├── main.py                    ← FastAPI app + rate limiter + CORS
+│   │   ├── schemas.py                 ← Pydantic validation models (all endpoints)
 │   │   ├── config.py                  ← Environment config
 │   │   ├── database.py                ← MongoDB repository + initialization
-│   │   ├── security.py                ← JWT + password security
+│   │   ├── security.py                ← JWT + bcrypt password security
+│   │   ├── routers/                   ← Modular route handlers
+│   │   │   ├── admin.py               ← Admin endpoints (exams, PDF upload, publishing)
+│   │   │   ├── auth.py                ← Authentication (login, face-recognize)
+│   │   │   ├── face.py                ← Face registration & verification
+│   │   │   ├── student.py             ← Student exam flow
+│   │   │   └── v1.py                  ← V1 JWT-protected routes
 │   │   └── services/                  ← AI, face, PDF parser services
-│   ├── scripts/                       ← Smoke tests and utilities
 │   ├── requirements.txt               ← Python dependencies
-│   └── start-python-backend.ps1       ← Windows startup helper
+│   └── Dockerfile                     ← Python container (non-root)
+│
+├── nginx/                             ← Reverse proxy & security headers
+│   ├── nginx.conf                     ← Routing, CSP, rate limiting
+│   └── Dockerfile                     ← Nginx container
+│
+└── docs/                              ← Project documentation
+    ├── QUICKSTART.md                  ← 5-minute setup guide
+    ├── RESTRUCTURING.md               ← Migration changelog
+    ├── SECURITY_HARDENING.md          ← Security audit report
+    ├── PHASE4_ARCHITECTURE.md         ← Modular router/schema architecture
+    ├── DOCKER_DEPLOYMENT.md           ← Container deployment guide
+    └── ...                            ← Additional docs
 ```
 
 ---
 
 ## Run Locally
 
-### Prerequisites
-- **Node.js** (v18+)
-- **MongoDB** (v7.x) running on `mongodb://127.0.0.1:27017`
-- **npm** (v9+)
+### Option A: Docker Compose (Recommended)
 
-### 1) Start Backend
+**Prerequisites:** Docker Desktop
+
 ```bash
-cd Team-A-Backend/Team-A-Backend
-python -m venv ../../.venv
-../../.venv/Scripts/pip install -r requirements.txt
-../../.venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload
+# First time (or after schema/security changes)
+docker compose down -v
+docker compose build --no-cache
+docker compose up -d
 ```
-- URL: `http://localhost:3000`
-- Health check: `GET http://localhost:3000/health`
-- Seeds the default super-admin on first run
 
-### 2) Start Frontend
+- **App URL:** `http://localhost` (via Nginx)
+- **Health check:** `GET http://localhost/health`
+- Auto-seeds the default super-admin on first run
+- MongoDB authentication is enabled automatically
+
+### Option B: Manual (Development)
+
+**Prerequisites:** Node.js (v18+), Python 3.11+, MongoDB 7.x, npm (v9+)
+
+#### 1) Start Backend
 ```bash
-cd Team-A-Frontend
+cd backend
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt
+.venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port 4000 --reload
+```
+- URL: `http://localhost:4000`
+- Health check: `GET http://localhost:4000/health`
+
+#### 2) Start Frontend
+```bash
+cd frontend
 npm install
 npm run dev
 ```
-- URL: `http://localhost:5173`
+- URL: `http://localhost:4100`
 
-### 3) Legacy Electron Desktop Mode
-The Electron kiosk shell is still present in the repository, but the new HTTP backend is Python-based. If you still need kiosk mode, keep the existing Node/Electron shell as a separate legacy process until it is replaced explicitly.
+> **Note:** When running without Docker/Nginx, set `VITE_API_BASE_URL=http://localhost:4000` in `frontend/.env`.
+> With Docker, leave it empty so all requests use relative `/api` paths through Nginx.
 
 ---
 
 ## Environment Variables
 
-### Backend (`Team-A-Backend/Team-A-Backend/.env`)
+### Backend (`backend/.env`)
 ```env
-# Database
-MONGODB_URI=mongodb://127.0.0.1:27017
+# Database (Docker uses authenticated URI)
+VOX_MONGODB_URI=mongodb://localhost:4200/vox
 MONGODB_DB_NAME=vox
-PORT=3000
+PORT=4000
 
 # JWT
 JWT_SECRET=vox-local-dev-secret-change-this
@@ -224,12 +270,14 @@ VOX_SUPERADMIN_EMAIL=admin@vox.edu
 VOX_SUPERADMIN_PASSWORD=ChangeMe@123
 
 # Frontend URL (for CORS)
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:4100
 ```
 
-### Frontend (`Team-A-Frontend/.env`)
+### Frontend (`frontend/.env`)
 ```env
-VITE_API_BASE_URL=http://localhost:3000
+# Leave empty for Docker/Nginx (relative /api paths)
+# Set to http://localhost:4000 for local dev without proxy
+VITE_API_BASE_URL=
 ```
 
 ### Voice/AI System Dependencies
@@ -241,7 +289,7 @@ Install these external binaries for full AI functionality:
 choco install espeak-ng
 ```
 
-The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` HTTP surface used by the frontend. Phase 2 dictation now uses browser-native STT and no longer depends on backend audio transcription.
+The backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` HTTP surface. Phase 2 dictation uses browser-native STT and no longer depends on backend audio transcription.
 
 ---
 
@@ -359,19 +407,23 @@ The Python backend preserves the existing `/health`, `/api/*`, and `/api/v1/*` H
 | **[QUICKSTART.md](docs/QUICKSTART.md)** | 5-minute setup guide — fastest way to get running |
 | **[SETUP.md](docs/SETUP.md)** | Complete development environment setup with IDE configuration |
 | **[PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)** | Detailed file organization and directory layout |
-| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System architecture, data flows, component interactions, and design patterns |
+| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System architecture, data flows, component interactions |
 | **[TECH_STACK.md](docs/TECH_STACK.md)** | Technology stack components and detailed architecture |
 | **[INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md)** | Complete API reference and backend integration details |
-| **[PHASE_2_WRITTEN_EXAMS.md](docs/PHASE_2_WRITTEN_EXAMS.md)** | Phase 2 implementation — written exam support with voice dictation |
+| **[RESTRUCTURING.md](docs/RESTRUCTURING.md)** | Project layout migration changelog |
+| **[SECURITY_HARDENING.md](docs/SECURITY_HARDENING.md)** | Security audit — injection prevention, rate limiting, container hardening |
+| **[PHASE4_ARCHITECTURE.md](docs/PHASE4_ARCHITECTURE.md)** | Modular router/schema architecture breakdown |
+| **[DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md)** | Container deployment guide |
+| **[PHASE_2_WRITTEN_EXAMS.md](docs/PHASE_2_WRITTEN_EXAMS.md)** | Phase 2 — written exam support with voice dictation |
 | **[ADMIN_SETTINGS_REDESIGN.md](docs/ADMIN_SETTINGS_REDESIGN.md)** | Admin portal UI redesign with glassmorphism theme |
 
 **Getting Started:**
 1. Start with [docs/QUICKSTART.md](docs/QUICKSTART.md) to get running in 5 minutes
-2. Read [docs/SETUP.md](docs/SETUP.md) for detailed environment setup
-3. Check [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) to understand the codebase organization
-4. Review [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for system design and data flows
+2. Read [docs/DOCKER_DEPLOYMENT.md](docs/DOCKER_DEPLOYMENT.md) for Docker deployment
+3. Check [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) to understand the codebase
+4. Review [docs/SECURITY_HARDENING.md](docs/SECURITY_HARDENING.md) for security documentation
 5. See [docs/INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) for API documentation
-6. Read [docs/PHASE_2_WRITTEN_EXAMS.md](docs/PHASE_2_WRITTEN_EXAMS.md) for Phase 2 features and voice commands
+6. Read [docs/PHASE_2_WRITTEN_EXAMS.md](docs/PHASE_2_WRITTEN_EXAMS.md) for Phase 2 features
 
 ---
 

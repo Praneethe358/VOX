@@ -8,7 +8,7 @@
 
 - **Python 3.11+** (with `python` command available)
 - **Node.js 18+** (with `npm` command available)
-- **MongoDB 7.x+** running locally on `mongodb://127.0.0.1:27017`
+- **MongoDB 7.x+** running locally on `mongodb://127.0.0.1:4200`
 - **Git** for version control
 
 ---
@@ -51,15 +51,15 @@ npm run dev:full
 ```
 
 This will start:
-- **Backend** (Python FastAPI) on `http://localhost:3000`
-- **Frontend** (React Vite) on `http://localhost:5173`
+- **Backend** (Python FastAPI) on `http://localhost:4000`
+- **Frontend** (React Vite) on `http://localhost:4100`
 
 ### Option B: Run Separately in 2 Terminals
 
 **Terminal 1 - Backend:**
 ```bash
 cd Team-A-Backend/Team-A-Backend
-python -m uvicorn app.main:app --reload --port 3000
+python -m uvicorn app.main:app --reload --port 4000
 ```
 
 **Terminal 2 - Frontend:**
@@ -72,10 +72,10 @@ npm run dev
 
 ## 3. Access the Application
 
-- **Student Portal**: `http://localhost:5173/` (Face login or password fallback)
-- **Admin Portal**: `http://localhost:5173/admin-login`
-- **API Documentation**: `http://localhost:3000/docs` (Swagger UI)
-- **Backend Health**: `http://localhost:3000/health`
+- **Student Portal**: `http://localhost:4100/` (Face login or password fallback)
+- **Admin Portal**: `http://localhost:4100/admin-login`
+- **API Documentation**: `http://localhost:4000/docs` (Swagger UI)
+- **Backend Health**: `http://localhost:4000/health`
 
 Landing behavior (current):
 - On first load of `/`, Vox speaks: **"Welcome to Vox. Say Student or Admin to continue."**
@@ -121,8 +121,8 @@ This validates:
 # Check MongoDB is running
 mongosh -u admin -p password --authenticationDatabase admin
 
-# Check port 3000 is free
-netstat -ano | findstr :3000
+# Check port 4000 is free
+netstat -ano | findstr :4000
 
 # Install missing dependencies
 pip install -r requirements.txt
@@ -148,7 +148,7 @@ npm run dev
 
 ### Run Backend with Auto-Reload
 ```bash
-python -m uvicorn app.main:app --reload --port 3000
+python -m uvicorn app.main:app --reload --port 4000
 ```
 
 ### Run Frontend with Hot Reload
@@ -200,6 +200,6 @@ Team-A-Frontend/
 
 For issues or questions:
 1. Check project documentation
-2. Review backend logs: `http://localhost:3000/health`
+2. Review backend logs: `http://localhost:4000/health`
 3. Check browser console for frontend errors
 4. Review smoke test output: `python scripts/smoke_test.py`

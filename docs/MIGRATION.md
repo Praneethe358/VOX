@@ -277,7 +277,7 @@ className="text-cyan-300"
 ### Build & Deployment
 - [ ] `npm install` succeeds without Electron warnings
 - [ ] `npm run build` completes; PWA assets generated
-- [ ] `npm run dev` starts dev server on localhost:5173
+- [ ] `npm run dev` starts dev server on localhost:4100
 - [ ] Manifest file included in dist/
 
 ---

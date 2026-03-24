@@ -41,7 +41,7 @@ const DETECTION_INTERVAL_MS = 500;
 const rawApiBase =
   (import.meta.env.VITE_API_URL as string | undefined) ||
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  'http://localhost:3000/api';
+  '/api';
 const API_BASE = /\/api(?:\/|$)/.test(rawApiBase.replace(/\/+$/, ''))
   ? rawApiBase.replace(/\/+$/, '')
   : `${rawApiBase.replace(/\/+$/, '')}/api`;
@@ -123,10 +123,19 @@ export function LiveFaceRegistration({ onRegistered, onCancel }: Props) {
         streamRef.current = stream;
       }
 
-      // Wait for video to be ready
-      await new Promise<void>((resolve) => {
+      // Wait for video to be ready and explicitly play
+      await new Promise<void>((resolve, reject) => {
         if (videoRef.current) {
-          videoRef.current.onloadedmetadata = () => resolve();
+          videoRef.current.onloadedmetadata = async () => {
+            try {
+              // Explicitly call play() to ensure video starts playing
+              await videoRef.current!.play();
+              resolve();
+            } catch (playErr) {
+              console.error('[Face Registration] Video play error:', playErr);
+              reject(new Error(`Failed to start video playback: ${playErr instanceof Error ? playErr.message : 'Unknown error'}`));
+            }
+          };
         }
       });
 

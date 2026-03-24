@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from "react";
 const rawApiBase =
   (import.meta.env.VITE_API_URL as string | undefined) ||
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
-  "http://localhost:3000/api";
+  "/api";
 const API_BASE = /\/api(?:\/|$)/.test(rawApiBase.replace(/\/+$/, ''))
   ? rawApiBase.replace(/\/+$/, '')
   : `${rawApiBase.replace(/\/+$/, '')}/api`;

@@ -229,7 +229,7 @@ cp .env.example .env || echo "No template found"
 
 # Verify .env content
 cat .env
-# Should show: VITE_API_BASE_URL=http://localhost:3000
+# Should show: VITE_API_BASE_URL=http://localhost:4000
 ```
 
 ---
@@ -260,7 +260,7 @@ mongosh --eval "db.serverStatus()"
 The database will be initialized automatically on first backend startup:
 
 ```bash
-python -m uvicorn app.main:app --reload --port 3000
+python -m uvicorn app.main:app --reload --port 4000
 # Backend will:
 # 1. Connect to MongoDB
 # 2. Create 'vox' database
@@ -278,10 +278,10 @@ python -m uvicorn app.main:app --reload --port 3000
 ```bash
 # Terminal 1: Start backend
 cd Team-A-Frontend/Team-A-Backend/Team-A-Backend
-python -m uvicorn app.main:app --reload --port 3000
+python -m uvicorn app.main:app --reload --port 4000
 
 # Terminal 2: Test health endpoint
-curl http://localhost:3000/health
+curl http://localhost:4000/health
 
 # Expected output:
 # {"status":"ok","service":"vox-backend","timestamp":"2026-03-17T..."}
@@ -295,13 +295,13 @@ cd Team-A-Frontend/Team-A-Frontend
 npm run dev
 
 # Expected output:
-# ➜  Local:   http://localhost:5173/
+# ➜  Local:   http://localhost:4100/
 # ➜  Network: use --host to expose
 ```
 
 ### Access Application
 
-- Open `http://localhost:5173` in browser
+- Open `http://localhost:4100` in browser
 - Frontend should load without errors
 - Student login should be accessible
 - Landing page should narrate: **"Welcome to Vox. Say Student or Admin to continue."**
@@ -391,7 +391,7 @@ Create `.vscode/settings.json` in project root:
       "type": "python",
       "request": "launch",
       "module": "uvicorn",
-      "args": ["app.main:app", "--reload", "--port", "3000"],
+      "args": ["app.main:app", "--reload", "--port", "4000"],
       "jinja": true,
       "cwd": "${workspaceFolder}/Team-A-Frontend/Team-A-Backend/Team-A-Backend"
     }
@@ -418,7 +418,7 @@ npm run dev:full
 # Or in separate terminals:
 # Terminal 1:
 cd Team-A-Backend/Team-A-Backend
-python -m uvicorn app.main:app --reload --port 3000
+python -m uvicorn app.main:app --reload --port 4000
 
 # Terminal 2:
 cd Team-A-Frontend
@@ -434,7 +434,7 @@ npm run dev
 
 ```bash
 # Test backend routes
-curl http://localhost:3000/api/v1/exams
+curl http://localhost:4000/api/v1/exams
 
 # Test frontend in browser
 # Open DevTools (F12) to check for errors
@@ -477,16 +477,16 @@ brew services start mongodb-community
 sudo systemctl start mongod
 ```
 
-### Port 3000 Already in Use
+### Port 4000 Already in Use
 
 ```bash
-# Find and kill process on port 3000
+# Find and kill process on port 4000
 # Windows:
-netstat -ano | findstr :3000
+netstat -ano | findstr :4000
 taskkill /PID <PID> /F
 
 # macOS/Linux:
-lsof -i :3000
+lsof -i :4000
 kill -9 <PID>
 ```
 
