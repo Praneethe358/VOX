@@ -1,14 +1,21 @@
-node_modules
-npm-debug.log
+# ── Frontend Docker build context (.dockerignore) ──
+# Build context is project root, only need frontend/ and nginx/
+.git
+.venv
+backend
+docs
+*.md
+*.bat
+seed_data.js
 .env
 .env.local
-.DS_Store
-docs
-.git
-.gitignore
-README.md
-dist
-coverage
+
+# Frontend build artifacts
+frontend/node_modules
+frontend/dist
+frontend/coverage
+frontend/.env.local
+
+# IDE
 .vscode
 .idea
-*.md

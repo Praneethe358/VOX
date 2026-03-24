@@ -12,6 +12,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Pass frontend API origin at build time (Vite embeds VITE_* vars into the bundle)
+ARG VITE_API_BASE_URL=http://localhost:4000
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # Build the application
 RUN npm run build
 

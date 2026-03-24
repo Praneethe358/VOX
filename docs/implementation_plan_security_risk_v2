@@ -1,0 +1,604 @@
+# MindKraft (Vox) — Complete Implementation Plan
+
+All refactoring, infrastructure, and security hardening work in one unified plan.
+
+---
+
+## Status Overview
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| Phase 1 | Docker + Nginx Infrastructure | ✅ Done |
+| Phase 2 | Critical Security (Auth, Injection, Passwords) | 🔴 Next |
+| Phase 3 | Security Hardening (Rate limit, Headers, MongoDB) | ⬜ Planned |
+| Phase 4 | Architecture Refactoring (Routers, Pydantic, HTTPS) | ⬜ Planned |
+
+---
+
+## Phase 1: Docker + Nginx Infrastructure ✅ DONE
+
+> Already implemented in the previous session.
+
+| Change | File | Status |
+|--------|------|--------|
+| Fixed [.env](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/.env) var names (`VOX_*`, DB `vox`) | [.env](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/.env) | ✅ |
+| Face login issues JWT token | [StudentLogin.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/pages/StudentLogin.tsx) | ✅ |
+| Added `espeak-ng` to Dockerfile | [Dockerfile](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/Dockerfile) | ✅ |
+| Created nginx reverse proxy | [nginx.conf](file:///d:/mindkraft/nginx.conf) | ✅ |
+| Created multi-stage nginx Dockerfile | [Dockerfile.nginx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/Dockerfile.nginx) | ✅ |
+| Updated docker-compose (nginx, Ollama fix) | [docker-compose.yml](file:///d:/mindkraft/docker-compose.yml) | ✅ |
+| Replaced deprecated `on_event` with [lifespan](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py#28-32) | [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py) | ✅ |
+| Tightened CORS to `FRONTEND_URL` | [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py) | ✅ |
+| Removed `--reload` from prod CMD | [Dockerfile](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/Dockerfile) | ✅ |
+
+---
+
+## Phase 2: Critical Security Fixes 🔴
+
+> Fixes: VULN-01, VULN-02, VULN-03, VULN-04, VULN-05, VULN-10
+
+---
+
+### 2.1 — JWT Auth on ALL Admin Routes (VULN-01 + VULN-10)
+
+#### [MODIFY] [security.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/security.py)
+
+Add reusable admin JWT dependency:
+
+```diff
++def require_admin_jwt(authorization: str = Header(..., alias="Authorization")) -> dict[str, Any]:
++    """Dependency: validates JWT and ensures admin/superadmin role."""
++    if not authorization.lower().startswith("bearer "):
++        raise HTTPException(status_code=401, detail="Authorization header required")
++    payload = decode_token(authorization.split(" ", 1)[1].strip())
++    if payload.get("role") not in ("admin", "superadmin"):
++        raise HTTPException(status_code=403, detail="Admin access required")
++    return payload
++
++
++def require_student_jwt(authorization: str = Header(..., alias="Authorization")) -> dict[str, Any]:
++    """Dependency: validates JWT and ensures student role."""
++    if not authorization.lower().startswith("bearer "):
++        raise HTTPException(status_code=401, detail="Authorization header required")
++    payload = decode_token(authorization.split(" ", 1)[1].strip())
++    if payload.get("role") not in ("student",):
++        raise HTTPException(status_code=403, detail="Student access required")
++    return payload
+```
+
+#### [MODIFY] [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py)
+
+**A) Make legacy admin login return JWT** (same as V1 login):
+
+```diff
+ @app.post("/api/admin/login")
+ async def admin_login(body: dict[str, Any]) -> dict[str, Any]:
+     username = str(body.get("username") or "")
+     password = str(body.get("password") or "")
++    admin = repo.find_admin_by_email(username)
++    if not admin or not verify_password(password, admin.get("passwordHash")):
++        raise HTTPException(status_code=401, detail="Invalid credentials")
++    token = create_token({"sub": str(admin["_id"]), "email": admin["email"],
++                          "name": admin.get("name", ""), "role": admin.get("role", "admin")})
++    return ok({"token": token, "admin": {...admin data...}})
+```
+
+**B) Add `Depends(require_admin_jwt)` to ALL legacy admin endpoints:**
+
+```diff
+-@app.get("/api/admin/exams")
+-def admin_exams() -> dict[str, Any]:
++@app.get("/api/admin/exams")
++def admin_exams(_auth: dict = Depends(require_admin_jwt)) -> dict[str, Any]:
+```
+
+Apply to all 13 admin endpoints:
+- `GET /api/admin/exams`
+- `POST /api/admin/create-exam`
+- `POST /api/admin/upload-exam-pdf`
+- `POST /api/admin/publish-exam`
+- `POST /api/admin/unpublish-exam`
+- `DELETE /api/admin/exam/{code}`
+- `PUT /api/admin/exam/{code}`
+- `POST /api/admin/register-student-face`
+- `GET /api/admin/dashboard/stats`
+- `GET /api/admin/activity`
+- `GET /api/admin/submissions`
+- `GET /api/admin/students-for-scoring`
+- `POST /api/admin/score`
+- `GET /api/admin/answers/{id}` + `/download`
+
+**C) Add `Depends(require_student_jwt)` to student data endpoints:**
+- `POST /api/student/submit-answer`
+- `GET /api/student/results`
+- `GET /api/student/exam-session`
+
+---
+
+### 2.2 — Remove Plaintext Password Fallback (VULN-02)
+
+#### [MODIFY] [security.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/security.py)
+
+```diff
+ def verify_password(password: str, stored_value: str | None) -> bool:
+     if not stored_value:
+         return False
+     if stored_value.startswith("$2"):
+         try:
+             return bcrypt.checkpw(password.encode("utf-8"), stored_value.encode("utf-8"))
+         except ValueError:
+             return False
+-    return stored_value == password
++    # Reject non-bcrypt passwords — never compare plaintext
++    return False
+```
+
+---
+
+### 2.3 — NoSQL Injection Prevention (VULN-04)
+
+#### [NEW] `app/utils/sanitize.py`
+
+Create an input sanitizer that strips MongoDB operators:
+
+```python
+"""Input sanitization to prevent NoSQL injection."""
+from typing import Any
+from fastapi import HTTPException
+
+MONGO_OPERATORS = {"$gt", "$gte", "$lt", "$lte", "$ne", "$in", "$nin",
+                   "$or", "$and", "$not", "$nor", "$exists", "$type",
+                   "$regex", "$where", "$all", "$elemMatch", "$size",
+                   "$expr", "$mod", "$text", "$search"}
+
+def sanitize_value(value: Any) -> Any:
+    """Recursively strip MongoDB operators from input."""
+    if isinstance(value, dict):
+        for key in value:
+            if key.startswith("$"):
+                raise HTTPException(status_code=400, detail=f"Invalid input: operator '{key}' not allowed")
+        return {k: sanitize_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [sanitize_value(item) for item in value]
+    return value
+
+def safe_str(value: Any) -> str:
+    """Ensure value is a plain string, reject dicts/lists (injection payloads)."""
+    if isinstance(value, (dict, list)):
+        raise HTTPException(status_code=400, detail="Invalid input: expected string")
+    return str(value).strip()
+```
+
+#### [MODIFY] [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py)
+
+Add sanitization to all login/query endpoints:
+
+```diff
++from .utils.sanitize import sanitize_value, safe_str
+
+ @app.post("/api/admin/login")
+ async def admin_login(body: dict[str, Any]) -> dict[str, Any]:
+-    username = str(body.get("username") or "")
+-    password = str(body.get("password") or "")
++    username = safe_str(body.get("username") or "")
++    password = safe_str(body.get("password") or "")
+```
+
+Apply `safe_str()` to all endpoints that receive `studentId`, [email](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/database.py#88-90), `examCode`, [password](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/security.py#11-13) fields.
+Apply `sanitize_value()` to any dict passed to MongoDB queries.
+
+---
+
+### 2.4 — Sanitize Error Responses (VULN-05)
+
+#### [MODIFY] [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py)
+
+```diff
+ @app.exception_handler(Exception)
+ async def generic_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
++    import traceback
++    traceback.print_exc()  # Log full trace server-side only
+-    return JSONResponse(status_code=500, content={"success": False, "error": str(exc), "message": str(exc)})
++    return JSONResponse(status_code=500, content={"success": False, "error": "Internal server error", "message": "An unexpected error occurred"})
+```
+
+---
+
+### 2.5 — Frontend Auth Hardening (VULN-03)
+
+#### [MODIFY] [adminlogin.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/pages/adminlogin.tsx)
+
+Update legacy admin login to store JWT from the new response:
+
+```diff
+ // After successful login response:
+-sessionStorage.setItem('adminAuth', 'true');
+-sessionStorage.setItem('adminUsername', username);
++// Store JWT token for authenticated API calls
++if (data.token) {
++  localStorage.setItem('vox_admin_token', data.token);
++}
++onLoginSuccess(data.token, data.admin);
+```
+
+#### [MODIFY] [ProtectedRoute.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/components/ProtectedRoute.tsx)
+
+Remove legacy `sessionStorage` fallback:
+
+```diff
+-  // Also check legacy session auth
+-  const legacyAuth = sessionStorage.getItem('adminAuth') === 'true';
+-  if (!isAuthenticated && !legacyAuth) {
++  if (!isAuthenticated) {
+     return <Navigate to={redirectTo} replace />;
+   }
+```
+
+Update student guard to check JWT:
+
+```diff
+ export const StudentProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+-  const studentAuth =
+-    sessionStorage.getItem('studentAuth') === 'true' ||
+-    Boolean(sessionStorage.getItem('studentId'));
++  const token = localStorage.getItem('vox_student_token');
++  const studentAuth = Boolean(token) || Boolean(sessionStorage.getItem('studentId'));
+```
+
+---
+
+### Phase 2 Verification
+
+```bash
+# Test admin routes reject unauthenticated calls
+curl -s http://localhost:4100/api/admin/exams
+# Expected: {"success": false, "error": "Authorization header required"} (401)
+
+# Test admin login returns JWT
+curl -s -X POST http://localhost:4100/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin@vox.edu","password":"ChangeMe@123"}'
+# Expected: {"success": true, "data": {"token": "eyJ..."}}
+
+# Test NoSQL injection is blocked
+curl -s -X POST http://localhost:4100/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":{"$gt":""},"password":{"$gt":""}}'
+# Expected: {"success": false, "error": "Invalid input: expected string"} (400)
+
+# Test error messages don't leak internals
+curl -s http://localhost:4100/api/admin/nonexistent
+# Expected: Generic error, no stack trace
+```
+
+---
+
+## Phase 3: Security Hardening 🟠
+
+> Fixes: VULN-06, VULN-07, VULN-09, VULN-12, VULN-13, Security Headers
+
+---
+
+### 3.1 — Rate Limiting (VULN-06)
+
+#### [NEW] `app/middleware/rate_limiter.py`
+
+Using `slowapi`:
+
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+```
+
+#### [MODIFY] [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py)
+
+```diff
++from slowapi import _rate_limit_exceeded_handler
++from slowapi.errors import RateLimitExceeded
++app.state.limiter = limiter
++app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+ @app.post("/api/admin/login")
++@limiter.limit("5/minute")
+ async def admin_login(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+
+ @app.post("/api/student/verify-face")
++@limiter.limit("10/minute")
+ async def student_verify_face(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+
+ @app.post("/api/auth/face-recognize")
++@limiter.limit("10/minute")
+ async def face_recognize(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+```
+
+#### [MODIFY] [requirements.txt](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/requirements.txt)
+
+```diff
++slowapi>=0.1.9
+```
+
+---
+
+### 3.2 — Stronger Face Auth Thresholds (VULN-07)
+
+#### [MODIFY] [face.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/services/face.py)
+
+```diff
+-        # Lowered thresholds for better real-world matching (was 0.85 / 0.55)
+-        matched = best_match is not None and (best_confidence >= 0.75 or best_distance < 0.70)
++        # Strict thresholds — both must pass (AND, not OR)
++        matched = best_match is not None and best_confidence >= 0.85 and best_distance < 0.55
+```
+
+Apply same change in [verify_face_by_student_id](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/services/face.py#107-136) method.
+
+---
+
+### 3.3 — JWT Secret Validation (VULN-09)
+
+#### [MODIFY] [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py)
+
+Add startup guard:
+
+```diff
+ @asynccontextmanager
+ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
++    # Reject weak JWT secrets in production
++    import os
++    if os.getenv("ENV", "development") == "production":
++        if len(settings.jwt_secret) < 32 or "change" in settings.jwt_secret.lower():
++            raise RuntimeError("FATAL: JWT_SECRET is too weak for production")
+     repo.initialize()
+     yield
+```
+
+---
+
+### 3.4 — MongoDB Authentication (VULN-12)
+
+#### [MODIFY] [docker-compose.yml](file:///d:/mindkraft/docker-compose.yml)
+
+```diff
+   mongo:
+     image: mongo:7
+     ports:
+       - "4200:27017"
+     environment:
+       MONGO_INITDB_DATABASE: vox
++      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-voxadmin}
++      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:-VoxSecure2026!}
+     volumes:
+       - mongo-data:/data/db
+
+   backend:
+     environment:
+-      MONGODB_URI: mongodb://mongo:27017
++      MONGODB_URI: mongodb://${MONGO_USER:-voxadmin}:${MONGO_PASS:-VoxSecure2026!}@mongo:27017
+```
+
+> [!WARNING]
+> After enabling MongoDB auth, delete the existing `mongo-data` volume: `docker compose down -v && docker compose up -d`
+
+---
+
+### 3.5 — Non-Root Docker Containers (VULN-13)
+
+#### [MODIFY] [Dockerfile](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/Dockerfile) (backend)
+
+```diff
++# Run as non-root user
++RUN adduser --disabled-password --gecos '' appuser
++USER appuser
+
+ CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000"]
+```
+
+---
+
+### 3.6 — Security Headers (nginx)
+
+#### [MODIFY] [nginx.conf](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/nginx.conf)
+
+```diff
+     # Security Headers
+     add_header X-Frame-Options "SAMEORIGIN" always;
+     add_header X-Content-Type-Options "nosniff" always;
+     add_header X-XSS-Protection "1; mode=block" always;
++    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' blob: data:; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:" always;
++    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
++    add_header Permissions-Policy "camera=(self), microphone=(self), geolocation=()" always;
++
++    # Hide server version
++    server_tokens off;
+```
+
+---
+
+### Phase 3 Verification
+
+```bash
+# Test rate limiting (6th login should be 429)
+for i in $(seq 1 6); do
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:4100/api/admin/login \
+    -H "Content-Type: application/json" -d '{"username":"wrong","password":"wrong"}'
+done
+
+# Test security headers
+curl -sI http://localhost:4100/ | grep -E "Content-Security|X-Frame|Referrer|Permissions"
+
+# Test MongoDB auth
+docker compose exec mongo mongosh --eval "db.adminCommand('ping')"
+# Should fail without credentials
+```
+
+---
+
+## Phase 4: Architecture & Defense in Depth 🟢
+
+---
+
+### 4.1 — Pydantic Request Models (full NoSQL injection prevention)
+
+#### [NEW] `app/models/requests.py`
+
+```python
+from pydantic import BaseModel, Field, field_validator
+import re
+
+class LoginRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=1, max_length=255)
+
+    @field_validator("username", "password")
+    @classmethod
+    def reject_operators(cls, v: str) -> str:
+        if isinstance(v, dict) or "$" in str(v):
+            raise ValueError("Invalid characters in input")
+        return v.strip()
+
+class FaceVerifyRequest(BaseModel):
+    examCode: str = Field(..., min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_-]+$")
+    liveDescriptor: list[float] = Field(..., min_length=64, max_length=256)
+
+class SubmitAnswerRequest(BaseModel):
+    studentId: str = Field(..., min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_-]+$")
+    examCode: str = Field(..., min_length=1, max_length=50, pattern=r"^[A-Za-z0-9_-]+$")
+    questionIndex: int = Field(..., ge=0)
+    answer: str = Field(..., max_length=10000)
+
+class CreateExamRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=50, pattern=r"^[A-Z0-9_]+$")
+    title: str = Field(..., min_length=1, max_length=200)
+    durationMinutes: int = Field(..., ge=5, le=480)
+    instructions: str = Field("", max_length=2000)
+    questions: list[dict] = Field(default_factory=list)
+
+class ScoreRequest(BaseModel):
+    studentId: str = Field(..., min_length=1, max_length=50)
+    score: int = Field(..., ge=0, le=100)
+```
+
+Then replace all `body: dict[str, Any]` in main.py with the Pydantic models.
+
+---
+
+### 4.2 — Liveness Detection (VULN-08)
+
+#### [MODIFY] [face.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/services/face.py)
+
+Add multi-frame variance check:
+
+```python
+def _check_liveness(descriptors: list[list[float]], min_frames: int = 3) -> bool:
+    """Ensure descriptors have natural variance (not a static photo)."""
+    if len(descriptors) < min_frames:
+        return False
+    # Calculate pairwise variance — real faces have micro-movements
+    variances = []
+    for i in range(len(descriptors) - 1):
+        dist = _euclidean_distance(descriptors[i], descriptors[i + 1])
+        variances.append(dist)
+    avg_variance = sum(variances) / len(variances)
+    # Real faces: 0.01-0.15 variance between frames
+    # Photos: < 0.005 (static) or > 0.3 (completely different)
+    return 0.005 < avg_variance < 0.30
+```
+
+---
+
+### 4.3 — Split Monolithic main.py into Router Modules
+
+#### [NEW] `app/routers/admin.py` — Admin endpoints (~150 lines)
+#### [NEW] `app/routers/student.py` — Student endpoints (~80 lines)
+#### [NEW] `app/routers/auth.py` — Auth endpoints (~50 lines)
+#### [NEW] `app/routers/face.py` — Face endpoints (~100 lines)
+#### [NEW] `app/routers/ai.py` — AI/TTS/STT endpoints (~60 lines)
+#### [NEW] `app/routers/v1.py` — V1 JWT-protected endpoints (~200 lines)
+
+#### [MODIFY] [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py) — Reduce to ~50 lines:
+
+```python
+from .routers import admin, student, auth, face, ai, v1
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(student.router, prefix="/api/student", tags=["student"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(face.router, prefix="/api/face", tags=["face"])
+app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
+app.include_router(v1.router, prefix="/api/v1", tags=["v1"])
+```
+
+---
+
+### 4.4 — HTTPS / TLS via Nginx
+
+#### [NEW] `certs/generate-dev-cert.sh`
+
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/nginx/ssl/key.pem -out /etc/nginx/ssl/cert.pem \
+  -subj "/CN=localhost"
+```
+
+#### [MODIFY] [nginx.conf](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/nginx.conf)
+
+```diff
++server {
++    listen 443 ssl;
++    ssl_certificate /etc/nginx/ssl/cert.pem;
++    ssl_certificate_key /etc/nginx/ssl/key.pem;
++    ssl_protocols TLSv1.2 TLSv1.3;
++    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
++    # ... rest of config
++}
++
+ server {
+     listen 80;
+-    # ... existing config
++    return 301 https://$host$request_uri;
+ }
+```
+
+---
+
+## File Change Summary
+
+| Phase | New Files | Modified Files | Total Changes |
+|-------|-----------|---------------|---------------|
+| Phase 1 ✅ | 2 ([nginx.conf](file:///d:/mindkraft/nginx.conf), [Dockerfile.nginx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/Dockerfile.nginx)) | 5 ([.env](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/.env) ×2, [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py), [Dockerfile](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/Dockerfile), [docker-compose.yml](file:///d:/mindkraft/docker-compose.yml), [StudentLogin.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/pages/StudentLogin.tsx), [client.ts](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/api/client.ts)) | 7 |
+| Phase 2 🔴 | 1 (`app/utils/sanitize.py`) | 4 ([security.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/security.py), [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py), [adminlogin.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/pages/adminlogin.tsx), [ProtectedRoute.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/components/ProtectedRoute.tsx)) | 5 |
+| Phase 3 🟠 | 1 (`app/middleware/rate_limiter.py`) | 5 ([main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py), [face.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/services/face.py), [nginx.conf](file:///d:/mindkraft/nginx.conf), [docker-compose.yml](file:///d:/mindkraft/docker-compose.yml), [Dockerfile](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/Dockerfile), [requirements.txt](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/requirements.txt)) | 6 |
+| Phase 4 🟢 | 9 (`app/models/requests.py`, `app/routers/*.py` ×6, `certs/generate-dev-cert.sh`, `app/routers/__init__.py`) | 3 ([main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py), [face.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/services/face.py), [nginx.conf](file:///d:/mindkraft/nginx.conf)) | 12 |
+| **Total** | **13** | **17** | **30** |
+
+---
+
+## Verification Plan
+
+### After Phase 2 (Critical)
+
+| Test | Command | Expected |
+|------|---------|----------|
+| Admin routes block unauth | `curl /api/admin/exams` | 401 |
+| Admin login returns JWT | `POST /api/admin/login` with creds | `{token: "eyJ..."}` |
+| NoSQL injection blocked | `POST /api/admin/login` with `{"$gt":""}` | 400 |
+| Plaintext password rejected | Login with unhashed password | 401 |
+| No stack traces in errors | Trigger server error | Generic message |
+
+### After Phase 3 (Hardening)
+
+| Test | Command | Expected |
+|------|---------|----------|
+| Rate limit on login | 6 rapid POSTs | 429 on 6th |
+| Security headers present | `curl -I /` | CSP, HSTS, etc |
+| MongoDB requires auth | `mongosh` without creds | Connection refused |
+| Face auth stricter | Low confidence match | Rejected |
+
+### After Phase 4 (Architecture)
+
+| Test | Command | Expected |
+|------|---------|----------|
+| HTTPS works | `curl https://localhost:4100` | 200 |
+| Pydantic rejects bad input | POST with missing fields | 422 |
+| Liveness rejects photo | Single-frame descriptor | Rejected |
+| All routers respond | Hit each `/api/*` prefix | Correct responses |

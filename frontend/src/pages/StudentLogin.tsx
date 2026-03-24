@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import * as faceapi from 'face-api.js';
-import { studentApi } from '../api/client';
+import { studentApi, setStoredToken } from '../api/client';
 
 export default function StudentLogin() {
   const navigate = useNavigate();
@@ -111,7 +111,7 @@ export default function StudentLogin() {
     }
   };
 
-  // Verify face with backend
+  // Verify face with backend and get JWT token
   const verifyWithBackend = async (descriptor: number[]) => {
     try {
       if (!descriptor || descriptor.length === 0) {
@@ -120,9 +120,18 @@ export default function StudentLogin() {
         return;
       }
 
-      const result = await studentApi.verifyFace(examCode || 'TECH101', descriptor);
+      // Use authenticateWithFace which calls /api/auth/face-recognize and returns a JWT
+      const result = await studentApi.authenticateWithFace({
+        examCode: examCode || 'TECH101',
+        liveDescriptor: descriptor,
+      });
 
       if (result.success && result.data?.matched) {
+        // Store JWT token for authenticated API calls
+        if (result.data.token) {
+          setStoredToken(result.data.token);
+        }
+
         // Store student info in session
         sessionStorage.setItem('studentAuth', 'true');
         sessionStorage.setItem('studentId', result.data.studentId || 'UNKNOWN');
@@ -133,10 +142,7 @@ export default function StudentLogin() {
       } else if (!result.success) {
         // API returned an error
         const errorMsg = result.error || 'Face verification failed. ';
-        const detailedMsg = result.data?.confidence !== undefined 
-          ? `${errorMsg}(Confidence: ${(result.data.confidence * 100).toFixed(1)}%)`
-          : errorMsg;
-        setError(detailedMsg);
+        setError(errorMsg);
         setDetecting(false);
       } else {
         // Face not matched

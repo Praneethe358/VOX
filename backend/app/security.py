@@ -20,7 +20,8 @@ def verify_password(password: str, stored_value: str | None) -> bool:
             return bcrypt.checkpw(password.encode("utf-8"), stored_value.encode("utf-8"))
         except ValueError:
             return False
-    return stored_value == password
+    # SECURITY: reject non-bcrypt passwords — never compare plaintext
+    return False
 
 
 def create_token(payload: dict[str, Any], expires_hours: int = 8) -> str:
@@ -48,6 +49,26 @@ def get_auth_payload(authorization: str | None = Header(default=None)) -> dict[s
         raise HTTPException(status_code=401, detail="Authorization header required")
     token = authorization.split(" ", 1)[1].strip()
     return decode_token(token)
+
+
+def require_admin_jwt(authorization: str = Header(..., alias="Authorization")) -> dict[str, Any]:
+    """FastAPI dependency: validates JWT and ensures admin/superadmin role."""
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    payload = decode_token(authorization.split(" ", 1)[1].strip())
+    if payload.get("role") not in ("admin", "superadmin", "super-admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return payload
+
+
+def require_student_jwt(authorization: str = Header(..., alias="Authorization")) -> dict[str, Any]:
+    """FastAPI dependency: validates JWT and ensures student role."""
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Authorization header required")
+    payload = decode_token(authorization.split(" ", 1)[1].strip())
+    if payload.get("role") not in ("student",):
+        raise HTTPException(status_code=403, detail="Student access required")
+    return payload
 
 
 def require_roles(*roles: str):

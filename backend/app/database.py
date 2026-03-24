@@ -333,7 +333,26 @@ class MongoRepository:
         ]
 
     def get_students_for_scoring(self) -> list[dict[str, Any]]:
-        return serialize(list(self.collection("students").find({})))
+        students = list(self.collection("students").find({}))
+        submissions = list(self.collection("submissions").find({}).sort("submittedAt", -1))
+        
+        # Build a map of latest exam per student
+        latest_exam_by_student: dict[str, str] = {}
+        for submission in submissions:
+            student_id = str(submission.get("studentId") or submission.get("rollNumber") or "")
+            if student_id and student_id not in latest_exam_by_student:
+                latest_exam_by_student[student_id] = str(submission.get("examCode") or submission.get("exam") or "Unknown")
+        
+        result = []
+        for student in students:
+            student_id = str(student.get("studentId") or student.get("rollNumber") or student.get("registerNumber") or "")
+            result.append({
+                **serialize(student),
+                "id": serialize(student.get("_id")),
+                "exam": latest_exam_by_student.get(student_id, student.get("exam") or student.get("examCode") or "No Exam"),
+            })
+        
+        return result
 
     def set_student_score(self, id_or_roll: str, score: int) -> None:
         self.collection("students").update_one(

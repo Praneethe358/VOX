@@ -50,11 +50,22 @@ export default function LoginFaceID() {
         // V1 unavailable or timed out — fall through to legacy
       }
 
-      // Fallback to legacy login
+      // Primary login (formerly "legacy" — now also returns JWT)
       const result = await adminApi.login(username, password);
-      if (result.success) {
+      if (result.success && result.data?.token) {
+        const admin = result.data.admin || {};
+        onLoginSuccess(result.data.token, {
+          id: admin.id || '',
+          name: admin.name || username,
+          email: admin.email || username,
+          role: admin.role || 'admin',
+          mfaEnabled: false,
+        });
+        setSuccess(true);
+        setTimeout(() => navigate("/admin"), 800);
+      } else if (result.success) {
+        // Backwards compat: server returned success without token
         sessionStorage.setItem('adminAuth', 'true');
-        sessionStorage.setItem('adminUsername', username);
         setSuccess(true);
         setTimeout(() => navigate("/admin"), 800);
       } else {

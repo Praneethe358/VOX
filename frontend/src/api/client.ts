@@ -356,7 +356,7 @@ class UnifiedApiClient {
   // ═══════════════════════════════════════════════════════════════════════════
   //  LEGACY AUTH — /api/auth/*
   // ═══════════════════════════════════════════════════════════════════════════
-  async authenticateWithFace(faceData: any) {
+  async authenticateWithFace(faceData: any): Promise<ApiResponse<{ matched: boolean; token?: string; studentId?: string; student?: any }>> {
     return this.request('/auth/face-recognize', 'POST', faceData);
   }
 
@@ -653,7 +653,10 @@ export const unifiedApiClient = new UnifiedApiClient();
 export const adminApi = {
   login: async (username: string, password: string) => {
     const response = await unifiedApiClient.loginAdmin(username, password);
-    return { success: response.success, error: response.error };
+    if (response.success && response.data && (response.data as any).authenticated === false) {
+      return { success: false, error: 'Invalid username or password' } as any;
+    }
+    return response as any;
   },
   v1Login: unifiedApiClient.v1AdminLogin.bind(unifiedApiClient),
   uploadExamPdf: unifiedApiClient.uploadExamPdf.bind(unifiedApiClient),

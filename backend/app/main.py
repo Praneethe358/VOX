@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,7 +14,8 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .config import get_settings
 from .database import MongoRepository
-from .security import create_token, decode_token, require_roles, verify_password
+from .security import create_token, decode_token, require_admin_jwt, require_roles, verify_password
+from .utils.sanitize import safe_str, sanitize_value
 from .services.ai import AIService
 from .services.face import FaceService
 from .services.pdf_parser import extract_questions, parse_pdf_file, parse_uploaded_exam
@@ -22,11 +25,21 @@ repo = MongoRepository(settings)
 face_service = FaceService(repo)
 ai_service = AIService(settings)
 
-app = FastAPI(title="vox-backend", version="2.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+    repo.initialize()
+    yield
+
+
+app = FastAPI(title="vox-backend", version="2.0.0", lifespan=lifespan)
+
+# CORS — use FRONTEND_URL for production, fall back to * for local dev
+allowed_origins = [settings.frontend_url] if settings.frontend_url else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -40,10 +53,6 @@ def ok(data: Any = None, message: str | None = None) -> dict[str, Any]:
         payload["message"] = message
     return payload
 
-
-@app.on_event("startup")
-def startup() -> None:
-    repo.initialize()
 
 
 @app.exception_handler(HTTPException)
@@ -61,7 +70,9 @@ async def validation_exception_handler(_request: Request, exc: RequestValidation
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
-    return JSONResponse(status_code=500, content={"success": False, "error": str(exc), "message": str(exc)})
+    import traceback
+    traceback.print_exc()  # Log full trace server-side only
+    return JSONResponse(status_code=500, content={"success": False, "error": "Internal server error", "message": "An unexpected error occurred"})
 
 
 def require_admin_or_401(username: str, password: str) -> None:
@@ -96,21 +107,44 @@ def get_exam_by_id_compat(exam_id: str) -> dict[str, Any]:
 
 @app.post("/api/admin/login")
 async def admin_login(body: dict[str, Any]) -> dict[str, Any]:
-    username = str(body.get("username") or "")
-    password = str(body.get("password") or "")
+    username = safe_str(body.get("username") or "")
+    password = safe_str(body.get("password") or "")
     if not username or not password:
         raise HTTPException(status_code=400, detail="username and password required")
-    require_admin_or_401(username, password)
-    return ok({"authenticated": True})
+    # Verify credentials via existing method
+    if not repo.admin_login(username, password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    # Fetch admin record for JWT payload
+    admin = repo.collection("admins").find_one(
+        {"$or": [{"username": username}, {"email": username.lower().strip()}]}
+    )
+    if not admin:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_token({
+        "sub": str(admin.get("_id", "")),
+        "email": admin.get("email", ""),
+        "name": admin.get("name", ""),
+        "role": admin.get("role", "admin"),
+    })
+    return ok({
+        "authenticated": True,
+        "token": token,
+        "admin": {
+            "id": str(admin.get("_id", "")),
+            "name": admin.get("name", ""),
+            "email": admin.get("email", ""),
+            "role": admin.get("role", "admin"),
+        },
+    })
 
 
 @app.get("/api/admin/exams")
-def admin_exams() -> dict[str, Any]:
+def admin_exams(_auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     return ok(repo.get_all_exams())
 
 
 @app.post("/api/admin/create-exam")
-async def create_exam(body: dict[str, Any]) -> dict[str, Any]:
+async def create_exam(body: dict[str, Any], _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     title = str(body.get("title") or "").strip()
     if not title:
         raise HTTPException(status_code=400, detail="title is required")
@@ -151,6 +185,7 @@ async def upload_exam_pdf(
     title: str = Form(...),
     durationMinutes: str = Form(default="30"),
     instructions: str | None = Form(default=None),
+    _auth: dict[str, Any] = Depends(require_admin_jwt),
 ) -> dict[str, Any]:
     exam_code = (code or title).strip().upper().replace(" ", "_")
     exam_code = "".join(char for char in exam_code if char.isalnum() or char == "_")
@@ -182,7 +217,7 @@ async def upload_exam_pdf(
 
 
 @app.post("/api/admin/publish-exam")
-async def publish_exam(body: dict[str, Any]) -> dict[str, Any]:
+async def publish_exam(body: dict[str, Any], _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     code = str(body.get("code") or "")
     if not code:
         raise HTTPException(status_code=400, detail="code required")
@@ -191,7 +226,7 @@ async def publish_exam(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.post("/api/admin/unpublish-exam")
-async def unpublish_exam(body: dict[str, Any]) -> dict[str, Any]:
+async def unpublish_exam(body: dict[str, Any], _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     code = str(body.get("code") or "")
     if not code:
         raise HTTPException(status_code=400, detail="code required")
@@ -200,47 +235,47 @@ async def unpublish_exam(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.delete("/api/admin/exam/{code}")
-def delete_exam(code: str) -> dict[str, Any]:
+def delete_exam(code: str, _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     if not repo.delete_exam(code):
         raise HTTPException(status_code=404, detail="Exam not found")
     return ok({"deleted": True, "code": code})
 
 
 @app.put("/api/admin/exam/{code}")
-async def update_exam(code: str, body: dict[str, Any]) -> dict[str, Any]:
+async def update_exam(code: str, body: dict[str, Any], _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     if not repo.update_exam(code, body):
         raise HTTPException(status_code=404, detail="Exam not found")
     return ok({"updated": True, "code": code})
 
 
 @app.post("/api/admin/register-student-face")
-async def register_student_face(body: dict[str, Any]) -> dict[str, Any]:
+async def register_student_face(body: dict[str, Any], _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     repo.register_student({**body, "registeredAt": body.get("registeredAt") or datetime.now(timezone.utc).isoformat()})
     return ok({"registered": True})
 
 
 @app.get("/api/admin/dashboard/stats")
-def admin_dashboard_stats() -> dict[str, Any]:
+def admin_dashboard_stats(_auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     return ok(repo.get_dashboard_stats())
 
 
 @app.get("/api/admin/activity")
-def admin_activity() -> dict[str, Any]:
+def admin_activity(_auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     return ok(repo.get_recent_activity())
 
 
 @app.get("/api/admin/submissions")
-def admin_submissions() -> dict[str, Any]:
+def admin_submissions(_auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     return ok(repo.get_submissions())
 
 
 @app.get("/api/admin/students-for-scoring")
-def students_for_scoring() -> dict[str, Any]:
+def students_for_scoring(_auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     return ok(repo.get_students_for_scoring())
 
 
 @app.post("/api/admin/score")
-async def admin_score(body: dict[str, Any]) -> dict[str, Any]:
+async def admin_score(body: dict[str, Any], _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     student_id = body.get("studentId")
     score = body.get("score")
     if student_id is None or score is None:
@@ -250,7 +285,7 @@ async def admin_score(body: dict[str, Any]) -> dict[str, Any]:
 
 
 @app.get("/api/admin/answers/{student_id}/download")
-def download_answers(student_id: str, examCode: str | None = None) -> PlainTextResponse:
+def download_answers(student_id: str, examCode: str | None = None, _auth: dict[str, Any] = Depends(require_admin_jwt)) -> PlainTextResponse:
     answers = repo.get_student_answers(student_id, examCode)
     lines = []
     for index, answer in enumerate(answers):
@@ -265,7 +300,7 @@ def download_answers(student_id: str, examCode: str | None = None) -> PlainTextR
 
 
 @app.get("/api/admin/answers/{student_id}")
-def admin_answers(student_id: str, examCode: str | None = None) -> dict[str, Any]:
+def admin_answers(student_id: str, examCode: str | None = None, _auth: dict[str, Any] = Depends(require_admin_jwt)) -> dict[str, Any]:
     return ok(repo.get_student_answers(student_id, examCode))
 
 
@@ -344,8 +379,8 @@ async def end_exam(body: dict[str, Any]) -> dict[str, Any]:
 
 @app.post("/api/auth/login")
 async def auth_login(body: dict[str, Any]) -> dict[str, Any]:
-    email = str(body.get("email") or "")
-    password = str(body.get("password") or "")
+    email = safe_str(body.get("email") or "")
+    password = safe_str(body.get("password") or "")
     if not email or not password:
         raise HTTPException(status_code=400, detail="email and password required")
     student = repo.find_student_by_credentials(email, password)

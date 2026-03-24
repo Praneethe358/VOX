@@ -1,0 +1,345 @@
+# 🔒 MindKraft (Vox) — Security Audit & Hardening Plan
+
+## Executive Summary
+
+The application has **15+ critical/high vulnerabilities** that can be exploited to bypass auth, access admin APIs without credentials, extract student data, spoof face recognition, and perform injection attacks. This plan prioritizes fixes by exploitability.
+
+---
+
+## Current Security Posture
+
+| Area | Status | Grade |
+|------|--------|-------|
+| Admin Auth (V1 JWT) | JWT-protected, bcrypt hashing | 🟡 B |
+| Admin Auth (Legacy) | **No JWT, no session — completely open** | 🔴 F |
+| Student Auth | **Client-side sessionStorage only** | 🔴 F |
+| API Authorization | **30+ admin routes have zero auth** | 🔴 F |
+| Rate Limiting | **None** | 🔴 F |
+| Input Validation | **No sanitization, raw dict bodies** | 🔴 F |
+| Secrets Management | Hardcoded in .env, committed to repo | 🟠 D |
+| Face Auth Security | Lowered thresholds, no liveness check | 🟠 D |
+| Docker Security | Root user, no resource limits | 🟡 C |
+| Error Handling | **Stack traces leaked to client** | 🔴 F |
+
+---
+
+## 🔴 Critical Vulnerabilities
+
+### VULN-01: All Legacy Admin Routes Are Completely Unprotected
+
+> [!CAUTION]
+> **CVSS: 9.8 (Critical)** — Any anonymous user can call ALL `/api/admin/*` endpoints without any authentication.
+
+**Affected routes (13 endpoints):**
+```
+GET  /api/admin/exams              ← List all exams
+POST /api/admin/create-exam        ← Create exams
+POST /api/admin/upload-exam-pdf    ← Upload question papers
+POST /api/admin/publish-exam       ← Publish exams
+POST /api/admin/unpublish-exam     ← Unpublish exams
+DELETE /api/admin/exam/{code}      ← Delete exams
+PUT  /api/admin/exam/{code}        ← Modify exams
+POST /api/admin/register-student-face ← Register face embeddings
+GET  /api/admin/dashboard/stats    ← View stats
+GET  /api/admin/activity           ← View audit logs
+GET  /api/admin/submissions        ← View all submissions
+GET  /api/admin/students-for-scoring ← View all students
+POST /api/admin/score              ← Modify student scores
+GET  /api/admin/answers/{id}       ← View student answers
+GET  /api/admin/answers/{id}/download ← Download answers
+```
+
+**Exploit:** `curl http://localhost:4000/api/admin/exams` — returns all exams, no auth needed.
+
+**Root cause:** Legacy `/api/admin/login` only verifies credentials and returns `{authenticated: true}` — it does NOT issue a JWT token, so there's nothing to validate on subsequent requests.
+
+---
+
+### VULN-02: Plaintext Password Fallback
+
+> [!CAUTION]
+> **CVSS: 9.1 (Critical)** — [verify_password()](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/security.py#15-24) falls back to **plaintext comparison** for non-bcrypt passwords.
+
+**File:** [security.py:23](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/security.py#L23)
+```python
+return stored_value == password  # ← Plaintext comparison!
+```
+
+Any password stored without the `$2` bcrypt prefix is compared as raw plaintext. The seed script stores `passwordHash: 'student123'` — this means student login with `student123` will succeed via plaintext comparison.
+
+---
+
+### VULN-03: Student Auth is Client-Side Only (Trivially Bypassable)
+
+> [!CAUTION]
+> **CVSS: 8.5 (High)** — Student-protected routes only check `sessionStorage` in the browser. Zero server-side verification.
+
+**File:** [ProtectedRoute.tsx:50-52](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/components/ProtectedRoute.tsx#L50-L52)
+```typescript
+const studentAuth =
+    sessionStorage.getItem('studentAuth') === 'true' ||
+    Boolean(sessionStorage.getItem('studentId'));
+```
+
+**Exploit:** Open browser console → `sessionStorage.setItem('studentAuth', 'true')` → access any student page. No backend verification whatsoever.
+
+Additionally, student API endpoints (`/api/student/*`) have **no auth middleware** — any anonymous HTTP client can call them.
+
+---
+
+### VULN-04: NoSQL Injection via Raw dict Bodies
+
+> [!WARNING]
+> **CVSS: 8.2 (High)** — All routes accept `body: dict[str, Any]` with no validation. MongoDB operators can be injected.
+
+**Example attack on admin login:**
+```json
+POST /api/admin/login
+{
+  "username": {"$gt": ""},
+  "password": {"$gt": ""}
+}
+```
+
+Since PyMongo passes these directly to `find_one()`, MongoDB operators like `$gt`, `$ne`, `$regex` can bypass authentication or extract data.
+
+---
+
+### VULN-05: Stack Traces Leaked to Clients
+
+> [!WARNING]
+> **CVSS: 5.3 (Medium)** — The generic exception handler returns `str(exc)` which exposes internal details.
+
+**File:** [main.py:70-72](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py#L70-L72)
+```python
+async def generic_exception_handler(_request, exc):
+    return JSONResponse(status_code=500, content={"error": str(exc), "message": str(exc)})
+```
+
+This leaks file paths, database queries, and stack traces to attackers.
+
+---
+
+## 🟠 High Vulnerabilities
+
+### VULN-06: No Rate Limiting on Any Endpoint
+
+- Face recognition can be brute-forced with all possible embeddings
+- Admin login can be brute-forced
+- No throttling on API calls → easy DoS
+
+### VULN-07: Face Auth Thresholds Too Low
+
+Cosine similarity threshold lowered from `0.85` to `0.75` and Euclidean from `0.55` to `0.70`. The `OR` condition makes it worse — either threshold passing is enough. This increases false positive acceptance rate.
+
+### VULN-08: No Liveness Detection Enforcement
+
+The README mentions liveness detection, but the backend does zero liveness verification. A printed photo or screen showing a face will pass verification.
+
+### VULN-09: JWT Secret Hardcoded in Source
+
+**File:** [config.py:11](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/config.py#L11)
+```python
+jwt_secret: str = "vox-local-dev-secret-change-this"
+```
+
+Docker Compose uses `vox-docker-dev-secret-change-this`. Both are guessable defaults.
+
+### VULN-10: Admin Legacy Login Has No JWT — Sessions Are Stateless
+
+The `/api/admin/login` endpoint returns `{authenticated: true}` but **no token**. The frontend sets `sessionStorage.setItem('adminAuth', 'true')` — same trivial bypass as students.
+
+### VULN-11: Face Embeddings Stored/Transmitted Unencrypted
+
+128-dimensional face embeddings are biometric data. They're stored in MongoDB without encryption and transmitted over HTTP in plain JSON.
+
+### VULN-12: MongoDB Has No Authentication
+
+Docker Compose runs MongoDB without `MONGO_INITDB_ROOT_USERNAME`/`MONGO_INITDB_ROOT_PASSWORD`. Anyone with network access can connect directly.
+
+---
+
+## 🟡 Medium Vulnerabilities
+
+### VULN-13: Docker Runs as Root
+
+Both backend and frontend containers run as root user — container escape gives full host access.
+
+### VULN-14: No Request Size Limits on Backend
+
+No `max_body_size` on FastAPI — an attacker can send multi-GB payloads to crash the server.
+
+### VULN-15: Exam Questions Accessible Without Auth
+
+`GET /api/student/exams` and `GET /api/student/exam/{code}` return full exam questions without any authentication.
+
+---
+
+## Proposed Changes
+
+### Component 1: Backend Authentication Hardening
+
+---
+
+#### [MODIFY] [main.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/main.py)
+
+- **Fix VULN-01:** Add JWT middleware to ALL `/api/admin/*` legacy routes via a `Depends(require_admin_jwt)` dependency
+- **Fix VULN-04:** Replace raw `dict[str, Any]` bodies with Pydantic models for input validation and block MongoDB operators
+- **Fix VULN-05:** Sanitize generic exception handler — log full error server-side, return generic message to client
+- **Fix VULN-10:** Make `/api/admin/login` return a JWT token (same as V1 login does)
+- **Fix VULN-15:** Add JWT dependency to student exam endpoints
+
+#### [MODIFY] [security.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/security.py)
+
+- **Fix VULN-02:** Remove plaintext password fallback — only accept bcrypt hashes
+- Add `require_admin_jwt` dependency function for legacy routes
+- Add `require_student_jwt` dependency function
+
+#### [NEW] `app/middleware/rate_limiter.py`
+
+- **Fix VULN-06:** Add rate limiting middleware:
+  - Login endpoints: 5 attempts per 15 minutes per IP
+  - Face verification: 10 attempts per 15 minutes per IP
+  - General API: 100 requests per minute per IP
+
+#### [NEW] `app/models/` (Pydantic request models)
+
+- **Fix VULN-04:** Define strict Pydantic models for all request bodies
+- Validates types, rejects MongoDB operators like `$gt`, `$ne`
+
+---
+
+### Component 2: Face Auth Hardening
+
+---
+
+#### [MODIFY] [face.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/services/face.py)
+
+- **Fix VULN-07:** Restore thresholds to `0.85` cosine / `0.55` euclidean, use AND instead of OR
+- **Fix VULN-08:** Add server-side liveness score check (require multiple frame descriptors with variance)
+- Add embedding dimension validation (reject if not exactly 128D)
+- Encrypt embeddings at rest using field-level encryption
+
+---
+
+### Component 3: Frontend Auth Hardening
+
+---
+
+#### [MODIFY] [ProtectedRoute.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/components/ProtectedRoute.tsx)
+
+- **Fix VULN-03:** Replace `sessionStorage` check with JWT token validation
+- [StudentProtectedRoute](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/components/ProtectedRoute.tsx#46-60) must check for valid JWT in localStorage, not just a flag
+
+#### [MODIFY] [adminlogin.tsx](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/src/pages/adminlogin.tsx)
+
+- **Fix VULN-10:** Store JWT from login response and use AuthContext properly
+
+---
+
+### Component 4: Docker & Infrastructure Hardening
+
+---
+
+#### [MODIFY] [docker-compose.yml](file:///d:/mindkraft/docker-compose.yml)
+
+- **Fix VULN-12:** Add MongoDB auth (`MONGO_INITDB_ROOT_USERNAME`, `MONGO_INITDB_ROOT_PASSWORD`)
+- **Fix VULN-13:** Add `user: "1000:1000"` to backend/frontend containers
+- Add resource limits (`mem_limit`, `cpus`)
+- Add `read_only: true` where possible
+- Move secrets to Docker secrets or [.env](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/.env) file excluded from git
+
+#### [MODIFY] [Dockerfile](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/Dockerfile)
+
+- **Fix VULN-13:** Add non-root user (`RUN adduser --disabled-password appuser && USER appuser`)
+
+#### [MODIFY] [nginx.conf](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/nginx.conf)
+
+- **Fix VULN-14:** Add `client_max_body_size 10M`
+- Add rate limiting via `limit_req_zone`
+- Add HTTPS/TLS support (self-signed cert for dev)
+- Remove server version headers
+
+---
+
+### Component 5: Secrets Management
+
+---
+
+#### [MODIFY] [config.py](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/app/config.py)
+
+- **Fix VULN-09:** Add startup validation — refuse to start if `jwt_secret` is a default/weak value
+- Add minimum secret length enforcement (32+ characters)
+
+#### [NEW] [.env.example](file:///d:/mindkraft/Team-A-Frontend/Team-A-Backend/Team-A-Backend/.env.example)
+
+- Document required secrets without actual values
+- Add strong random default generation instructions
+
+#### [MODIFY] [.gitignore](file:///d:/mindkraft/Team-A-Frontend/.git)
+
+- Ensure [.env](file:///d:/mindkraft/Team-A-Frontend/Team-A-Frontend/.env) files are gitignored (verify current state)
+
+---
+
+## Prioritized Implementation
+
+### 🔴 Sprint 1 — Stop the Bleeding (1-2 hours)
+
+| # | Fix | Vulnerability |
+|---|-----|--------------|
+| 1 | Add JWT auth to ALL `/api/admin/*` routes | VULN-01 |
+| 2 | Remove plaintext password fallback | VULN-02 |
+| 3 | Make legacy admin login return JWT | VULN-10 |
+| 4 | Sanitize error responses | VULN-05 |
+| 5 | Add basic input validation (block `$` operators) | VULN-04 |
+| 6 | Add JWT auth to student API routes | VULN-03, VULN-15 |
+
+### 🟠 Sprint 2 — Harden (2-3 hours)
+
+| # | Fix | Vulnerability |
+|---|-----|--------------|
+| 7 | Add rate limiting | VULN-06 |
+| 8 | Restore face auth thresholds + AND logic | VULN-07 |
+| 9 | Add MongoDB authentication | VULN-12 |
+| 10 | Non-root Docker containers | VULN-13 |
+| 11 | Strong JWT secret validation on startup | VULN-09 |
+
+### 🟢 Sprint 3 — Defense in Depth (3-4 hours)
+
+| # | Fix | Vulnerability |
+|---|-----|--------------|
+| 12 | Pydantic request models for all endpoints | VULN-04 |
+| 13 | Server-side liveness detection | VULN-08 |
+| 14 | Encrypt face embeddings at rest | VULN-11 |
+| 15 | HTTPS/TLS via nginx | Network security |
+| 16 | Frontend JWT validation in ProtectedRoute | VULN-03 |
+| 17 | Security headers (CSP, HSTS) | Best practice |
+| 18 | Docker resource limits + read-only FS | VULN-13, VULN-14 |
+
+---
+
+## Verification Plan
+
+### Automated
+```bash
+# Test that admin routes REJECT unauthenticated requests
+curl -s http://localhost:4100/api/admin/exams | grep -q "401"
+
+# Test that NoSQL injection is blocked
+curl -s -X POST http://localhost:4100/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":{"$gt":""},"password":{"$gt":""}}' | grep -q "400"
+
+# Test rate limiting
+for i in $(seq 1 10); do
+  curl -s -X POST http://localhost:4100/api/admin/login \
+    -d '{"username":"wrong","password":"wrong"}' -H "Content-Type: application/json"
+done
+# 6th+ should return 429 Too Many Requests
+```
+
+### Manual Browser Testing
+- Verify `sessionStorage.setItem('studentAuth', 'true')` NO LONGER bypasses auth
+- Verify admin portal requires JWT login
+- Verify face login with photo fails liveness check

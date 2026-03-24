@@ -1,0 +1,69 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.nginx
+    ports:
+      - "4100:80"
+    depends_on:
+      - backend
+    networks:
+      - mindkraft-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "4000:3000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB_NAME: vox
+      FRONTEND_URL: http://localhost:4100
+      JWT_SECRET: ${JWT_SECRET:-vox-docker-dev-secret-change-this}
+      OLLAMA_URL: http://ollama:11434
+      ESPEAK_BIN: espeak-ng
+    depends_on:
+      - mongo
+    networks:
+      - mindkraft-network
+    restart: unless-stopped
+    volumes:
+      - ./backend/app:/app/app
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "4200:27017"
+    environment:
+      MONGO_INITDB_DATABASE: vox
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    networks:
+      - mindkraft-network
+    restart: unless-stopped
+
+  # Ollama for local LLM support (answer formatting)
+  # Uncomment to enable AI-assisted MCQ answer formatting
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "4300:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - mindkraft-network
+  #   restart: unless-stopped
+  #   environment:
+  #     OLLAMA_HOST: 0.0.0.0:11434
+
+volumes:
+  mongo-data:
+  mongo-config:
+  # ollama-data:
+
+networks:
+  mindkraft-network:
+    driver: bridge

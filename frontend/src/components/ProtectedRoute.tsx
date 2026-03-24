@@ -21,9 +21,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 }) => {
   const { isAuthenticated, isLoading, admin } = useAuth();
 
-  // Also check legacy session auth
-  const legacyAuth = sessionStorage.getItem('adminAuth') === 'true';
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -32,7 +29,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     );
   }
 
-  if (!isAuthenticated && !legacyAuth) {
+  // SECURITY: removed legacy sessionStorage check — JWT auth only
+  if (!isAuthenticated) {
     return <Navigate to={redirectTo} replace />;
   }
 

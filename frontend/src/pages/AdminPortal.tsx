@@ -1393,8 +1393,8 @@ const ScoreSection: React.FC = () => {  const toast = useToast();  const [search
                     initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.025 }}
                   >
-                    <td style={{ fontWeight: 600, color: 'var(--text)' }}>{student.name}</td>
-                    <td style={{ fontFamily: 'monospace', color: 'var(--accent-lt)', fontSize: '12.5px' }}>{student.exam}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--text)' }}>{student.name || 'N/A'}</td>
+                    <td style={{ fontFamily: 'monospace', color: 'var(--accent-lt)', fontSize: '12.5px' }}>{student.exam || 'No Exam'}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <input type="number" placeholder="0–100" min="0" max="100"
