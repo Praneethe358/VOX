@@ -155,8 +155,19 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   // ── Voice Selection (Web Speech API) ────────────────────────────────────
 
   const getBestVoice = useCallback((): SpeechSynthesisVoice | null => {
-    if (selectedVoiceRef.current) return selectedVoiceRef.current;
     const voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0) return null;
+
+    // Check if cached voice is still available
+    if (selectedVoiceRef.current) {
+      const stillAvailable = voices.some(
+        v => v.name === selectedVoiceRef.current!.name && v.lang === selectedVoiceRef.current!.lang
+      );
+      if (stillAvailable) return selectedVoiceRef.current;
+      // Cache is stale, clear it
+      selectedVoiceRef.current = null;
+    }
+
     // Prefer natural-sounding Microsoft / Google voices
     const preferred = [
       'Microsoft Zira',
@@ -168,21 +179,46 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     ];
     for (const name of preferred) {
       const v = voices.find(voice => voice.name.includes(name));
-      if (v) { selectedVoiceRef.current = v; return v; }
+      if (v) {
+        selectedVoiceRef.current = v;
+        console.log('[TTS] Selected voice:', v.name, `(${v.lang})`);
+        return v;
+      }
     }
+
     // Fallback: any English voice
     const enVoice = voices.find(v => v.lang.startsWith('en'));
-    if (enVoice) { selectedVoiceRef.current = enVoice; return enVoice; }
-    return voices[0] || null;
+    if (enVoice) {
+      selectedVoiceRef.current = enVoice;
+      console.log('[TTS] Selected fallback voice:', enVoice.name, `(${enVoice.lang})`);
+      return enVoice;
+    }
+
+    // Last resort: first voice
+    if (voices.length > 0) {
+      selectedVoiceRef.current = voices[0];
+      console.log('[TTS] Selected first available voice:', voices[0].name);
+      return voices[0];
+    }
+
+    return null;
   }, []);
 
   // Pre-load voices (some browsers load them asynchronously)
   useEffect(() => {
     const load = () => {
-      if (window.speechSynthesis.getVoices().length > 0) getBestVoice();
+      const voiceCount = window.speechSynthesis.getVoices().length;
+      if (voiceCount > 0) {
+        console.log(`[TTS] Voices loaded: ${voiceCount}`);
+        getBestVoice();
+      }
     };
     load();
-    window.speechSynthesis.onvoiceschanged = load;
+    window.speechSynthesis.onvoiceschanged = () => {
+      console.log('[TTS] Voice list changed, clearing cache');
+      selectedVoiceRef.current = null;
+      load();
+    };
     return () => { window.speechSynthesis.onvoiceschanged = null; };
   }, [getBestVoice]);
 
@@ -192,7 +228,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     // Advance generation — any in-progress _doSpeak will self-cancel
     speakGenRef.current += 1;
     // Cancel any ongoing browser speech
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch (err) {
+      console.warn('[TTS] Error canceling speech:', err);
+    }
     // Reset queue so next speak() starts immediately
     speakQueueRef.current = Promise.resolve();
     setIsSpeaking(false);
@@ -213,14 +253,24 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           console.log('[TTS] Speaking:', text.substring(0, 60));
 
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.rate = rate;
-          utterance.pitch = pitch;
+          
+          // Normalize rate and pitch to valid ranges
+          utterance.rate = Math.max(0.1, Math.min(10, rate));    // 0.1 - 10
+          utterance.pitch = Math.max(0, Math.min(2, pitch));     // 0 - 2
           utterance.lang = 'en-US';
+          utterance.volume = 1;
 
-          const voice = getBestVoice();
-          if (voice) {
-            utterance.voice = voice;
-            console.log('[TTS] Using voice:', voice.name);
+          // Try to assign voice, but don't fail if it's not available
+          try {
+            const voice = getBestVoice();
+            if (voice) {
+              utterance.voice = voice;
+              console.log('[TTS] Using voice:', voice.name, `(${voice.lang})`);
+            } else {
+              console.warn('[TTS] No voice available, using system default');
+            }
+          } catch (voiceErr) {
+            console.warn('[TTS] Voice assignment error, using system default:', voiceErr);
           }
 
           utterance.onend = () => {
@@ -228,17 +278,26 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
             resolve();
           };
 
-          utterance.onerror = (event) => {
+          utterance.onerror = (event: any) => {
             if (event.error !== 'canceled' && event.error !== 'interrupted') {
-              console.error('[TTS] Error:', event.error);
+              console.error('[TTS] Speaking error:', event.error);
+              // Don't retry on voice errors — just finish
             }
             if (speakGenRef.current === gen) setIsSpeaking(false);
             resolve();
           };
 
+          utterance.onpause = () => {
+            console.log('[TTS] Speaking paused');
+          };
+
+          utterance.onresume = () => {
+            console.log('[TTS] Speaking resumed');
+          };
+
           window.speechSynthesis.speak(utterance);
         } catch (err) {
-          console.error('[TTS] Error:', err);
+          console.error('[TTS] Unexpected error:', err);
           if (speakGenRef.current === gen) setIsSpeaking(false);
           resolve();
         }
@@ -249,7 +308,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   const speak = useCallback(
     (text: string, options: SpeakOptions = {}): Promise<void> => {
-      const { rate = 0.95, pitch = 1, interrupt = true } = options;
+      const { rate = 1.0, pitch = 1, interrupt = true } = options;
+
+      if (!text || !text.trim()) {
+        console.warn('[TTS] Refusing to speak empty text');
+        return Promise.resolve();
+      }
 
       if (interrupt) {
         // Advance generation and clear any in-flight speech, reset queue

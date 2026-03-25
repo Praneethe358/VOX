@@ -51,7 +51,7 @@ class QuestionInput(BaseModel):
     text: str = ""
     type: str | None = None
     options: list[str] | None = None
-    correctAnswer: str | None = None
+    correctAnswer: int | str | None = None
 
 
 class CreateExamRequest(BaseModel):

@@ -32,3 +32,5 @@ mongo-data/
 # ── Misc ──
 *.log
 restructure.bat
+venv/  
+mongo-config/ 

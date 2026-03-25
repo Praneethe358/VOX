@@ -33,7 +33,7 @@ export interface UseDictationReturn {
 
 export function useDictation({
   onDictationEnd,
-  silenceTimeout = 10000,
+  silenceTimeout = 5000,
   lang = 'en-US',
 }: UseDictationOptions): UseDictationReturn {
   const { playBeep, isSpeaking } = useVoiceContext();

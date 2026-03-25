@@ -189,7 +189,8 @@ export function ExamInterface() {
   }, [speak, transition, setRawTranscript, setFormattedAnswer, currentQuestion, isWrittenDictation]);
 
   const { isRecording, interimText, finalText: dictationFinalText, lastError: dictationError, start: startDictation, stop: stopDictation, reset: resetDictation } =
-    useDictation({ onDictationEnd: handleDictationEnd, silenceTimeout: 10_000 });
+    useDictation({ onDictationEnd: handleDictationEnd, silenceTimeout: 5_000 });
+
 
   // Keep written answer draft synced with finalized dictated text while recording.
   useEffect(() => {

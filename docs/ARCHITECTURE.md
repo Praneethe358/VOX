@@ -67,7 +67,7 @@ Additional branch:
 
 - STT source: browser SpeechRecognition/webkitSpeechRecognition.
 - Transcript streams directly into answer input.
-- 10-second silence timeout stops dictation.
+- 5-second silence timeout stops dictation.
 - Continue dictation preserves existing text and appends new speech.
 
 ## Authentication Architecture
@@ -151,3 +151,4 @@ The following are not active in current Phase 2 flow and should be treated as le
 3. Hybrid input for written questions (voice + typing).
 4. Security and auditability across full exam lifecycle.
 5. Backward-compatible API evolution during migration.
+

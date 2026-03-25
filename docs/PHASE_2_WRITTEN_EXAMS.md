@@ -241,7 +241,7 @@ Student says "start answer"
     ↓
 Student speaks answer
     ↓
-10 seconds silence detected
+5 seconds silence detected
     ↓
 [COMMAND_MODE] - Text appears in text box
     ↓
@@ -481,7 +481,7 @@ if (expectedAnswerLength === 'long' && wordCount < 50)
 ```
 1. Say "start answer"
 2. Speak: "Machine learning is a subset of artificial intelligence"
-3. Wait 10 seconds for auto-stop
+3. Wait 5 seconds for auto-stop
 4. Verify text appears in box
 5. Say "continue dictation"
 6. Speak: "that enables systems to learn from data"
@@ -640,7 +640,7 @@ Exam starts → Question 1: "What are the themes in Hamlet?"
 Student: "Say 'start answer'"
 System: "Dictation active..."
 Student: "Hamlet explores themes of revenge, madness, and mortality..."
-System: [10 seconds silence detected] → Text appears in box
+System: [5 seconds silence detected] → Text appears in box
 Student: Say "continue dictation" to add more or
          Say "confirm answer" to save or
          Manually edit text then say "confirm answer"
@@ -763,7 +763,7 @@ Student: "Water cycle is the continuous
            It includes evaporation, 
            condensation, and precipitation."
     ↓
-[10 seconds of silence detected]
+[5 seconds of silence detected]
     ↓ 
 State: COMMAND_MODE
 Text auto-fills in box:
@@ -801,7 +801,7 @@ Recording resumes (existing text preserved)
 Student: "It includes evaporation where 
            water evaporates from oceans..."
     ↓
-[10 seconds silence]
+[5 seconds silence]
     ↓
 State: COMMAND_MODE
 Text in box now shows:
@@ -990,7 +990,7 @@ System: "Exam submitted successfully.
 | Continue Mode | ❌ N/A | ✅ Append to existing | New command "continue dictation" |
 | Edit Command | ✅ Clear & restart | ✅ Clear & restart | Same behavior, now works for written |
 | AI Formatting | Ollama/Llama 3 | Ollama/Llama 3 (MCQ only) | Not applied to written (preserves original) |
-| Silence Detection | 3 seconds | 10 seconds | Longer buffer for speech |
+| Silence Detection | 3 seconds | 5 seconds | Longer buffer for speech |
 | Auto-Save | ✅ Every 15s | ✅ Every 15s | Applies to written answers too |
 | Admin: PDF Parser | ✅ MCQ only | ✅ MCQ + descriptive + numerical | Enhanced question type support |
 | Command Count | 13 commands | 13+ commands | New: "start answer", "continue dictation" |
@@ -1007,7 +1007,7 @@ System: "Exam submitted successfully.
 - Voice dictation streams directly into answer box (not separate overlay)
 - "Continue dictation" preserves and appends existing text
 - "Edit answer" clears and restarts from scratch
-- 10-second silence auto-stops dictation
+- 5-second silence auto-stops dictation
 - Word count advisory displayed in real-time
 - Written answers NOT processed by AI formatter (preserves original)
 - MCQ + written answers submit together as unified result
@@ -1045,3 +1045,5 @@ For Phase 2 specific issues:
 Created: March 17, 2026  
 Version: 1.0  
 Status: ✅ Complete & Deployable
+
+

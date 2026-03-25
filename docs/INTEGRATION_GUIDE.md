@@ -127,7 +127,7 @@ Navigation silence policy:
 
 Behavior:
 - Real-time transcript streaming into answer input.
-- 10-second silence timeout.
+- 5-second silence timeout.
 - Continue dictation appends text.
 - Edit answer clears and restarts.
 
@@ -204,3 +204,4 @@ The following are legacy and not active in current model:
 - Verify written dictation text appears directly in answer box.
 - Verify continue/edit commands work as expected.
 - Verify API calls reach FastAPI routes and persist in MongoDB.
+

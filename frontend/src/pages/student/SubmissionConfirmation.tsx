@@ -24,7 +24,7 @@ export function SubmissionConfirmation() {
   const [submissionData, setSubmissionData] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(true);
   const { speak } = useVoiceContext();
-  const [countdown, setCountdown] = useState(30);
+  const [countdown, setCountdown] = useState(15);
 
   // ── Voice: auto-speak submission result ────────────────────────────────
   useAutoSpeak(
@@ -33,7 +33,7 @@ export function SubmissionConfirmation() {
       return (
         `Exam submitted successfully. ${submissionData.examTitle}. ` +
         `You answered ${submissionData.answeredQuestions} out of ${submissionData.totalQuestions} questions. ` +
-        `You will be redirected to the landing page in 30 seconds.`
+        `You will be redirected to the landing page in 15 seconds.`
       );
     },
     [isSubmitting, submissionData],

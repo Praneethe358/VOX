@@ -6,7 +6,7 @@ Vox
 Voice-First Accessible Examination Platform
 
 Tagline:
-Hybrid Phase 2 Flow: Face Login -> Voice Navigation -> Mixed Question Exams -> Secure Submission
+Your AI-powered scribe partner: Face Login -> Voice Navigation -> Mixed Question Exams -> Effortless Submission
 
 ## Slide 2 - Problem and Goal
 
@@ -20,7 +20,7 @@ Goal:
 
 ## Slide 3 - What Vox Delivers
 
-- Biometric login with face recognition.
+- Password-free Face Login (Accessible & Seamless).
 - Voice-assisted end-to-end exam journey.
 - Dynamic support for MCQ, descriptive, and numerical questions.
 - Hybrid answer model: dictation and manual typing.
@@ -63,7 +63,7 @@ Command examples:
 - Student opens written question.
 - Says "start answer" or types directly.
 - Dictation streams into answer box in real time.
-- 10-second silence auto-stop.
+- 5-second silence auto-stop.
 - Student can append (`continue dictation`) or restart (`edit answer`).
 - `confirm answer` stores response.
 
@@ -119,3 +119,4 @@ API groups:
 ## Slide 12 - Closing
 
 Vox enables accessible, secure, and practical assessment with a modern hybrid voice-first architecture.
+
