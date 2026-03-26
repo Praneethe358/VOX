@@ -222,17 +222,25 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     return () => { window.speechSynthesis.onvoiceschanged = null; };
   }, [getBestVoice]);
 
+  // Preserve utterance reference to prevent Chrome Garbage Collection bug
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
   // ── TTS via browser Web Speech API ──────────────────────────────────────
 
   const stopSpeaking = useCallback(() => {
     // Advance generation — any in-progress _doSpeak will self-cancel
     speakGenRef.current += 1;
-    // Cancel any ongoing browser speech
+    
+    // Stop any ongoing browser speech
     try {
       window.speechSynthesis.cancel();
     } catch (err) {
       console.warn('[TTS] Error canceling speech:', err);
     }
+    
+    // Clear preserved utterance
+    activeUtteranceRef.current = null;
+
     // Reset queue so next speak() starts immediately
     speakQueueRef.current = Promise.resolve();
     setIsSpeaking(false);
@@ -253,6 +261,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           console.log('[TTS] Speaking:', text.substring(0, 60));
 
           const utterance = new SpeechSynthesisUtterance(text);
+          // Retain reference to avoid sudden Garbage Collection cutoffs mid-speech
+          activeUtteranceRef.current = utterance;
           
           // Normalize rate and pitch to valid ranges
           utterance.rate = Math.max(0.1, Math.min(10, rate));    // 0.1 - 10
@@ -274,14 +284,15 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           }
 
           utterance.onend = () => {
+            activeUtteranceRef.current = null; // Clear reference
             if (speakGenRef.current === gen) setIsSpeaking(false);
             resolve();
           };
 
           utterance.onerror = (event: any) => {
+            activeUtteranceRef.current = null; // Clear reference
             if (event.error !== 'canceled' && event.error !== 'interrupted') {
               console.error('[TTS] Speaking error:', event.error);
-              // Don't retry on voice errors — just finish
             }
             if (speakGenRef.current === gen) setIsSpeaking(false);
             resolve();
@@ -297,6 +308,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
           window.speechSynthesis.speak(utterance);
         } catch (err) {
+          activeUtteranceRef.current = null; // Clear reference
           console.error('[TTS] Unexpected error:', err);
           if (speakGenRef.current === gen) setIsSpeaking(false);
           resolve();
@@ -321,7 +333,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       }
 
       // Capture generation AFTER the potential stopSpeaking() increment
-      const myGen = ++speakGenRef.current;
+      // If interrupt was called, stopSpeaking already incremented it. 
+      // If not, we increment it now to queue the next speech properly.
+      const myGen = interrupt ? speakGenRef.current : ++speakGenRef.current;
 
       // Chain onto the serial queue — guarantees only one utterance plays at a time
       const queued = speakQueueRef.current.then(() => _doSpeak(text, rate, pitch, myGen));
