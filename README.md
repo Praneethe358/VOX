@@ -3,6 +3,8 @@
 > **Empowering inclusive education with an AI-driven, 100% voice-navigated examination platform.**<br>
 > Vox eliminates the need for human scribes by providing a seamless, fully speech-to-text hybrid testing environment.
 
+_Quick update note (2026-03-29): minor documentation wording refresh._
+
 ---
 
 ## 🌟 Vision & Mission
