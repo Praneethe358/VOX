@@ -55,10 +55,22 @@ class MongoRepository:
 
     def ensure_default_admin(self) -> None:
         email = self._settings.vox_superadmin_email.strip().lower()
+        username = email.split("@", 1)[0]
         existing = self.collection("admins").find_one({"email": email})
         if existing:
+            self.collection("admins").update_one(
+                {"_id": existing["_id"]},
+                {
+                    "$set": {
+                        "username": username,
+                        "passwordHash": hash_password(self._settings.vox_superadmin_password),
+                        "role": existing.get("role") or "super-admin",
+                        "updatedAt": utc_now(),
+                    }
+                },
+            )
             return
-        username = email.split("@", 1)[0]
+
         self.collection("admins").insert_one(
             {
                 "name": "Super Admin",

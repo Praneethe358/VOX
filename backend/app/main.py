@@ -50,8 +50,19 @@ app = FastAPI(title="vox-backend", version="3.0.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS — use FRONTEND_URL for production, fall back to * for local dev
-allowed_origins = [settings.frontend_url] if settings.frontend_url else ["*"]
+# CORS: support comma-separated FRONTEND_URL values and common local dev origins.
+configured_origins = [
+    origin.strip().rstrip("/")
+    for origin in (settings.frontend_url or "").split(",")
+    if origin.strip()
+]
+local_dev_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4100",
+    "http://127.0.0.1:4100",
+]
+allowed_origins = list(dict.fromkeys([*configured_origins, *local_dev_origins]))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -108,6 +119,11 @@ async def generic_exception_handler(_request: Request, exc: Exception) -> JSONRe
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"status": "ok", "service": "vox-backend", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/")
+def root() -> dict[str, Any]:
+    return ok({"service": "vox-backend", "health": "/health", "docs": "/docs"}, "Backend is running")
 
 
 @app.get("/api/exams/{exam_id}")

@@ -27,47 +27,49 @@ export default function LoginFaceID() {
     setIsLoading(true);
     
     try {
-      // Try V1 JWT login first (with 3s timeout — skip if V1 isn't available)
-      try {
-        const v1Promise = adminApi.v1Login(username, password);
-        const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
-        const v1Result = await Promise.race([v1Promise, timeout]);
-        if (v1Result.success && v1Result.data?.token) {
-          const admin = v1Result.data.admin;
-          onLoginSuccess(v1Result.data.token, {
-            id: admin.id,
-            name: admin.name,
-            email: admin.email,
-            role: admin.role,
-            mfaEnabled: admin.mfaEnabled,
-          });
-          sessionStorage.setItem('adminAuth', 'true');
-          setSuccess(true);
-          setTimeout(() => navigate("/admin"), 800);
-          return;
+      const userInput = username.trim();
+      const isEmailInput = userInput.includes('@');
+
+      // If user entered an email, try v1 first (email-based auth)
+      if (isEmailInput) {
+        try {
+          const v1Promise = adminApi.v1Login(userInput, password);
+          const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+          const v1Result = await Promise.race([v1Promise, timeout]);
+          if (v1Result.success && v1Result.data?.token) {
+            const admin = v1Result.data.admin;
+            onLoginSuccess(v1Result.data.token, {
+              id: admin.id,
+              name: admin.name,
+              email: admin.email,
+              role: admin.role,
+              mfaEnabled: admin.mfaEnabled,
+            });
+            setSuccess(true);
+            setTimeout(() => navigate("/admin"), 800);
+            return;
+          }
+        } catch {
+          // v1 unavailable/timed out — fall through to legacy
         }
-      } catch {
-        // V1 unavailable or timed out — fall through to legacy
       }
 
-      // Primary login (formerly "legacy" — now also returns JWT)
-      const result = await adminApi.login(username, password);
+      // Username or fallback path: use legacy login (accepts username/email)
+      const result = await adminApi.login(userInput, password);
       if (result.success && result.data?.token) {
         const admin = result.data.admin || {};
         onLoginSuccess(result.data.token, {
           id: admin.id || '',
-          name: admin.name || username,
-          email: admin.email || username,
+          name: admin.name || userInput,
+          email: admin.email || userInput,
           role: admin.role || 'admin',
           mfaEnabled: false,
         });
         setSuccess(true);
         setTimeout(() => navigate("/admin"), 800);
       } else if (result.success) {
-        // Backwards compat: server returned success without token
-        sessionStorage.setItem('adminAuth', 'true');
-        setSuccess(true);
-        setTimeout(() => navigate("/admin"), 800);
+        setError('Login response missing token. Please try again.');
+        setIsLoading(false);
       } else {
         setError(result.error || "Invalid username or password");
         setIsLoading(false);
@@ -145,6 +147,9 @@ export default function LoginFaceID() {
                   onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 3px rgba(45, 78, 232, 0.1)'; }}
                   onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border2)'; e.currentTarget.style.boxShadow = 'inset 0 2px 4px rgba(0, 0, 0, 0.1)'; }}
                 />
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Local dev default: admin / ChangeMe@123
+                </p>
               </div>
 
               {/* Password - Larger */}

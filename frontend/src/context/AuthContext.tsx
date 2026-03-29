@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { getStoredToken, getStoredAdmin, clearStoredToken } from '../api/client';
+import { getStoredToken, getStoredAdmin, clearStoredToken, setStoredToken, setStoredAdmin } from '../api/client';
 
 interface AdminUser {
   id: string;
@@ -54,6 +54,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const onLoginSuccess = useCallback((token: string, admin: AdminUser) => {
+    setStoredToken(token);
+    setStoredAdmin({ ...admin });
     setState({ isAuthenticated: true, isLoading: false, admin, token });
   }, []);
 

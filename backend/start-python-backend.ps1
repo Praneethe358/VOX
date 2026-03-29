@@ -8,7 +8,24 @@ try {
     Copy-Item .env.example .env
   }
 
-  & d:/mindkraft/.venv/Scripts/python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload
+  $pythonCandidates = @(
+    (Join-Path $scriptDir ".venv\Scripts\python.exe"),
+    (Join-Path $scriptDir "..\..\..\.venv\Scripts\python.exe")
+  )
+
+  $pythonExe = $null
+  foreach ($candidate in $pythonCandidates) {
+    if (Test-Path $candidate) {
+      $pythonExe = (Resolve-Path $candidate).Path
+      break
+    }
+  }
+
+  if (-not $pythonExe) {
+    $pythonExe = "python"
+  }
+
+  & $pythonExe -m uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload
 }
 finally {
   Pop-Location
